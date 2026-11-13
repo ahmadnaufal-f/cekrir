@@ -1,0 +1,49 @@
+datasource db {
+  provider = "postgresql"
+}
+
+enum ShipmentStatus {
+  pending
+  in_transit
+  delivered
+  exception
+}
+
+enum ShipmentSource {
+  manual
+  camera
+}
+
+model Shipment {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  resiNumber     String         @map("resi_number") @db.VarChar(64)
+  courier        String         @db.VarChar(32)
+  source         ShipmentSource
+  cameraId       String?        @map("camera_id") @db.VarChar(100)
+  status         ShipmentStatus @default(pending)
+  summary        String
+  provider       String
+  history        Json           @default("[]") @db.JsonB
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  checkedAt      DateTime       @default(now()) @map("checked_at") @db.Timestamptz(3)
+  lastDetectedAt DateTime?      @map("last_detected_at") @db.Timestamptz(3)
+  notifications  Notification[]
+
+  @@unique([courier, resiNumber])
+  @@index([resiNumber])
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+  @@map("shipment")
+}
+
+model Notification {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shipmentId String   @map("shipment_id") @db.Uuid
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  title      String
+  message    String
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([shipmentId])
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+  @@map("notification")
+}

@@ -1,13 +1,20 @@
-from pathlib import Path
+from typing import Any
 
-from sqlalchemy.engine import Engine, make_url
-from sqlmodel import create_engine
+from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 
-def build_engine(database_url: str) -> Engine:
-    url = make_url(database_url)
-    if url.drivername == "sqlite":
-        if url.database and url.database != ":memory:":
-            Path(url.database).parent.mkdir(parents=True, exist_ok=True)
-        return create_engine(database_url, connect_args={"check_same_thread": False})
-    return create_engine(database_url, pool_pre_ping=True)
+def build_pool(database_url: str) -> ConnectionPool:
+    """Prisma manages DDL; Python only opens pooled PostgreSQL connections."""
+    return ConnectionPool(
+        database_url,
+        min_size=1,
+        max_size=10,
+        timeout=10,
+        open=False,
+        kwargs={"autocommit": True, "row_factory": dict_row, "connect_timeout": 5},
+        check=ConnectionPool.check_connection,
+    )
+
+
+DatabaseRow = dict[str, Any]

@@ -1,10 +1,14 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
+from uuid import uuid4
 
+import psycopg
+import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import create_engine
 
 from cekrir.config import Settings
 from cekrir.main import create_app
+from cekrir.schemas import TrackingEvent
 
 
 def test_health(client):
@@ -95,13 +99,10 @@ def test_invalid_barcode_and_unknown_shipment(client):
     assert client.get("/api/v1/shipments?limit=0").status_code == 422
 
 
-def test_database_survives_restart_and_concurrent_detections(tmp_path, provider):
-    engine = create_engine(
-        f"sqlite:///{tmp_path / 'cekrir.db'}", connect_args={"check_same_thread": False}
-    )
-    settings = Settings(_env_file=None)
+def test_database_survives_restart_and_concurrent_detections(database_url, provider):
+    settings = Settings(_env_file=None, DATABASE_URL=database_url)
     payload = {"resi_number": "AB12345", "courier": "jne", "camera_id": "front-door"}
-    with TestClient(create_app(settings=settings, engine=engine, provider=provider)) as client:
+    with TestClient(create_app(settings=settings, provider=provider)) as client:
         with ThreadPoolExecutor(max_workers=4) as pool:
             results = list(
                 pool.map(lambda _: client.post("/api/v1/detections", json=payload), range(4))
@@ -109,7 +110,66 @@ def test_database_survives_restart_and_concurrent_detections(tmp_path, provider)
         assert all(result.status_code == 200 for result in results)
         assert sum(result.json()["created"] for result in results) == 1
         assert len(client.get("/api/v1/notifications").json()) == 1
-    with TestClient(create_app(settings=settings, engine=engine, provider=provider)) as client:
+    with TestClient(create_app(settings=settings, provider=provider)) as client:
         assert len(client.get("/api/v1/shipments").json()) == 1
         assert len(client.get("/api/v1/notifications").json()) == 1
-    engine.dispose()
+
+
+def test_concurrent_status_refreshes_notify_once(client, provider):
+    shipment = client.post(
+        "/api/v1/shipments", json={"resi_number": "AB12345", "courier": "jne"}
+    ).json()
+    provider.status = "delivered"
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(
+            pool.map(lambda _: client.post(f"/api/v1/shipments/{shipment['id']}/refresh"), range(4))
+        )
+    assert all(result.status_code == 200 for result in results)
+    assert all(result.json()["status"] == "delivered" for result in results)
+    assert len(client.get("/api/v1/notifications").json()) == 2
+
+
+def test_history_and_timestamps_roundtrip_through_postgres(client, provider):
+    provider.history = [
+        TrackingEvent(
+            occurred_at=datetime(2026, 11, 13, 8, 30, tzinfo=UTC),
+            description="Arrived at sorting hub",
+            location="Jakarta",
+        )
+    ]
+    shipment = client.post(
+        "/api/v1/shipments", json={"resi_number": "AB12345", "courier": "jne"}
+    ).json()
+    assert shipment["history"][0]["location"] == "Jakarta"
+    assert shipment["history"][0]["occurred_at"] == "2026-11-13T08:30:00Z"
+    assert datetime.fromisoformat(shipment["created_at"]).tzinfo is not None
+    assert client.get("/api/v1/shipments").json() == [shipment]
+
+
+def test_postgres_enforces_notification_foreign_key(database_url):
+    with psycopg.connect(database_url, autocommit=True) as connection:
+        with pytest.raises(psycopg.errors.ForeignKeyViolation):
+            connection.execute(
+                "INSERT INTO notification (shipment_id, title, message) VALUES (%s, %s, %s)",
+                (uuid4(), "Invalid reference", "Must not be persisted"),
+            )
+
+
+def test_notification_insert_failure_rolls_back_shipment(client, database_url):
+    with psycopg.connect(database_url, autocommit=True) as connection:
+        connection.execute(
+            """CREATE FUNCTION reject_notification() RETURNS trigger LANGUAGE plpgsql AS $$
+               BEGIN RAISE EXCEPTION 'Test notification failure'; END $$"""
+        )
+        connection.execute(
+            """CREATE TRIGGER reject_notification BEFORE INSERT ON notification
+               FOR EACH ROW EXECUTE FUNCTION reject_notification()"""
+        )
+        try:
+            with pytest.raises(psycopg.errors.RaiseException, match="Test notification failure"):
+                client.post("/api/v1/shipments", json={"resi_number": "AB12345", "courier": "jne"})
+            assert client.get("/api/v1/shipments").json() == []
+            assert client.get("/api/v1/notifications").json() == []
+        finally:
+            connection.execute("DROP TRIGGER reject_notification ON notification")
+            connection.execute("DROP FUNCTION reject_notification()")

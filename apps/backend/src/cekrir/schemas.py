@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from cekrir.models import ShipmentStatus
+ShipmentStatus = Literal["pending", "in_transit", "delivered", "exception"]
 
 
 class ResiInput(BaseModel):
@@ -40,7 +41,7 @@ class TrackingSnapshot(BaseModel):
 class ShipmentRead(TrackingSnapshot):
     model_config = ConfigDict(from_attributes=True)
 
-    id: str
+    id: UUID
     resi_number: str
     courier: str
     source: Literal["manual", "camera"]
@@ -59,8 +60,8 @@ class DetectionResult(BaseModel):
 class NotificationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: str
-    shipment_id: str
+    id: UUID
+    shipment_id: UUID
     title: str
     message: str
     created_at: datetime

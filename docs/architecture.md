@@ -10,7 +10,8 @@ flowchart LR
   API --> Provider[TrackingProvider adapter]
   Provider --> Demo[Offline demo]
   Provider --> Gateway[Configurable HTTP gateway]
-  API --> DB[(SQLite)]
+  API -->|psycopg pool| DB[(PostgreSQL)]
+  Prisma[Prisma schema and migrations] --> DB
   DB --> Feed[In-app notification feed]
   Feed -->|Poll every 10 seconds| UI
   UI --> Alerts[Opt-in device notifications]
@@ -31,7 +32,9 @@ Couriers cannot reliably be inferred from the barcode alone. The scanner require
 
 `Shipment` stores the latest tracking snapshot, history supplied by the provider, source, camera ID, and timestamps. `Notification` stores durable in-app events. UUID identifiers keep clients independent of database sequence IDs.
 
-SQLite and `SQLModel.metadata.create_all` keep onboarding small. `create_all` creates missing tables; it does **not** migrate existing schemas. Add Alembic migrations before the first schema evolution, and move to Postgres when concurrency or deployment requires it. No footage is stored or sent to FastAPI by this scaffold.
+PostgreSQL stores UUID identifiers, timezone-aware timestamps, enum status/source values, and JSONB tracking history. Prisma owns the schema and versioned migrations in `prisma/`. FastAPI uses psycopg for pooled PostgreSQL access; it does not run DDL at startup. This keeps the Python API while using Prisma's supported schema/migration tooling. See [database setup](database.md).
+
+Registration inserts the shipment and its notification in a single transaction. `INSERT ... ON CONFLICT` resolves competing registrations with the unique courier/resi constraint. Refreshes acquire a PostgreSQL row lock so simultaneous requests that observe the same new status create a single status-change notification. Parameterized queries live in `repository.py`; connection pools open and close with the application lifespan. No footage is stored or sent to FastAPI by this scaffold.
 
 Backend HTTP handlers are synchronous so blocking database/provider work runs in FastAPI's thread pool. The provider has a 10-second network timeout; the frontend has a 15-second request timeout. Tracking API secrets and ingestion keys stay in backend environment variables.
 

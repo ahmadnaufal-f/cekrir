@@ -5,3 +5,4 @@ apps/frontend/android/
 apps/frontend/ios/
 dist/
 node_modules/
+prisma/schema.prisma

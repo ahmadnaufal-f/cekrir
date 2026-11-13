@@ -2,14 +2,14 @@ from collections.abc import Generator
 from secrets import compare_digest
 
 from fastapi import Header, HTTPException, Request
-from sqlmodel import Session
 
+from cekrir.repository import ShipmentRepository
 from cekrir.services.tracking import TrackingProvider
 
 
-def get_session(request: Request) -> Generator[Session, None, None]:
-    with Session(request.app.state.engine) as session:
-        yield session
+def get_repository(request: Request) -> Generator[ShipmentRepository, None, None]:
+    with request.app.state.pool.connection() as connection:
+        yield ShipmentRepository(connection)
 
 
 def get_provider(request: Request) -> TrackingProvider:
