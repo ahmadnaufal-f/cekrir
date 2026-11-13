@@ -17,3 +17,5 @@ data/
 .DS_Store
 .idea/
 .vscode/
+.pio/
+apps/esp32/include/config.h

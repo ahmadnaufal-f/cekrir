@@ -10,10 +10,12 @@ dependencies = [
   "python-dotenv>=1.0,<2",
   "psycopg[binary,pool]>=3.2,<4",
   "httpx>=0.28,<1",
+  "pillow>=12,<14",
+  "zxing-cpp>=3,<4",
 ]
 
 [project.optional-dependencies]
-vision = ["opencv-python-headless>=4.11,<5", "zxing-cpp>=2.3,<4"]
+vision = ["opencv-python-headless>=4.11,<5"]
 
 [dependency-groups]
 dev = ["pytest>=8.3,<10", "ruff>=0.11,<1"]

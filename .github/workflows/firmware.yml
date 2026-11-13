@@ -1,0 +1,54 @@
+name: ESP32 firmware
+
+on:
+  push:
+    paths:
+      - 'apps/esp32/**'
+      - '.github/workflows/firmware.yml'
+      - 'package.json'
+  pull_request:
+    paths:
+      - 'apps/esp32/**'
+      - '.github/workflows/firmware.yml'
+      - 'package.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firmware-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        board: [xiao_esp32s3_sense, ai_thinker_esp32cam]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.6'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/platforms
+            ~/.platformio/packages
+          key: ${{ runner.os }}-platformio-${{ matrix.board }}-${{ hashFiles('apps/esp32/platformio.ini', 'apps/esp32/requirements.txt') }}
+      - run: >-
+          uv run --no-project --python 3.12
+          --with-requirements apps/esp32/requirements.txt
+          platformio run --project-dir apps/esp32 --environment ${{ matrix.board }}
+
+  policy-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.6'
+      - run: >-
+          uv run --no-project --python 3.12
+          --with-requirements apps/esp32/requirements.txt
+          platformio test --project-dir apps/esp32 --environment native

@@ -67,6 +67,16 @@ The courier must be configured explicitly; a barcode does not normally identify 
 
 Set `CEKRIR_INGEST_API_KEY` in both the worker's environment and the backend's environment to require the `X-Ingest-Key` header on camera submissions. If the worker is remote, set `CEKRIR_API_BASE_URL` to the API's reachable HTTPS base URL. Keep RTSP credentials in the ignored `.env`, not command history.
 
+## ESP32 camera firmware
+
+`apps/esp32` contains the camera capture client for the XIAO ESP32S3 Sense and AI Thinker ESP32-CAM. Its [README](../apps/esp32/README.md) covers hardware selection, configuration, build, flashing, and serial monitoring.
+
+Firmware sends raw JPEG bytes to `POST /api/v1/detections/frame?courier=jne&camera_id=esp32-front-door`, with `Content-Type: image/jpeg` and the same `X-Ingest-Key` used for JSON detections. The endpoint decodes common shipping barcodes with ZXing, ignores unsupported payloads such as QR URLs, and registers only a single unambiguous resi candidate. Its compact response includes `detected_count`, `ambiguous`, and `detections` containing the resi, shipment ID, and `created` flag.
+
+JPEGs must fit within 512 KiB, 2 megapixels, and 2048 pixels per dimension. Request bodies are bounded even for chunked uploads; image dimensions are checked before decompression. The server does not write images to disk or the database. A blank frame returns HTTP 200 with zero detections. Multiple valid-looking resi numbers return HTTP 200 with `ambiguous: true` and no registration.
+
+Unlike the desktop worker, this path uploads image frames to the API. Decoding is on the backend rather than on the ESP32. The courier remains explicitly configured; there is no OCR, courier classifier, or offline device-side decoding in the scaffold.
+
 ## Notifications
 
 The working default is a persistent in-app notification feed at `GET /api/v1/notifications`. It records a new package and subsequent normalized status changes. This lets the complete local flow work without sending external messages.

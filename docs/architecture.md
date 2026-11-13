@@ -6,6 +6,8 @@ The initial flow is synchronous and local. The camera worker is a separately lau
 flowchart LR
   Camera[CCTV / webcam] --> Scanner[Optional Python barcode worker]
   Scanner -->|resi + courier + camera ID| API[FastAPI]
+  ESP32[ESP32 camera firmware] -->|JPEG snapshot| Decoder[FastAPI JPEG / ZXing decoder]
+  Decoder -->|One unambiguous resi| API
   UI[Vue / Capacitor] -->|Manual resi / refresh| API
   API --> Provider[TrackingProvider adapter]
   Provider --> Demo[Offline demo]
@@ -34,7 +36,9 @@ Couriers cannot reliably be inferred from the barcode alone. The scanner require
 
 PostgreSQL stores UUID identifiers, timezone-aware timestamps, enum status/source values, and JSONB tracking history. Prisma owns the schema and versioned migrations in `prisma/`. FastAPI uses psycopg for pooled PostgreSQL access; it does not run DDL at startup. This keeps the Python API while using Prisma's supported schema/migration tooling. See [database setup](database.md).
 
-Registration inserts the shipment and its notification in a single transaction. `INSERT ... ON CONFLICT` resolves competing registrations with the unique courier/resi constraint. Refreshes acquire a PostgreSQL row lock so simultaneous requests that observe the same new status create a single status-change notification. Parameterized queries live in `repository.py`; connection pools open and close with the application lifespan. No footage is stored or sent to FastAPI by this scaffold.
+Registration inserts the shipment and its notification in a single transaction. `INSERT ... ON CONFLICT` resolves competing registrations with the unique courier/resi constraint. Refreshes acquire a PostgreSQL row lock so simultaneous requests that observe the same new status create a single status-change notification. Parameterized queries live in `repository.py`; connection pools open and close with the application lifespan.
+
+The optional desktop camera worker decodes locally and sends only resi metadata. The ESP32 firmware instead sends bounded JPEG snapshots to FastAPI for decoding with Pillow and ZXing. Frames are capped at 512 KiB and 2 megapixels, validated before decompression, and processed in memory without image persistence. One valid candidate goes through the same registration workflow; blank, unsupported, and ambiguous frames create no shipments. CPU decoding and synchronous provider/database work run in the thread pool. Firmware contains camera/network logic, while the backend owns barcode decoding, tracking credentials, PostgreSQL access, and notifications.
 
 Backend HTTP handlers are synchronous so blocking database/provider work runs in FastAPI's thread pool. The provider has a 10-second network timeout; the frontend has a 15-second request timeout. Tracking API secrets and ingestion keys stay in backend environment variables.
 

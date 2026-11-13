@@ -7,14 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 ShipmentStatus = Literal["pending", "in_transit", "delivered", "exception"]
 
 
-class ResiInput(BaseModel):
-    resi_number: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9-]+$")
+class CourierInput(BaseModel):
     courier: str = Field(min_length=2, max_length=32, pattern=r"^[a-z0-9_-]+$")
-
-    @field_validator("resi_number", mode="before")
-    @classmethod
-    def normalize_resi(cls, value: object) -> object:
-        return value.strip().upper() if isinstance(value, str) else value
 
     @field_validator("courier", mode="before")
     @classmethod
@@ -22,8 +16,33 @@ class ResiInput(BaseModel):
         return value.strip().lower() if isinstance(value, str) else value
 
 
+class ResiInput(CourierInput):
+    resi_number: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9-]+$")
+
+    @field_validator("resi_number", mode="before")
+    @classmethod
+    def normalize_resi(cls, value: object) -> object:
+        return value.strip().upper() if isinstance(value, str) else value
+
+
 class DetectionInput(ResiInput):
     camera_id: str = Field(min_length=1, max_length=100)
+
+
+class CameraFrameInput(CourierInput):
+    camera_id: str = Field(min_length=1, max_length=100)
+
+
+class FrameDetection(BaseModel):
+    resi_number: str
+    shipment_id: UUID
+    created: bool
+
+
+class CameraFrameResult(BaseModel):
+    detected_count: int = 0
+    ambiguous: bool = False
+    detections: list[FrameDetection] = Field(default_factory=list)
 
 
 class TrackingEvent(BaseModel):

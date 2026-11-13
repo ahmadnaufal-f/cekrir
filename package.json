@@ -25,7 +25,11 @@
     "db:deploy": "prisma migrate deploy",
     "db:validate": "prisma validate",
     "db:studio": "prisma studio",
-    "db:test:deploy": "node scripts/prisma-test.mjs"
+    "db:test:deploy": "node scripts/prisma-test.mjs",
+    "firmware:build": "uv run --no-project --python 3.12 --with-requirements apps/esp32/requirements.txt platformio run --project-dir apps/esp32",
+    "firmware:upload": "uv run --no-project --python 3.12 --with-requirements apps/esp32/requirements.txt platformio run --project-dir apps/esp32 --target upload",
+    "firmware:monitor": "uv run --no-project --python 3.12 --with-requirements apps/esp32/requirements.txt platformio device monitor --baud 115200",
+    "firmware:test": "uv run --no-project --python 3.12 --with-requirements apps/esp32/requirements.txt platformio test --project-dir apps/esp32 --environment native"
   },
   "devDependencies": {
     "concurrently": "^10.0.7",

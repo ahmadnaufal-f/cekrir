@@ -2,12 +2,13 @@
 
 A starter monorepo for a package checking service: decode a **resi** (shipment tracking number) from a CCTV barcode, look it up through a tracking provider, and collect package notifications.
 
-Two apps, one repository:
+Three apps, one repository:
 
-| App             | Stack                                      | Purpose                                                       |
-| --------------- | ------------------------------------------ | ------------------------------------------------------------- |
-| `apps/backend`  | Python 3.12+, FastAPI, psycopg, PostgreSQL | Detection ingestion, tracking, persistence, notification feed |
-| `apps/frontend` | Vue 3, TypeScript, Vite, Capacitor         | Web dashboard and Android/iOS app shell                       |
+| App             | Stack                                      | Purpose                                                             |
+| --------------- | ------------------------------------------ | ------------------------------------------------------------------- |
+| `apps/backend`  | Python 3.12+, FastAPI, psycopg, PostgreSQL | Detection ingestion, tracking, persistence, notification feed       |
+| `apps/frontend` | Vue 3, TypeScript, Vite, Capacitor         | Web dashboard and Android/iOS app shell                             |
+| `apps/esp32`    | Arduino C++, PlatformIO                    | Camera firmware that sends JPEG frames to the barcode detection API |
 
 The default tracking provider is an explicitly labeled **offline demo**. It never calls a courier API. The HTTP provider and camera worker can be enabled separately. Integrations stay configurable until a real tracking API and notification channel are selected.
 
@@ -48,24 +49,44 @@ curl -X POST http://127.0.0.1:8000/api/v1/detections \
 
 The dashboard polls every 10 seconds. The detection creates a shipment and a notification. Repeat the request: the same courier/resi pair keeps a single shipment and does not send another tracking request or create another notification. If `CEKRIR_INGEST_API_KEY` is configured, also send the matching `X-Ingest-Key` header.
 
+## ESP32 camera scanner
+
+The [ESP32 app](apps/esp32/README.md) includes PlatformIO profiles for **Seeed XIAO ESP32S3 Sense** and **AI Thinker ESP32-CAM**. Start with a camera-equipped board with PSRAM and evaluate its optics with actual shipping labels before buying a batch.
+
+The firmware uploads small JPEG snapshots to `POST /api/v1/detections/frame`. FastAPI decodes Code 128, Code 39, ITF, or direct-resi QR barcodes and reuses shipment tracking and notification deduplication. Decoding runs on the server; frames are processed in memory without being stored. Multiple possible resi codes in one frame are reported as ambiguous and create no shipments.
+
+```sh
+cp apps/esp32/include/config.example.h apps/esp32/include/config.h
+# Set Wi-Fi, API URL, camera ID, courier, ingestion key, and HTTPS root CA.
+npm run firmware:build
+npm run firmware:test
+```
+
+See the firmware README for flashing, a trusted LAN development setup, board selection, frame limits, and hardware validation steps.
+
 ## Commands
 
 Run these from the repository root:
 
-| Command                                    | Purpose                                          |
-| ------------------------------------------ | ------------------------------------------------ |
-| `npm run dev`                              | Run FastAPI and Vite                             |
-| `npm run dev:backend`                      | Run FastAPI only                                 |
-| `npm run dev:frontend`                     | Run Vite only                                    |
-| `npm run check`                            | Formatting, Python lint, Vue/TypeScript checking |
-| `npm test`                                 | API integration tests and frontend API tests     |
-| `npm run build`                            | Type check and build the frontend                |
-| `npm run format`                           | Format Python and web/docs/config files          |
-| `npm run db:up`                            | Start local PostgreSQL and wait for readiness    |
-| `npm run db:down`                          | Stop local PostgreSQL; keep persisted data       |
-| `npm run db:deploy`                        | Apply committed Prisma migrations                |
-| `npm run db:migrate -- --name change_name` | Create and apply a development migration         |
-| `npm run db:studio`                        | Inspect PostgreSQL data with Prisma Studio       |
+| Command                                                       | Purpose                                          |
+| ------------------------------------------------------------- | ------------------------------------------------ |
+| `npm run dev`                                                 | Run FastAPI and Vite                             |
+| `npm run dev:backend`                                         | Run FastAPI only                                 |
+| `npm run dev:frontend`                                        | Run Vite only                                    |
+| `npm run check`                                               | Formatting, Python lint, Vue/TypeScript checking |
+| `npm test`                                                    | API integration tests and frontend API tests     |
+| `npm run build`                                               | Type check and build the frontend                |
+| `npm run format`                                              | Format Python and web/docs/config files          |
+| `npm run db:up`                                               | Start local PostgreSQL and wait for readiness    |
+| `npm run db:down`                                             | Stop local PostgreSQL; keep persisted data       |
+| `npm run db:deploy`                                           | Apply committed Prisma migrations                |
+| `npm run db:migrate -- --name change_name`                    | Create and apply a development migration         |
+| `npm run db:studio`                                           | Inspect PostgreSQL data with Prisma Studio       |
+| `npm run firmware:build`                                      | Cross-compile the default ESP32S3 camera profile |
+| `npm run firmware:build -- --environment ai_thinker_esp32cam` | Cross-compile the AI Thinker profile             |
+| `npm run firmware:test`                                       | Run firmware policy tests on the host            |
+| `npm run firmware:upload -- --environment xiao_esp32s3_sense` | Flash a connected device                         |
+| `npm run firmware:monitor`                                    | Open the serial monitor at 115200 baud           |
 
 `npm test` applies Prisma migrations to `TEST_DATABASE_URL` and runs the API tests against that dedicated PostgreSQL database. Compose creates `cekrir_test` on its first initialization. Tests clear its shipment/notification tables; they require a database name ending in `_test` and reject the application database. Frontend tests do not need PostgreSQL.
 
@@ -93,6 +114,11 @@ apps/
       lib/            # API client and device notifications
       types/          # Frontend API contracts
     capacitor.config.ts
+  esp32/
+    include/          # Board pins, configuration example, scan policy
+    src/main.cpp      # Wi-Fi, camera capture, HTTPS submission, retry loop
+    test/             # Host tests without hardware
+    platformio.ini    # Pinned toolchain and camera board profiles
 docs/
   architecture.md
   database.md

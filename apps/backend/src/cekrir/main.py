@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from psycopg_pool import ConnectionPool
 
+from cekrir.api.camera import router as camera_router
 from cekrir.api.routes import router
 from cekrir.config import Settings, get_settings
 from cekrir.db import build_pool
@@ -50,6 +51,7 @@ def create_app(
         return {"status": "ok", "tracking_provider": settings.tracking_provider}
 
     app.include_router(router)
+    app.include_router(camera_router)
     return app
 
 
