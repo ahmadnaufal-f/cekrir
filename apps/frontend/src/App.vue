@@ -1,316 +1,291 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import ShipmentCard from './components/ShipmentCard.vue'
-import { api } from './lib/api'
+import { computed, onMounted, onUnmounted, shallowRef, watch } from 'vue'
+import type { AppServices } from './services/contracts'
+import type { AppUser } from './types/app'
+import AuthScreen from './screens/AuthScreen.vue'
+import DeliveriesScreen from './screens/DeliveriesScreen.vue'
+import DeliveryDetailScreen from './screens/DeliveryDetailScreen.vue'
+import DevicesScreen from './screens/DevicesScreen.vue'
+import MembersScreen from './screens/MembersScreen.vue'
+import SetupScreen from './screens/SetupScreen.vue'
+import SettingsScreen from './screens/SettingsScreen.vue'
+import NotificationSettings from './screens/NotificationSettings.vue'
+import { createPushController } from './composables/usePush'
 import {
-  requestNotificationPermission,
-  showPackageNotification,
-} from './lib/notifications'
-import type { PackageNotification, Shipment } from './types/api'
+  createSimulatedPushBridge,
+  createUnavailablePushBridge,
+} from './lib/push'
+import { deliveryRoute, guardRoute, useNavigation } from './lib/navigation'
+import { ui, errorMessage } from './lib/strings'
+import { shellCopy as copy } from './lib/shell-copy'
 
-const shipments = ref<Shipment[]>([])
-const notifications = ref<PackageNotification[]>([])
-const resiNumber = ref('')
-const courier = ref('jne')
-const loading = ref(true)
-const saving = ref(false)
-const refreshing = ref<string | null>(null)
-const error = ref('')
-const notice = ref('')
-const notificationsEnabled = ref(false)
-const permissionPending = ref(false)
-const seenNotifications = new Set<string>()
-let initialized = false
-let loadingData = false
-let pollTimer: ReturnType<typeof setInterval> | undefined
-
-const stats = computed(() => [
-  { label: 'Tracked packages', value: shipments.value.length },
-  {
-    label: 'On the way',
-    value: shipments.value.filter((item) => item.status === 'in_transit')
-      .length,
-  },
-  {
-    label: 'Delivered',
-    value: shipments.value.filter((item) => item.status === 'delivered').length,
-  },
-])
-const hasDemo = computed(() =>
-  shipments.value.some((shipment) => shipment.provider === 'demo'),
+const { services } = defineProps<{ services: AppServices }>()
+const user = shallowRef<AppUser | null>(null)
+const ready = shallowRef(false)
+const refreshKey = shallowRef(0)
+const signingOut = shallowRef(false)
+const notice = shallowRef('')
+const { requested, navigate } = useNavigation()
+let pendingDirectLink = requested.value.startsWith('/deliveries/')
+  ? requested.value
+  : null
+const route = computed(() => guardRoute(requested.value, user.value))
+const deliveryId = computed(() =>
+  route.value.startsWith('/deliveries/')
+    ? decodeURIComponent(route.value.slice(12))
+    : null,
 )
-
-function message(cause: unknown): string {
-  return cause instanceof Error
-    ? cause.message
-    : 'Something went wrong. Please try again.'
+const links = computed(() => {
+  const common = [{ path: '/deliveries' as const, label: ui.deliveries }]
+  return user.value?.role === 'admin'
+    ? [
+        ...common,
+        { path: '/devices' as const, label: ui.devices },
+        { path: '/members' as const, label: ui.members },
+        { path: '/setup' as const, label: ui.setup },
+        { path: '/settings' as const, label: ui.settings },
+      ]
+    : [...common, { path: '/settings' as const, label: ui.settings }]
+})
+const bridge =
+  services.mode === 'mock' && import.meta.env.DEV
+    ? createSimulatedPushBridge()
+    : createUnavailablePushBridge()
+const push = createPushController({
+  bridge,
+  service: services.push,
+  user,
+  navigationReady: ready,
+  onNavigate(id) {
+    if (!ready.value || !user.value) return false
+    navigate(deliveryRoute(id))
+    return true
+  },
+  onRefresh() {
+    refreshKey.value++
+  },
+})
+const pushState = push.state
+let disposed = false
+watch([user, requested, ready], () => {
+  if (!ready.value) return
+  if (!user.value && requested.value.startsWith('/deliveries/'))
+    pendingDirectLink = requested.value
+  const target = guardRoute(requested.value, user.value)
+  if (target !== requested.value) navigate(target, true)
+})
+function authenticated(next: AppUser) {
+  user.value = next
+  notice.value = ''
+  // The detail service reauthorizes this ID against the newly signed-in household.
+  const target = pendingDirectLink
+  pendingDirectLink = null
+  if (!pushState.value.pendingNavigation)
+    navigate(target || '/deliveries', true)
 }
-
-async function loadData(): Promise<void> {
-  if (loadingData) return
-  loadingData = true
-  try {
-    const [packages, updates] = await Promise.all([
-      api.shipments(),
-      api.notifications(),
-    ])
-    shipments.value = packages
-    notifications.value = updates
-    for (const update of [...updates].reverse()) {
-      if (
-        initialized &&
-        notificationsEnabled.value &&
-        !seenNotifications.has(update.id)
-      ) {
-        try {
-          await showPackageNotification(update)
-        } catch {
-          notice.value =
-            'Device notification could not be shown. Your updates are saved below.'
-        }
-      }
-      seenNotifications.add(update.id)
-    }
-    // Bound the set to the current page of notifications in a long-running app.
-    const currentIds = new Set(updates.map((update) => update.id))
-    for (const id of seenNotifications)
-      if (!currentIds.has(id)) seenNotifications.delete(id)
-    initialized = true
-    error.value = ''
-  } catch (cause) {
-    error.value = `Could not load package updates. ${message(cause)}`
-  } finally {
-    loading.value = false
-    loadingData = false
-  }
+function expired() {
+  pendingDirectLink = deliveryId.value ? deliveryRoute(deliveryId.value) : null
+  // A 401 invalidates UI state; the push controller rejects stale account work.
+  user.value = null
+  notice.value = copy.sessionExpired
+  navigate('/login', true)
 }
-
-async function addShipment(): Promise<void> {
-  saving.value = true
-  error.value = ''
+async function logout() {
+  if (signingOut.value) return
+  signingOut.value = true
   notice.value = ''
   try {
-    await api.addShipment({
-      resi_number: resiNumber.value,
-      courier: courier.value,
-    })
-    resiNumber.value = ''
-    notice.value =
-      'Package saved. Tracking the same resi again keeps a single entry.'
-    await loadData()
+    if (!(await push.beforeLogout())) {
+      notice.value = copy.logoutFailed
+      return
+    }
+    await services.auth.logout()
+    pendingDirectLink = null
+    user.value = null
+    refreshKey.value++
+    navigate('/login', true)
+    notice.value = copy.signedOut
   } catch (cause) {
-    error.value = `Could not add package. ${message(cause)}`
+    notice.value = errorMessage(cause)
   } finally {
-    saving.value = false
+    signingOut.value = false
   }
 }
-
-async function refreshShipment(id: string): Promise<void> {
-  if (refreshing.value) return
-  refreshing.value = id
-  error.value = ''
-  try {
-    await api.refreshShipment(id)
-    await loadData()
-  } catch (cause) {
-    error.value = `Could not refresh package. ${message(cause)}`
-  } finally {
-    refreshing.value = null
+function simulate(tap: boolean) {
+  if (!import.meta.env.DEV || services.mode !== 'mock' || !user.value) return
+  const payload = {
+    type: 'delivery.created',
+    eventId: `demo-event-${user.value.id}`,
+    deliveryId: 'delivery-demo-complete',
+    householdId: user.value.householdId,
   }
+  if (tap) push.simulateTap(payload)
+  else push.simulateReceived(payload)
 }
-
-async function enableNotifications(): Promise<void> {
-  permissionPending.value = true
-  try {
-    notificationsEnabled.value = await requestNotificationPermission()
-    notice.value = notificationsEnabled.value
-      ? 'Device notifications enabled while this app is open.'
-      : 'Notifications are unavailable or permission was declined. Updates remain visible here.'
-  } catch (cause) {
-    notice.value = `Could not enable device notifications. ${message(cause)}`
-  } finally {
-    permissionPending.value = false
-  }
+function resume() {
+  if (document.visibilityState === 'visible') refreshKey.value++
 }
-
-onMounted(() => {
-  void loadData()
-  pollTimer = setInterval(() => void loadData(), 10_000)
+function focusMain() {
+  document.getElementById('main-content')?.focus({ preventScroll: true })
+}
+watch(route, () => {
+  queueMicrotask(focusMain)
 })
-onUnmounted(() => clearInterval(pollTimer))
+onMounted(async () => {
+  document.addEventListener('visibilitychange', resume)
+  try {
+    const restored = await services.auth.restore()
+    if (!disposed) user.value = restored
+  } catch (cause) {
+    if (!disposed) notice.value = errorMessage(cause)
+  } finally {
+    if (!disposed) {
+      ready.value = true
+      push.setNavigationReady(true)
+    }
+  }
+})
+onUnmounted(() => {
+  disposed = true
+  document.removeEventListener('visibilitychange', resume)
+  push.dispose()
+})
 </script>
 
 <template>
   <div class="app-shell">
+    <a href="#main-content" class="skip-link" @click.prevent="focusMain">{{
+      copy.skip
+    }}</a>
     <header class="topbar">
-      <a class="brand" href="/" aria-label="Cekrir home"
-        ><span class="brand__mark" aria-hidden="true">▥</span>cekrir<span
-          class="brand__dot"
-          >.</span
-        ></a
+      <a
+        class="brand"
+        href="#/deliveries"
+        aria-label="Cekrir"
+        @click.prevent="navigate(user ? '/deliveries' : '/login')"
+        ><svg viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <path
+            d="m3 9 11-6 11 6v12l-11 5-11-5V9Z"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linejoin="round"
+          />
+          <path
+            d="m3 9 11 6 11-6M14 15v11M8 6l11 6"
+            stroke="currentColor"
+            stroke-width="1.6"
+          /></svg
+        >cekrir<span class="brand__dot">.</span></a
       >
-      <span class="topbar__label">PACKAGE MONITOR</span>
-      <span class="chip">Local workspace</span>
+      <span class="mode-label">{{
+        services.mode === 'mock' ? ui.mock : ui.live
+      }}</span>
     </header>
-
-    <main>
-      <section class="intro">
-        <div>
-          <p class="eyebrow">FROM YOUR DOORSTEP TO YOUR DASHBOARD</p>
-          <h1>A little more clarity.<br />For every delivery.</h1>
-          <p class="intro__copy">
-            Follow your resi numbers, collect camera detections, and keep
-            package updates in one place.
-          </p>
-        </div>
-        <div class="intro__illustration" aria-hidden="true">
-          <div class="parcel">
-            <span>CEKRIR</span>
-            <div class="barcode"></div>
-            <small>HANDLE WITH CARE</small>
-          </div>
-          <span class="scan-line"></span>
-        </div>
-      </section>
-
-      <div v-if="error" class="banner banner--error" role="alert">
-        {{ error }} <button class="text-button" @click="loadData">Retry</button>
-      </div>
-      <div v-if="notice" class="banner" role="status">{{ notice }}</div>
-
-      <section
-        class="stats"
-        aria-label="Package overview, latest 100 shipments"
+    <nav v-if="user" class="app-nav" :aria-label="copy.navigation">
+      <a
+        v-for="link in links"
+        :key="link.path"
+        :href="`#${link.path}`"
+        :aria-current="
+          route === link.path || (link.path === '/deliveries' && deliveryId)
+            ? 'page'
+            : undefined
+        "
+        @click.prevent="navigate(link.path)"
+        >{{ link.label }}</a
       >
-        <article v-for="stat in stats" :key="stat.label">
-          <span>{{ stat.label }}</span><strong>{{
-            stat.value.toString().padStart(2, '0')
-          }}</strong>
-        </article>
-      </section>
-
-      <div class="dashboard-grid">
-        <div class="packages">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">YOUR DELIVERIES</p>
-              <h2>Package activity</h2>
-            </div>
-            <span class="muted">Latest 100 · updates every 10s</span>
-          </div>
-          <p v-if="hasDemo" class="demo-note">
-            Demo tracking is active. These statuses are sample data.
-          </p>
-          <div v-if="loading" class="empty-state" role="status">
-            Loading your packages…
-          </div>
-          <div v-else-if="!shipments.length" class="empty-state">
-            <span class="empty-state__icon" aria-hidden="true">▥</span>
-            <h3>Your next delivery starts here</h3>
-            <p>
-              Add a resi number to try tracking. Camera detections will appear
-              here too.
-            </p>
-          </div>
-          <div v-else class="shipment-list">
-            <ShipmentCard
-              v-for="shipment in shipments"
-              :key="shipment.id"
-              :shipment="shipment"
-              :refreshing="refreshing === shipment.id"
-              @refresh="refreshShipment"
-            />
-          </div>
-        </div>
-
-        <aside class="sidebar" aria-label="Tracking tools and notifications">
-          <section class="panel add-package">
-            <p class="eyebrow">A NEW ARRIVAL?</p>
-            <h2>Track a package</h2>
-            <form @submit.prevent="addShipment">
-              <label for="resi">Resi number</label>
-              <input
-                id="resi"
-                v-model.trim="resiNumber"
-                placeholder="e.g. CEKRIR123456"
-                required
-                minlength="3"
-                maxlength="64"
-                pattern="[A-Za-z0-9-]+"
-                autocomplete="off"
-              />
-              <label for="courier">Courier code</label>
-              <input
-                id="courier"
-                v-model.trim="courier"
-                list="couriers"
-                placeholder="e.g. jne"
-                required
-                minlength="2"
-                maxlength="32"
-                pattern="[A-Za-z0-9_-]+"
-              />
-              <datalist id="couriers">
-                <option value="jne" />
-                <option value="jnt" />
-                <option value="sicepat" />
-                <option value="pos" />
-                <option value="anteraja" />
-              </datalist>
-              <p class="field-help">
-                Use the courier code supported by your tracking provider.
-              </p>
-              <button
-                class="button button--primary"
-                type="submit"
-                :disabled="saving"
-              >
-                {{ saving ? 'Adding package…' : 'Track package' }}
-                <span aria-hidden="true">→</span>
-              </button>
-            </form>
-          </section>
-
-          <section class="panel updates">
-            <div class="section-heading">
-              <h2>Latest updates</h2>
-              <span class="count">{{ notifications.length }}</span>
-            </div>
-            <p v-if="!notifications.length" class="muted">
-              When a package is detected or its status changes, you’ll see an
-              update here.
-            </p>
-            <ol v-else class="notification-list">
-              <li v-for="update in notifications.slice(0, 5)" :key="update.id">
-                <span class="notification-dot" aria-hidden="true"></span>
-                <div>
-                  <strong>{{ update.title }}</strong>
-                  <p>{{ update.message }}</p>
-                  <time :datetime="update.created_at">{{
-                    new Date(update.created_at).toLocaleString()
-                  }}</time>
-                </div>
-              </li>
-            </ol>
-            <button
-              class="button button--quiet"
-              :disabled="permissionPending || notificationsEnabled"
-              @click="enableNotifications"
-            >
-              {{
-                notificationsEnabled
-                  ? 'Notifications enabled'
-                  : 'Enable device notifications'
-              }}
-            </button>
-            <p class="field-help">Device alerts work while the app is open.</p>
-          </section>
+    </nav>
+    <p v-if="services.mode === 'mock'" class="mode-note">{{ ui.mockNote }}</p>
+    <div v-if="notice" class="banner session-banner" role="status">
+      {{ notice }}
+    </div>
+    <main id="main-content" class="main-content" tabindex="-1">
+      <p v-if="!ready" role="status">{{ copy.restore }}</p>
+      <template v-else>
+        <aside
+          v-if="pushState.banner && user"
+          class="banner push-banner"
+          role="status"
+        >
+          <p>{{ ui.deliveries }}</p>
+          <button class="button button--primary" @click="push.tapBanner()">
+            {{ copy.navigateDelivery }}</button><button
+            class="text-button"
+            @click="push.dismissBanner()"
+          >
+            {{ copy.dismiss }}
+          </button>
         </aside>
-      </div>
-      <footer>
-        Cekrir <span aria-hidden="true">/</span> A watchful eye on every
-        package.
-      </footer>
+        <div v-if="services.mode === 'live'" class="banner live-note">
+          <strong>{{ copy.unavailable }}</strong>
+          <p>{{ copy.liveHelp }}</p>
+        </div>
+        <AuthScreen
+          v-if="!user"
+          :key="route"
+          :services="services"
+          :signup="route === '/signup'"
+          @authenticated="authenticated"
+          @switch="navigate(route === '/signup' ? '/login' : '/signup')"
+        />
+        <template v-else>
+          <DeliveryDetailScreen
+            v-if="deliveryId"
+            :key="`${user.id}:${deliveryId}`"
+            :services="services"
+            :user="user"
+            :delivery-id="deliveryId"
+            :refresh-key="refreshKey"
+            @back="navigate('/deliveries')"
+            @session-expired="expired"
+          />
+          <DeliveriesScreen
+            v-else-if="route === '/deliveries'"
+            :key="user.id"
+            :services="services"
+            :user="user"
+            :refresh-key="refreshKey"
+            @open="navigate(deliveryRoute($event))"
+            @session-expired="expired"
+          />
+          <DevicesScreen
+            v-else-if="route === '/devices' && user.role === 'admin'"
+            :key="user.id"
+            :services="services"
+            :user="user"
+            @session-expired="expired"
+          />
+          <MembersScreen
+            v-else-if="route === '/members' && user.role === 'admin'"
+            :key="user.id"
+            :services="services"
+            :user="user"
+            @session-expired="expired"
+          />
+          <SetupScreen
+            v-else-if="route === '/setup' && user.role === 'admin'"
+            :key="user.id"
+            :services="services"
+            :user="user"
+            @session-expired="expired"
+          />
+          <SettingsScreen
+            v-else
+            :user="user"
+            :signing-out="signingOut"
+            @logout="logout"
+            ><NotificationSettings
+              :state="pushState"
+              @enable="push.enable()"
+              @retry="push.retry()"
+              @simulate-received="simulate(false)"
+              @simulate-tap="simulate(true)"
+              @tap-banner="push.tapBanner()"
+              @dismiss-banner="push.dismissBanner()"
+          /></SettingsScreen>
+        </template>
+      </template>
     </main>
+    <footer>{{ copy.privacy }}</footer>
   </div>
 </template>

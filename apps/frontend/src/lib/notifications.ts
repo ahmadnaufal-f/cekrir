@@ -1,3 +1,5 @@
+// Legacy development alerts after shipment polling. These are not server push.
+// The household app uses lib/push.ts and does not call this local alert helper.
 import { Capacitor } from '@capacitor/core'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import type { PackageNotification } from '../types/api'
