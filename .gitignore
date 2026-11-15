@@ -19,3 +19,4 @@ data/
 .vscode/
 .pio/
 apps/esp32/include/config.h
+.vercel/

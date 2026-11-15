@@ -1,3 +1,5 @@
+// Legacy shipment/feed client, preserved for scaffold compatibility.
+// Shipment snapshots cannot establish household ownership or delivery identity.
 import { Capacitor } from '@capacitor/core'
 import type { PackageNotification, ResiInput, Shipment } from '../types/api'
 

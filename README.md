@@ -1,13 +1,17 @@
 # Cekrir
 
-A starter monorepo for a package checking service: decode a **resi** (shipment tracking number) from a CCTV barcode, look it up through a tracking provider, and collect package notifications.
+Frontend deployment: https://cekrir.vercel.app — production UI with live integrations unavailable and development mocks disabled. Vercel authentication may be required. See the [deployment record](docs/frontend/vercel-deployment.md).
+
+A monorepo for a household delivery app. The confirmed target uses proximity-triggered **ESP32 camera images** for Python barcode decoding; the selected **BARDI CCTV** supplies the separate delivery photo. The existing backend and firmware remain scaffold implementations pending alignment.
+
+The frontend now implements household screens with explicit development mocks. Auth, delivery events, photos, devices, members, and Android server push are **not live integrations**. See the [frontend specification map](docs/frontend/spec-map.md), [integration and verification report](docs/frontend/integration-status.md), and [backend/firmware handoff](docs/frontend/backend-gaps.md).
 
 Three apps, one repository:
 
 | App             | Stack                                      | Purpose                                                             |
 | --------------- | ------------------------------------------ | ------------------------------------------------------------------- |
 | `apps/backend`  | Python 3.12+, FastAPI, psycopg, PostgreSQL | Detection ingestion, tracking, persistence, notification feed       |
-| `apps/frontend` | Vue 3, TypeScript, Vite, Capacitor         | Web dashboard and Android/iOS app shell                             |
+| `apps/frontend` | Vue 3, TypeScript, Vite, Capacitor         | Household delivery UI; Android acceptance target, iOS unverified    |
 | `apps/esp32`    | Arduino C++, PlatformIO                    | Camera firmware that sends JPEG frames to the barcode detection API |
 
 The default tracking provider is an explicitly labeled **offline demo**. It never calls a courier API. The HTTP provider and camera worker can be enabled separately. Integrations stay configurable until a real tracking API and notification channel are selected.
@@ -33,7 +37,9 @@ npm run dev
 - API documentation: <http://127.0.0.1:8000/docs>
 - Health: <http://127.0.0.1:8000/health>
 
-Add `CEKRIR123456` with courier `jne` in the dashboard to exercise the flow. Demo tracking always reports `in_transit`; it is sample data. PostgreSQL persists in the Compose `postgres_data` volume. The root dev command starts both apps and stops them together with Ctrl+C; `npm run db:down` stops PostgreSQL while preserving its volume.
+The frontend defaults to live mode and reports unsupported household operations. To review the frontend without a backend, run `VITE_APP_MODE=mock npm run dev:frontend`. Sign in with `admin@demo.test` or `anggota`, password `demo1234`. These are synthetic development accounts; sessions and new fixture records are in memory only. Production builds ignore mock mode and exclude the fixture module. The manual shipment client remains as legacy scaffold code, separate from household events.
+
+Backend demo tracking always reports `in_transit`; it is sample data. PostgreSQL persists in the Compose `postgres_data` volume. The root dev command starts both apps and stops them together with Ctrl+C; `npm run db:down` stops PostgreSQL while preserving its volume.
 
 **Prisma owns the database schema and versioned SQL migrations.** FastAPI uses psycopg and a connection pool because Prisma's supported client targets JavaScript/TypeScript. The schema is defined once in `prisma/schema.prisma`; the Python backend does not create or migrate tables. See [database setup](docs/database.md) for schema changes, testing, and deployment.
 
@@ -47,7 +53,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/detections \
   -d '{"resi_number":"CEKRIR987654","courier":"jne","camera_id":"front-door"}'
 ```
 
-The dashboard polls every 10 seconds. The detection creates a shipment and a notification. Repeat the request: the same courier/resi pair keeps a single shipment and does not send another tracking request or create another notification. If `CEKRIR_INGEST_API_KEY` is configured, also send the matching `X-Ingest-Key` header.
+This legacy backend detection creates a shipment and feed notification; it does not populate the household mock UI or deliver remote push. Its permanent courier/resi uniqueness differs from the target household delivery-event deduplication window. If `CEKRIR_INGEST_API_KEY` is configured, also send the matching `X-Ingest-Key` header.
 
 ## ESP32 camera scanner
 
@@ -135,6 +141,6 @@ See [architecture and next steps](docs/architecture.md) and [tracking/CCTV integ
 
 ## Scope of this scaffold
 
-This is a **single workspace development prototype**. The dashboard and API bind to loopback by default. User accounts, tenant ownership, production authorization, automatic scheduled tracking refreshes, durable background delivery, and background mobile push are future work. The optional ingestion key only protects camera submissions. Do not expose this shared workspace API to the public internet before adding user authentication and ownership checks.
+This is a **development prototype**. The app and API bind to loopback by default. Household account and role flows exist only as frontend fixtures. Backend authorization, delivery-event persistence, protected CCTV capture, and Android remote push remain gaps. The optional ingestion key only protects camera submissions; it is not user authorization. See the frontend handoff documents for the per-operation status.
 
 No license has been chosen; add one before distributing the project.
