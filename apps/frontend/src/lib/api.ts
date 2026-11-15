@@ -9,7 +9,7 @@ const baseUrl = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(
 )
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  if (Capacitor.isNativePlatform() && !/^https:\/\//.test(baseUrl)) {
+  if (Capacitor.isNativePlatform() && !baseUrl.startsWith('https://')) {
     throw new Error(
       'Set VITE_API_BASE_URL to an absolute HTTPS API URL for the mobile app.',
     )

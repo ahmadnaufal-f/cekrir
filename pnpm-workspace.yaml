@@ -1,0 +1,8 @@
+packages:
+  - apps/frontend
+
+allowBuilds:
+  '@prisma/engines': true
+  # Optional macOS file-watching dependency from the existing lockfile.
+  fsevents: true
+  prisma: true

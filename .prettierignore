@@ -1,8 +1,0 @@
-package-lock.json
-uv.lock
-apps/backend/
-apps/frontend/android/
-apps/frontend/ios/
-dist/
-node_modules/
-prisma/schema.prisma

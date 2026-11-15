@@ -1,5 +1,8 @@
 export type ShipmentStatus =
-  'pending' | 'in_transit' | 'delivered' | 'exception'
+  | 'pending'
+  | 'in_transit'
+  | 'delivered'
+  | 'exception'
 
 export interface TrackingEvent {
   occurred_at: string

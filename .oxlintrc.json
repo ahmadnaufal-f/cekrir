@@ -1,0 +1,39 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "vue", "vitest"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "vitest/require-mock-type-parameters": "off"
+  },
+  "env": {
+    "builtin": true
+  },
+  "ignorePatterns": [
+    "apps/frontend/android/**",
+    "apps/frontend/ios/**",
+    "**/dist/**",
+    "**/coverage/**"
+  ],
+  "overrides": [
+    {
+      "files": ["apps/frontend/src/**/*.{ts,vue}"],
+      "env": {
+        "browser": true
+      }
+    },
+    {
+      "files": [
+        "scripts/**/*.mjs",
+        "docs/frontend/verification/**/*.cjs",
+        "apps/frontend/*.ts",
+        "prisma.config.ts",
+        "**/*.test.ts"
+      ],
+      "env": {
+        "node": true
+      }
+    }
+  ]
+}

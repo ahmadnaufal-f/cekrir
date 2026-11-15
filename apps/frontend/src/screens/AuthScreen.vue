@@ -116,7 +116,8 @@ async function submit() {
       </p>
       <form novalidate :aria-busy="pending" @submit.prevent="submit">
         <template v-if="signup">
-          <label for="displayName">{{ copy.name }}</label><input
+          <label for="displayName">{{ copy.name }}</label
+          ><input
             id="displayName"
             v-model="form.displayName"
             name="name"
@@ -131,7 +132,8 @@ async function submit() {
             class="field-error"
             >{{ errors.displayName }}</span
           >
-          <label for="email">{{ copy.email }}</label><input
+          <label for="email">{{ copy.email }}</label
+          ><input
             id="email"
             v-model="form.email"
             type="email"
@@ -143,7 +145,8 @@ async function submit() {
           /><span v-if="errors.email" id="email-error" class="field-error">{{
             errors.email
           }}</span>
-          <label for="householdName">{{ copy.household }}</label><input
+          <label for="householdName">{{ copy.household }}</label
+          ><input
             id="householdName"
             v-model="form.householdName"
             autocomplete="organization"
@@ -172,7 +175,8 @@ async function submit() {
             errors.loginId
           }}</span></template
         >
-        <label for="password">{{ copy.password }}</label><input
+        <label for="password">{{ copy.password }}</label
+        ><input
           id="password"
           v-model="form.password"
           type="password"
