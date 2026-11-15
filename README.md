@@ -1,6 +1,6 @@
 # Cekrir
 
-Frontend deployment: https://cekrir.vercel.app — production UI with live integrations unavailable and development mocks disabled. Vercel authentication may be required. See the [deployment record](docs/frontend/vercel-deployment.md).
+GitHub-connected frontend deployment: https://cekrir-frontend.vercel.app (current release also at https://cekrir.vercel.app). Production UI has live integrations unavailable and development mocks disabled. Vercel authentication may be required. The frontend work is on `frontend/household-vercel`; `main` is unchanged. See the [deployment record](docs/frontend/vercel-deployment.md).
 
 A monorepo for a household delivery app. The confirmed target uses proximity-triggered **ESP32 camera images** for Python barcode decoding; the selected **BARDI CCTV** supplies the separate delivery photo. The existing backend and firmware remain scaffold implementations pending alignment.
 

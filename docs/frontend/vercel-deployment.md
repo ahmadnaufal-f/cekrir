@@ -1,5 +1,33 @@
 # Vercel frontend deployment
 
+## GitHub-connected deployment
+
+The owner's later request changed the deployment source from local artifacts to GitHub. The frontend and repository-root [vercel.json](../../vercel.json) were committed and pushed to [`frontend/household-vercel`](https://github.com/ahmadnaufal-f/cekrir/tree/frontend/household-vercel). `main` remains at the original baseline; no merge was performed.
+
+| Field                  | Git deployment result                                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Canonical project URL  | https://cekrir-frontend.vercel.app                                                                            |
+| Existing URL           | https://cekrir.vercel.app currently aliases this Git-built deployment                                         |
+| Immutable deployment   | https://cekrir-frontend-mj8fblll9-ahmadnaufals-projects.vercel.app                                            |
+| Target / status        | Production / READY                                                                                            |
+| Project                | `cekrir-frontend` (`prj_ZIQ9c9yjVMybd4XGcmQqvzg2E8xn`)                                                        |
+| Repository             | `ahmadnaufal-f/cekrir` (GitHub repo ID `1456573310`)                                                          |
+| Source branch / commit | `frontend/household-vercel` / `08b64ecf827600e44e7c198c5f3c4d69ec4efcb8`                                      |
+| Deployment ID          | `dpl_7Xeha3HEKTfFXy725jfWHb5u264T`                                                                            |
+| Build                  | Repository root, Node 24, `npm ci`, `npm run build --workspace @cekrir/frontend`; output `apps/frontend/dist` |
+
+The existing artifact-only project's connector could not attach Git, and the local Vercel CLI had no authenticated session. A new Git-linked project was created through the connected Vercel app. Its GitHub association was confirmed with the repository-filtered project query. The deployment log explicitly reports cloning the branch and commit above, followed by a successful install, Vue typecheck, and Vite build. Local frontend check, 53 tests, and build also passed before publication.
+
+Automatic approval review rejected pushing the whole change directly to the default `main` branch. The separate frontend branch was used as a safer, reviewable alternative. There was no force push or change to `main`, backend, firmware, schema, or lockfile.
+
+Vercel's standard Git setup uses `main` for automatic production releases and feature branches for previews. This production release was explicitly created from the frontend branch. Review and merge that branch before relying on future `main` production builds to include these frontend changes. Merging was not part of this work.
+
+Use `cekrir-frontend.vercel.app` as the project's automatically managed production domain. `cekrir.vercel.app` was reassigned to this deployment, but its project-domain registration remains on the old artifact project; automatic domain migration was rejected as already assigned. Moving that domain's registration in the Vercel dashboard is needed if it must automatically follow every future production release. The old artifact project remains available as a rollback reference.
+
+Default deployment protection and the production mock guards were retained. Live backend integrations remain unavailable. No backend hosting, native push, custom domain purchase, or authentication provider was added.
+
+## Original artifact deployment
+
 Deployed on 2026-11-15 following the owner's request to deploy on Vercel.
 
 | Field                | Result                                                                                                                  |
@@ -28,6 +56,6 @@ Vercel's default deployment protection was retained, so viewing the stable URL m
 - The error/fatal runtime-log query returned no records. This is a static deployment; it is not server-side integration or native push evidence.
 - [Deployed mobile screenshot](screenshots/vercel-production-mobile.png).
 
-This was an artifact deployment, not a Git-connected build. Future GitHub pushes will not automatically publish these uncommitted changes. To release a later snapshot, rebuild the frontend and deploy its current output to this existing project, or explicitly configure Git deployment separately.
+This first release was an artifact deployment, not a Git-connected build. It has been superseded by the GitHub-connected project described above.
 
 See [integration status](integration-status.md) and [backend/firmware gaps](backend-gaps.md) for the remaining capabilities and unresolved contracts.
