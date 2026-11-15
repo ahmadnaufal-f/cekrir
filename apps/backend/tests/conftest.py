@@ -37,7 +37,7 @@ def test_database_url():
     load_dotenv(Path(__file__).resolve().parents[3] / ".env")
     value = os.getenv("TEST_DATABASE_URL")
     if not value:
-        raise pytest.UsageError("Set TEST_DATABASE_URL and run npm run db:test:deploy first")
+        raise pytest.UsageError("Set TEST_DATABASE_URL and run pnpm run db:test:deploy first")
     test_url = urlsplit(value)
     app_url = urlsplit(os.getenv("DATABASE_URL", ""))
     if test_url.scheme not in {"postgres", "postgresql"} or not test_url.path.endswith("_test"):

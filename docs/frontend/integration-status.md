@@ -34,15 +34,17 @@ Live operations return explicit `integration_unavailable` errors rather than att
 From the repository root:
 
 ```sh
-npm ci
-VITE_APP_MODE=mock npm run dev:frontend
+pnpm install --frozen-lockfile
+VITE_APP_MODE=mock pnpm run dev:frontend
 ```
 
 Open `http://127.0.0.1:5173`. Development credentials are `admin@demo.test` / `demo1234` and `anggota` / `demo1234`. `tetangga` uses the same mock password for another-household checks. These are fake test accounts. New fixture accounts and inventory changes survive navigation but not a page reload.
 
 Without the explicit development setting, the app defaults to live mode and shows missing integration. Production ignores `VITE_APP_MODE=mock`. The fixture module, demo login credentials/hint, fixture deliveries, and simulated token were checked absent from the production JavaScript. Live failures never fall back to mocks.
 
-## Actual verification results
+## Historical implementation verification results
+
+These commands record the original npm/Prettier run. The current package-manager and quality-tool setup is documented in [tooling.md](../tooling.md).
 
 Environment: Node `v24.22.1`, npm `11.9.0`, Linux Chromium, compatible Capacitor 8 dependencies from the unchanged root lockfile.
 

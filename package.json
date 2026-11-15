@@ -4,21 +4,18 @@
   "version": "0.1.0",
   "engines": {
     "node": ">=24 <25",
-    "npm": ">=11"
+    "pnpm": ">=11 <12"
   },
-  "workspaces": [
-    "apps/frontend"
-  ],
   "scripts": {
-    "dev": "concurrently --kill-others -n api,web \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "concurrently --kill-others -n api,web \"pnpm run dev:backend\" \"pnpm run dev:frontend\"",
     "dev:backend": "uv run --directory apps/backend uvicorn cekrir.main:app --reload --host 127.0.0.1 --port 8000",
-    "dev:frontend": "npm run dev --workspace @cekrir/frontend",
-    "build": "npm run build --workspace @cekrir/frontend",
-    "check": "prettier --check . && npm run db:validate && npm run check:backend && npm run check --workspace @cekrir/frontend",
+    "dev:frontend": "pnpm --filter @cekrir/frontend dev",
+    "build": "pnpm --filter @cekrir/frontend build",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run db:validate && pnpm run check:backend && pnpm --filter @cekrir/frontend check",
     "check:backend": "uv run --project apps/backend ruff check apps/backend && uv run --project apps/backend ruff format --check apps/backend",
-    "test": "npm run test:backend && npm run test --workspace @cekrir/frontend",
-    "test:backend": "npm run db:test:deploy && uv run --project apps/backend pytest apps/backend/tests",
-    "format": "prisma format && uv run --project apps/backend ruff format apps/backend && prettier --write .",
+    "test": "pnpm run test:backend && pnpm --filter @cekrir/frontend test",
+    "test:backend": "pnpm run db:test:deploy && uv run --project apps/backend pytest apps/backend/tests",
+    "format": "prisma format && uv run --project apps/backend ruff format apps/backend && oxfmt",
     "db:up": "docker compose up -d --wait postgres",
     "db:down": "docker compose down",
     "db:migrate": "prisma migrate dev",
@@ -29,12 +26,19 @@
     "firmware:build": "uv run --no-project --python 3.12 --with-requirements apps/esp32/requirements.txt platformio run --project-dir apps/esp32",
     "firmware:upload": "uv run --no-project --python 3.12 --with-requirements apps/esp32/requirements.txt platformio run --project-dir apps/esp32 --target upload",
     "firmware:monitor": "uv run --no-project --python 3.12 --with-requirements apps/esp32/requirements.txt platformio device monitor --baud 115200",
-    "firmware:test": "uv run --no-project --python 3.12 --with-requirements apps/esp32/requirements.txt platformio test --project-dir apps/esp32 --environment native"
+    "firmware:test": "uv run --no-project --python 3.12 --with-requirements apps/esp32/requirements.txt platformio test --project-dir apps/esp32 --environment native",
+    "lint": "oxlint --deny-warnings",
+    "lint:fix": "oxlint --fix",
+    "format:check": "oxfmt --check",
+    "format:frontend": "oxfmt apps/frontend/src apps/frontend/index.html",
+    "check:frontend": "pnpm run lint && pnpm --filter @cekrir/frontend check"
   },
   "devDependencies": {
     "concurrently": "^10.0.7",
     "dotenv": "17.4.2",
-    "prettier": "^3.6.2",
+    "oxfmt": "0.78.0",
+    "oxlint": "1.93.0",
     "prisma": "7.10.1"
-  }
+  },
+  "packageManager": "pnpm@11.28.12"
 }

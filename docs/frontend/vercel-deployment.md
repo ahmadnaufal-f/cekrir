@@ -1,5 +1,7 @@
 # Vercel frontend deployment
 
+The tables below record the original npm-based releases. Current builds use the pinned pnpm 11 version and commands in [vercel.json](../../vercel.json); see [tooling.md](../tooling.md) for the migration.
+
 ## GitHub-connected deployment
 
 The owner's later request changed the deployment source from local artifacts to GitHub. The frontend and repository-root [vercel.json](../../vercel.json) were committed and pushed to [`frontend/household-vercel`](https://github.com/ahmadnaufal-f/cekrir/tree/frontend/household-vercel). `main` remains at the original baseline; no merge was performed.

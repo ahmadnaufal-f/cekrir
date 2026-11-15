@@ -43,7 +43,7 @@ export function createAuthorizedTransport(
       )
     if (!path.startsWith('/') || path.startsWith('//') || path.includes('://'))
       throw new ServiceError('invalid_path', copy.invalidPath)
-    if (Capacitor.isNativePlatform() && !/^https:\/\//.test(base))
+    if (Capacitor.isNativePlatform() && !base.startsWith('https://'))
       throw new ServiceError('configuration', copy.nativeHttps)
     const token = credentials.read()
     const headers = new Headers(init.headers)

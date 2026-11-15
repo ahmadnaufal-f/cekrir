@@ -2,6 +2,8 @@ import { onUnmounted, shallowRef } from 'vue'
 import type { AppRoute, AppUser } from '../types/app'
 
 const adminRoutes = new Set(['/devices', '/members', '/setup'])
+// oxlint-disable-next-line no-control-regex -- Reject control characters in untrusted delivery IDs.
+const unsafeDeliveryId = /[\u0000-\u001f/\\?#]/
 export function parseRoute(hash: string): AppRoute {
   const value = hash.replace(/^#/, '') || '/deliveries'
   if (
@@ -19,7 +21,7 @@ export function parseRoute(hash: string): AppRoute {
   if (/^\/deliveries\/[^/?#]{1,200}$/.test(value)) {
     try {
       const id = decodeURIComponent(value.slice(12))
-      if (id && !/[\u0000-\u001f/\\?#]/.test(id)) return value as AppRoute
+      if (id && !unsafeDeliveryId.test(id)) return value as AppRoute
     } catch {
       /* Invalid encoded identifier. */
     }

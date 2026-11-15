@@ -19,10 +19,10 @@ Vite replaces these variables at build time. Rebuild and sync after changing the
 From the repository root:
 
 ```sh
-npm run cap:sync --workspace @cekrir/frontend
-npm run cap:android --workspace @cekrir/frontend
+pnpm --filter @cekrir/frontend cap:sync
+pnpm --filter @cekrir/frontend cap:android
 # Requires macOS and Xcode:
-npm run cap:ios --workspace @cekrir/frontend
+pnpm --filter @cekrir/frontend cap:ios
 ```
 
 Install Android Studio and the Android SDK for Android builds. iOS builds require macOS, Xcode, signing configuration, and the SDK versions supported by your installed Capacitor version. `cap:sync` builds the web app before copying assets and updating plugins.
@@ -30,8 +30,8 @@ Install Android Studio and the Android SDK for Android builds. iOS builds requir
 If regenerating a platform after changing the app ID:
 
 ```sh
-npm run cap:add:android --workspace @cekrir/frontend
-npm run cap:add:ios --workspace @cekrir/frontend
+pnpm --filter @cekrir/frontend cap:add:android
+pnpm --filter @cekrir/frontend cap:add:ios
 ```
 
 Run these only when the corresponding native directory is absent. Commit native project sources and your platform customizations; native build output and copied web assets are ignored by their generated `.gitignore` files.

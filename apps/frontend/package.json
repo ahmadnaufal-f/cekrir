@@ -9,9 +9,9 @@
     "preview": "vite preview --host 127.0.0.1",
     "check": "vue-tsc --noEmit",
     "test": "vitest run",
-    "cap:sync": "npm run build && cap sync",
-    "cap:add:android": "npm run build && cap add android",
-    "cap:add:ios": "npm run build && cap add ios",
+    "cap:sync": "pnpm run build && cap sync",
+    "cap:add:android": "pnpm run build && cap add android",
+    "cap:add:ios": "pnpm run build && cap add ios",
     "cap:android": "cap open android",
     "cap:ios": "cap open ios"
   },
