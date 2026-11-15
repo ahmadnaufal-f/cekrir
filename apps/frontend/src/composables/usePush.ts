@@ -12,7 +12,11 @@ import {
 import { pushCopy } from '../lib/push-copy'
 
 export type PushAssociationState =
-  'idle' | 'pending' | 'registered' | 'failed' | 'blocked'
+  | 'idle'
+  | 'pending'
+  | 'registered'
+  | 'failed'
+  | 'blocked'
 
 export interface PushBanner {
   eventId: string

@@ -24,9 +24,9 @@ From the repository root:
 ```sh
 cp apps/esp32/include/config.example.h apps/esp32/include/config.h
 # Edit config.h: Wi-Fi, API URL, camera ID, courier, ingestion key, and HTTPS root CA.
-npm run firmware:build
+pnpm run firmware:build
 # Alternative board:
-npm run firmware:build -- --environment ai_thinker_esp32cam
+pnpm run firmware:build --environment ai_thinker_esp32cam
 ```
 
 `config.h` is ignored by Git. Builds without it use the example and halt at runtime until configured. Keep secrets out of build flags and committed files. Credentials are embedded in the flashed firmware; secure provisioning and encrypted storage are future work.
@@ -47,8 +47,8 @@ For example, set `kApiBaseUrl` to `http://192.168.1.20:8000/api/v1`. Set `CEKRIR
 Connect the board using its supported USB/programmer interface, then run:
 
 ```sh
-npm run firmware:upload -- --environment xiao_esp32s3_sense --upload-port /dev/ttyACM0
-npm run firmware:monitor -- --port /dev/ttyACM0
+pnpm run firmware:upload --environment xiao_esp32s3_sense --upload-port /dev/ttyACM0
+pnpm run firmware:monitor --port /dev/ttyACM0
 ```
 
 For AI Thinker, use its environment and actual serial port. Follow the board vendor's boot/programming instructions (some boards need GPIO0 held low during flashing, followed by release/reset). On Windows, serial ports look like `COM3`; on macOS they often start with `/dev/cu.`. Pin profiles follow [Espressif's camera examples](https://github.com/espressif/arduino-esp32/blob/2.0.17/libraries/ESP32/examples/Camera/CameraWebServer/camera_pins.h).
@@ -72,9 +72,9 @@ Frames leave the device and are decoded in backend memory, without being saved t
 ## Test without hardware
 
 ```sh
-npm run firmware:test
-npm run db:up
-npm test
+pnpm run firmware:test
+pnpm run db:up
+pnpm test
 ```
 
 Native C++ tests cover timer wraparound, bounded retries, query encoding, and courier validation. Backend tests encode real barcode images, JPEG-compress them, send them to the frame endpoint, and verify decoding, PostgreSQL persistence, duplicate handling, ambiguity, authentication, and image limits. A physical board is not needed for those tests.

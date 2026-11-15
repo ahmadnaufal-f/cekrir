@@ -18,28 +18,29 @@ The default tracking provider is an explicitly labeled **offline demo**. It neve
 
 ## Start locally
 
-Install **Node.js 24 LTS**, npm 11+, [uv](https://docs.astral.sh/uv/getting-started/installation/), and **Docker with Compose**. uv can install the required Python version. An existing PostgreSQL server can also be used instead of Docker.
+Install **Node.js 24 LTS**, pnpm 11, [uv](https://docs.astral.sh/uv/getting-started/installation/), and **Docker with Compose**. uv can install the required Python version. An existing PostgreSQL server can also be used instead of Docker.
 
 ```sh
 git clone https://github.com/ahmadnaufal-f/cekrir.git
 cd cekrir
-npm ci
+corepack enable
+pnpm install --frozen-lockfile
 uv sync --project apps/backend --frozen
 cp .env.example .env
 cp apps/backend/.env.example apps/backend/.env
 cp apps/frontend/.env.example apps/frontend/.env
-npm run db:up
-npm run db:deploy
-npm run dev
+pnpm run db:up
+pnpm run db:deploy
+pnpm run dev
 ```
 
 - Dashboard: <http://127.0.0.1:5173>
 - API documentation: <http://127.0.0.1:8000/docs>
 - Health: <http://127.0.0.1:8000/health>
 
-The frontend defaults to live mode and reports unsupported household operations. To review the frontend without a backend, run `VITE_APP_MODE=mock npm run dev:frontend`. Sign in with `admin@demo.test` or `anggota`, password `demo1234`. These are synthetic development accounts; sessions and new fixture records are in memory only. Production builds ignore mock mode and exclude the fixture module. The manual shipment client remains as legacy scaffold code, separate from household events.
+The frontend defaults to live mode and reports unsupported household operations. To review the frontend without a backend, run `VITE_APP_MODE=mock pnpm run dev:frontend`. Sign in with `admin@demo.test` or `anggota`, password `demo1234`. These are synthetic development accounts; sessions and new fixture records are in memory only. Production builds ignore mock mode and exclude the fixture module. The manual shipment client remains as legacy scaffold code, separate from household events.
 
-Backend demo tracking always reports `in_transit`; it is sample data. PostgreSQL persists in the Compose `postgres_data` volume. The root dev command starts both apps and stops them together with Ctrl+C; `npm run db:down` stops PostgreSQL while preserving its volume.
+Backend demo tracking always reports `in_transit`; it is sample data. PostgreSQL persists in the Compose `postgres_data` volume. The root dev command starts both apps and stops them together with Ctrl+C; `pnpm run db:down` stops PostgreSQL while preserving its volume.
 
 **Prisma owns the database schema and versioned SQL migrations.** FastAPI uses psycopg and a connection pool because Prisma's supported client targets JavaScript/TypeScript. The schema is defined once in `prisma/schema.prisma`; the Python backend does not create or migrate tables. See [database setup](docs/database.md) for schema changes, testing, and deployment.
 
@@ -64,8 +65,8 @@ The firmware uploads small JPEG snapshots to `POST /api/v1/detections/frame`. Fa
 ```sh
 cp apps/esp32/include/config.example.h apps/esp32/include/config.h
 # Set Wi-Fi, API URL, camera ID, courier, ingestion key, and HTTPS root CA.
-npm run firmware:build
-npm run firmware:test
+pnpm run firmware:build
+pnpm run firmware:test
 ```
 
 See the firmware README for flashing, a trusted LAN development setup, board selection, frame limits, and hardware validation steps.
@@ -74,29 +75,31 @@ See the firmware README for flashing, a trusted LAN development setup, board sel
 
 Run these from the repository root:
 
-| Command                                                       | Purpose                                          |
-| ------------------------------------------------------------- | ------------------------------------------------ |
-| `npm run dev`                                                 | Run FastAPI and Vite                             |
-| `npm run dev:backend`                                         | Run FastAPI only                                 |
-| `npm run dev:frontend`                                        | Run Vite only                                    |
-| `npm run check`                                               | Formatting, Python lint, Vue/TypeScript checking |
-| `npm test`                                                    | API integration tests and frontend API tests     |
-| `npm run build`                                               | Type check and build the frontend                |
-| `npm run format`                                              | Format Python and web/docs/config files          |
-| `npm run db:up`                                               | Start local PostgreSQL and wait for readiness    |
-| `npm run db:down`                                             | Stop local PostgreSQL; keep persisted data       |
-| `npm run db:deploy`                                           | Apply committed Prisma migrations                |
-| `npm run db:migrate -- --name change_name`                    | Create and apply a development migration         |
-| `npm run db:studio`                                           | Inspect PostgreSQL data with Prisma Studio       |
-| `npm run firmware:build`                                      | Cross-compile the default ESP32S3 camera profile |
-| `npm run firmware:build -- --environment ai_thinker_esp32cam` | Cross-compile the AI Thinker profile             |
-| `npm run firmware:test`                                       | Run firmware policy tests on the host            |
-| `npm run firmware:upload -- --environment xiao_esp32s3_sense` | Flash a connected device                         |
-| `npm run firmware:monitor`                                    | Open the serial monitor at 115200 baud           |
+| Command                                                     | Purpose                                                   |
+| ----------------------------------------------------------- | --------------------------------------------------------- |
+| `pnpm run dev`                                              | Run FastAPI and Vite                                      |
+| `pnpm run dev:backend`                                      | Run FastAPI only                                          |
+| `pnpm run dev:frontend`                                     | Run Vite only                                             |
+| `pnpm run check`                                            | Oxfmt, Oxlint, Prisma, Python lint, Vue/TypeScript checks |
+| `pnpm test`                                                 | API integration tests and frontend API tests              |
+| `pnpm run build`                                            | Type check and build the frontend                         |
+| `pnpm run format`                                           | Format Python and web/docs/config files                   |
+| `pnpm run db:up`                                            | Start local PostgreSQL and wait for readiness             |
+| `pnpm run db:down`                                          | Stop local PostgreSQL; keep persisted data                |
+| `pnpm run db:deploy`                                        | Apply committed Prisma migrations                         |
+| `pnpm run db:migrate --name change_name`                    | Create and apply a development migration                  |
+| `pnpm run db:studio`                                        | Inspect PostgreSQL data with Prisma Studio                |
+| `pnpm run firmware:build`                                   | Cross-compile the default ESP32S3 camera profile          |
+| `pnpm run firmware:build --environment ai_thinker_esp32cam` | Cross-compile the AI Thinker profile                      |
+| `pnpm run firmware:test`                                    | Run firmware policy tests on the host                     |
+| `pnpm run firmware:upload --environment xiao_esp32s3_sense` | Flash a connected device                                  |
+| `pnpm run firmware:monitor`                                 | Open the serial monitor at 115200 baud                    |
 
-`npm test` applies Prisma migrations to `TEST_DATABASE_URL` and runs the API tests against that dedicated PostgreSQL database. Compose creates `cekrir_test` on its first initialization. Tests clear its shipment/notification tables; they require a database name ending in `_test` and reject the application database. Frontend tests do not need PostgreSQL.
+`pnpm test` applies Prisma migrations to `TEST_DATABASE_URL` and runs the API tests against that dedicated PostgreSQL database. Compose creates `cekrir_test` on its first initialization. Tests clear its shipment/notification tables; they require a database name ending in `_test` and reject the application database. Frontend tests do not need PostgreSQL.
 
-Python dependencies live in `apps/backend/pyproject.toml` and `apps/backend/uv.lock`. The frontend is an npm workspace with a root `package-lock.json`. Commit both lockfiles when dependencies change. CI runs the same checks with frozen dependency installation.
+Python dependencies live in `apps/backend/pyproject.toml` and `apps/backend/uv.lock`. The frontend is a pnpm workspace defined in `pnpm-workspace.yaml`, with a root `pnpm-lock.yaml`. Commit both lockfiles when dependencies change. CI runs the same checks with frozen dependency installation.
+
+Formatting uses Oxfmt and JavaScript/TypeScript linting uses Oxlint with Vue and Vitest support. See [tooling setup](docs/tooling.md) for versions, editor integration, focused frontend checks, and formatting commands.
 
 ## Mobile apps
 

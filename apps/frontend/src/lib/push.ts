@@ -1,7 +1,10 @@
 import type { DeliveryPushData } from '../types/app'
 
 export type PushPermissionState =
-  'not-requested' | 'granted' | 'denied' | 'unsupported'
+  | 'not-requested'
+  | 'granted'
+  | 'denied'
+  | 'unsupported'
 
 export type PushBridgeKind = 'simulated' | 'unavailable' | 'native'
 

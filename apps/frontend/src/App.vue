@@ -209,10 +209,8 @@ onUnmounted(() => {
         >
           <p>{{ ui.deliveries }}</p>
           <button class="button button--primary" @click="push.tapBanner()">
-            {{ copy.navigateDelivery }}</button><button
-            class="text-button"
-            @click="push.dismissBanner()"
-          >
+            {{ copy.navigateDelivery }}</button
+          ><button class="text-button" @click="push.dismissBanner()">
             {{ copy.dismiss }}
           </button>
         </aside>
