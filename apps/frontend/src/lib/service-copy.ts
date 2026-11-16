@@ -4,7 +4,7 @@ export const serviceCopy = {
   connection: 'Tidak dapat menghubungi server. Periksa koneksi lalu coba lagi.',
   failed: 'Permintaan gagal. Coba lagi.',
   unavailable:
-    'Integrasi rumah tangga belum tersedia. Kontrak backend masih perlu disepakati.',
+    'Integrasi lokasi penerimaan belum tersedia. Kontrak backend masih perlu disepakati.',
   http: {
     401: 'Sesi berakhir. Silakan masuk lagi.',
     403: 'Anda tidak memiliki akses ke paket ini.',

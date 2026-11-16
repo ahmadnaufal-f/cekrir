@@ -104,7 +104,7 @@ function createTracking(
     senderName: 'Pengirim Demo',
     recipientName: 'Penerima Demo',
     origin: 'Kota Contoh',
-    destination: 'Rumah Demo',
+    destination: 'Lokasi Demo',
     events: [
       {
         occurredAt: `2026-11-15T0${8 - Math.min(index, 7)}:30:00Z`,

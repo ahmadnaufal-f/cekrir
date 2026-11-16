@@ -1,7 +1,7 @@
 export const pushCopy = {
   heading: 'Notifikasi paket',
   description:
-    'Terima pemberitahuan saat kiriman baru tercatat untuk rumah tangga Anda.',
+    'Terima pemberitahuan saat kiriman baru tercatat untuk lokasi penerimaan ini.',
   unavailable:
     'Notifikasi push Android belum tersedia di aplikasi ini. Paket tetap bisa dibuka di sini.',
   simulated:

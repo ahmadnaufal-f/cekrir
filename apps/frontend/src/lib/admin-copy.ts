@@ -1,38 +1,38 @@
-// Bahasa Indonesia copy for the household administration screens.
+// Bahasa Indonesia copy for the location administration screens.
 export const adminCopy = {
   common: {
     retry: 'Coba lagi',
     loading: 'Memuat…',
     requestFailed: 'Permintaan gagal. Silakan coba lagi.',
-    adminOnly: 'Halaman ini hanya tersedia untuk admin rumah tangga.',
+    adminOnly: 'Halaman ini hanya tersedia untuk admin lokasi penerimaan.',
     memberRole: 'Anggota',
   },
   devices: {
     title: 'Perangkat',
-    intro: 'Kelola perangkat yang membantu mencatat paket di rumah.',
+    intro: 'Kelola perangkat untuk mencatat paket di lokasi ini.',
     loadFailed: 'Daftar perangkat belum dapat dimuat.',
     esp32Title: 'ESP32 pendeteksi paket',
     esp32Description:
-      'Daftarkan satu perangkat ESP32 untuk mengirim peristiwa paket ke rumah tangga ini.',
+      'Daftarkan satu perangkat ESP32 untuk mengirim peristiwa paket ke lokasi penerimaan ini.',
     noEsp32: 'Belum ada ESP32 yang terdaftar.',
     esp32Name: 'Nama perangkat',
     esp32NamePlaceholder: 'Contoh: Kamera pintu depan',
     addEsp32: 'Daftarkan ESP32',
     savingEsp32: 'Mendaftarkan…',
     esp32Limit:
-      'Rumah tangga hanya dapat memiliki satu ESP32. Perangkat lama tetap tersimpan.',
+      'Setiap lokasi penerimaan hanya dapat memiliki satu ESP32. Perangkat lama tetap tersimpan.',
     esp32Failed: 'ESP32 belum dapat didaftarkan. Coba lagi.',
     esp32Registered: 'Terdaftar · status koneksi belum diperiksa',
     registeredLabel: 'Terdaftar',
     esp32Group: 'PERANGKAT PAKET',
-    cameraGroup: 'KAMERA RUMAH',
+    cameraGroup: 'KAMERA LOKASI',
     identity: 'Identitas perangkat',
     credentialLabel: 'Kredensial perangkat',
     credentialInputLabel: 'Kredensial konfigurasi ESP32',
     demoCredentialLabel: 'Kredensial demo · data simulasi',
     credentialTitle: 'Simpan kredensial perangkat',
     credentialIntro:
-      'Kredensial ini hanya tersedia pada tampilan ini. Salin untuk konfigurasi firmware sebelum menutupnya.',
+      'Kredensial ini hanya tersedia pada tampilan ini. Simpan secara pribadi sebelum menutupnya. Penggunaannya pada firmware menunggu kesepakatan integrasi.',
     credentialMissing:
       'ESP32 berhasil didaftarkan, tetapi kredensial konfigurasi tidak tersedia pada respons. Hubungi pengelola sebelum melanjutkan.',
     showCredential: 'Tampilkan kredensial',
@@ -72,9 +72,9 @@ export const adminCopy = {
   },
   members: {
     title: 'Anggota',
-    intro: 'Buat akun untuk orang yang membantu menerima paket di rumah.',
+    intro: 'Buat akun untuk orang yang membantu menerima paket di lokasi ini.',
     loadFailed: 'Daftar anggota belum dapat dimuat.',
-    empty: 'Belum ada anggota rumah tangga.',
+    empty: 'Belum ada anggota untuk lokasi ini.',
     createTitle: 'Buat akun anggota',
     displayName: 'Nama tampilan',
     displayNamePlaceholder: 'Contoh: Ibu',

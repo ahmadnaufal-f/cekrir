@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import AppIcon from '../components/AppIcon.vue'
 import type { PushState } from '../composables/usePush'
 import { pushCopy } from '../lib/push-copy'
 
@@ -69,15 +70,7 @@ const showRetry = computed(
   <section class="notification-settings" aria-labelledby="notification-heading">
     <header class="notification-settings__header">
       <span class="notification-settings__icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none">
-          <path
-            d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"
-            stroke="currentColor"
-            stroke-width="1.7"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
+        <AppIcon name="bell" />
       </span>
       <div>
         <h2 id="notification-heading">{{ pushCopy.heading }}</h2>
@@ -111,6 +104,7 @@ const showRetry = computed(
         :disabled="state.busy"
         @click="emit('enable')"
       >
+        <AppIcon name="bell" />
         {{ state.busy ? pushCopy.processing : pushCopy.enable }}
       </button>
       <button
@@ -120,6 +114,7 @@ const showRetry = computed(
         :disabled="state.busy"
         @click="emit('retry')"
       >
+        <AppIcon name="refresh" />
         {{ state.busy ? pushCopy.processing : pushCopy.retry }}
       </button>
     </div>
@@ -141,6 +136,7 @@ const showRetry = computed(
           :disabled="state.pendingNavigation && !state.error"
           @click="emit('tapBanner')"
         >
+          <AppIcon :name="state.error ? 'refresh' : 'package'" />
           {{
             state.error
               ? pushCopy.retry
@@ -155,6 +151,7 @@ const showRetry = computed(
           :aria-label="pushCopy.dismissBanner"
           @click="emit('dismissBanner')"
         >
+          <AppIcon name="close" />
           {{ pushCopy.close }}
         </button>
       </div>
@@ -173,6 +170,7 @@ const showRetry = computed(
         type="button"
         @click="emit('tapBanner')"
       >
+        <AppIcon name="refresh" />
         {{ pushCopy.retry }}
       </button>
     </aside>
@@ -189,6 +187,7 @@ const showRetry = computed(
           type="button"
           @click="emit('simulateReceived')"
         >
+          <AppIcon name="package" />
           {{ pushCopy.simulateReceived }}
         </button>
         <button
@@ -196,6 +195,7 @@ const showRetry = computed(
           type="button"
           @click="emit('simulateTap')"
         >
+          <AppIcon name="bell" />
           {{ pushCopy.simulateTap }}
         </button>
       </div>
@@ -295,6 +295,9 @@ const showRetry = computed(
 .notification-settings__button,
 .notification-settings__text-button,
 .notification-settings__dismiss {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   min-height: 44px;
   border: 1px solid #d6ded0;
   border-radius: 6px;

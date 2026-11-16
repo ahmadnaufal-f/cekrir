@@ -1,8 +1,9 @@
 export const shellCopy = {
   skip: 'Langsung ke isi',
-  household: 'Rumah tangga',
-  privacy: 'Catatan pengiriman untuk seluruh anggota rumah.',
+  household: 'Lokasi penerimaan',
+  privacy: 'Catatan pengiriman untuk orang yang menerima paket di lokasi ini.',
   navigation: 'Navigasi utama',
+  openAccount: 'Buka akun dan notifikasi',
   account: 'Akun dan notifikasi',
   role: 'Peran',
   identity: 'Identitas masuk',
@@ -15,7 +16,7 @@ export const shellCopy = {
     'Pelepasan notifikasi belum berhasil. Coba keluar lagi sebelum berpindah akun.',
   unavailable: 'Integrasi live belum tersedia',
   liveHelp:
-    'Backend saat ini menyediakan API pelacakan lama. Akun rumah tangga dan layanan pengiriman belum memiliki kontrak live yang disepakati.',
+    'Backend saat ini menyediakan API pelacakan lama. Akun untuk lokasi penerimaan dan layanan pengiriman belum memiliki kontrak live yang disepakati.',
   restore: 'Menyiapkan sesi…',
   navigateDelivery: 'Buka paket',
   dismiss: 'Tutup',

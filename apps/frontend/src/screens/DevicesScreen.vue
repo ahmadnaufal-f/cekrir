@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import DeviceSetupGuide from '../components/DeviceSetupGuide.vue'
+import AppIcon from '../components/AppIcon.vue'
 import { computed, onUnmounted, reactive, shallowRef, watch } from 'vue'
 import { adminCopy } from '../lib/admin-copy'
+import { deviceGuideCopy } from '../lib/device-guide-copy'
 import { ServiceError } from '../services/contracts'
 import type {
   AppUser,
@@ -27,6 +30,7 @@ const noticeMessage = shallowRef('')
 const credential = shallowRef<string | null>(null)
 const credentialVisible = shallowRef(false)
 const credentialNotice = shallowRef('')
+const esp32HelpOpen = shallowRef(false)
 const esp32Name = shallowRef('')
 const cameraForm = reactive({ name: '', url: '', username: '', password: '' })
 const isAdmin = computed(() => props.user.role === 'admin')
@@ -34,6 +38,15 @@ const isBusy = computed(() => operation.value !== null)
 const selectedCameraId = computed(
   () => inventory.value?.selectedDeliveryCameraId ?? null,
 )
+const needsCameraGuide = computed(() => {
+  const cameras = inventory.value?.cameras
+  if (!cameras) return false
+  return (
+    cameras.length === 0 ||
+    !cameras.some((camera) => camera.id === selectedCameraId.value) ||
+    cameras.some((camera) => camera.configurationState === 'incomplete')
+  )
+})
 
 let requestGeneration = 0
 let disposed = false
@@ -75,6 +88,7 @@ function resetScreenState(): void {
   esp32FieldError.value = ''
   cameraFieldErrors.value = {}
   noticeMessage.value = ''
+  esp32HelpOpen.value = false
   esp32Name.value = ''
   cameraForm.name = ''
   cameraForm.url = ''
@@ -229,6 +243,12 @@ function dismissCredential(): void {
   clearSensitiveState()
 }
 
+function updateEsp32HelpOpen(event: Event): void {
+  const disclosure = event.currentTarget
+  if (disclosure instanceof HTMLDetailsElement)
+    esp32HelpOpen.value = disclosure.open
+}
+
 async function copyCredential(): Promise<void> {
   const value = credential.value
   if (!value) return
@@ -333,6 +353,7 @@ onUnmounted(() => {
             type="button"
             @click="credentialVisible = !credentialVisible"
           >
+            <AppIcon :name="credentialVisible ? 'eyeOff' : 'eye'" />
             {{ credentialVisible ? copy.hideCredential : copy.showCredential }}
           </button>
           <button
@@ -340,6 +361,7 @@ onUnmounted(() => {
             type="button"
             @click="copyCredential"
           >
+            <AppIcon name="copy" />
             {{ copy.copyCredential }}
           </button>
         </div>
@@ -351,6 +373,7 @@ onUnmounted(() => {
           type="button"
           @click="dismissCredential"
         >
+          <AppIcon name="check" />
           {{ copy.credentialDismiss }}
         </button>
       </section>
@@ -359,13 +382,23 @@ onUnmounted(() => {
         <section class="admin-panel" aria-labelledby="esp32-heading">
           <div class="admin-panel__heading">
             <div>
-              <h2 id="esp32-heading">{{ copy.esp32Title }}</h2>
+              <h2 id="esp32-heading">
+                <AppIcon name="device" /> {{ copy.esp32Title }}
+              </h2>
             </div>
             <span v-if="inventory?.esp32" class="admin-pill">{{
               copy.registeredLabel
             }}</span>
           </div>
           <p class="admin-panel__copy">{{ copy.esp32Description }}</p>
+
+          <DeviceSetupGuide
+            v-if="inventoryState === 'ready' && !inventory?.esp32"
+            :services="props.services"
+            :user="props.user"
+            kind="esp32"
+            @session-expired="emit('sessionExpired')"
+          />
 
           <p
             v-if="inventoryState === 'loading'"
@@ -381,6 +414,7 @@ onUnmounted(() => {
               type="button"
               @click="loadInventory(requestGeneration)"
             >
+              <AppIcon name="refresh" />
               {{ adminCopy.common.retry }}
             </button>
           </div>
@@ -391,8 +425,23 @@ onUnmounted(() => {
               <small>{{ copy.identity }} · {{ inventory.esp32.id }}</small>
             </div>
           </div>
+          <details
+            v-if="inventoryState === 'ready' && inventory?.esp32"
+            :key="`${props.user.id}:${props.user.householdId}:${props.user.role}`"
+            class="device-help-disclosure"
+            @toggle="updateEsp32HelpOpen"
+          >
+            <summary>{{ deviceGuideCopy.esp32.disclosure }}</summary>
+            <DeviceSetupGuide
+              v-if="esp32HelpOpen"
+              :services="props.services"
+              :user="props.user"
+              kind="esp32"
+              @session-expired="emit('sessionExpired')"
+            />
+          </details>
           <form
-            v-else
+            v-if="inventoryState === 'ready' && !inventory?.esp32"
             class="admin-form admin-form--inline"
             @submit.prevent="registerEsp32"
           >
@@ -419,6 +468,7 @@ onUnmounted(() => {
               type="submit"
               :disabled="isBusy || inventoryState !== 'ready'"
             >
+              <AppIcon name="plus" />
               {{ operation === 'esp32' ? copy.savingEsp32 : copy.addEsp32 }}
             </button>
           </form>
@@ -427,7 +477,9 @@ onUnmounted(() => {
         <section class="admin-panel" aria-labelledby="cameras-heading">
           <div class="admin-panel__heading">
             <div>
-              <h2 id="cameras-heading">{{ copy.camerasTitle }}</h2>
+              <h2 id="cameras-heading">
+                <AppIcon name="camera" /> {{ copy.camerasTitle }}
+              </h2>
             </div>
             <span class="admin-pill">{{ inventory?.cameras.length ?? 0 }}</span>
           </div>
@@ -447,6 +499,7 @@ onUnmounted(() => {
               type="button"
               @click="loadInventory(requestGeneration)"
             >
+              <AppIcon name="refresh" />
               {{ adminCopy.common.retry }}
             </button>
           </div>
@@ -477,6 +530,7 @@ onUnmounted(() => {
                   class="selected-label"
                   aria-current="true"
                 >
+                  <AppIcon name="check" />
                   {{ copy.selectedCamera }}
                 </span>
                 <span v-else class="camera-card__not-selected">{{
@@ -489,6 +543,7 @@ onUnmounted(() => {
                   :disabled="isBusy"
                   @click="selectCamera(camera.id)"
                 >
+                  <AppIcon name="camera" />
                   {{
                     operation === 'select'
                       ? copy.selectingCamera
@@ -498,6 +553,14 @@ onUnmounted(() => {
               </div>
             </li>
           </ul>
+
+          <DeviceSetupGuide
+            v-if="inventoryState === 'ready' && needsCameraGuide"
+            :services="props.services"
+            :user="props.user"
+            kind="bardi"
+            @session-expired="emit('sessionExpired')"
+          />
 
           <form class="admin-form camera-form" @submit.prevent="registerCamera">
             <h3>{{ copy.registerCameraTitle }}</h3>
@@ -554,6 +617,7 @@ onUnmounted(() => {
               type="submit"
               :disabled="isBusy || inventoryState !== 'ready'"
             >
+              <AppIcon name="plus" />
               {{ operation === 'camera' ? copy.savingCamera : copy.addCamera }}
             </button>
           </form>
@@ -701,6 +765,27 @@ onUnmounted(() => {
   overflow-wrap: anywhere;
 }
 
+.device-help-disclosure {
+  margin-top: 16px;
+  color: #536c53;
+  font-size: 0.8125rem;
+}
+
+.device-help-disclosure summary {
+  width: fit-content;
+  min-height: 44px;
+  padding: 11px 0;
+  cursor: pointer;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: #9aab94;
+  text-underline-offset: 3px;
+}
+
+.device-help-disclosure :deep(.device-guide) {
+  margin-top: 8px;
+}
+
 .admin-form {
   display: grid;
   gap: 14px;
@@ -745,6 +830,7 @@ onUnmounted(() => {
 }
 
 .admin-button {
+  gap: 8px;
   display: inline-flex;
   min-height: 44px;
   align-items: center;
