@@ -29,6 +29,7 @@ const links = computed<NavigationLink[]>(() => {
 function isCurrent(path: AppRoute) {
   return (
     props.route === path ||
+    (path === '/devices' && props.route.startsWith('/devices/')) ||
     (path === '/deliveries' && props.route.startsWith('/deliveries/'))
   )
 }

@@ -4,6 +4,18 @@ Reviewed and implemented on 2026-11-15 against `bc45600de0906a4b7995ac7111802525
 
 **Verified level: frontend UI with explicit mocks.** This is not live frontend integration, Android phone validation, or the complete hardware demonstration. Canonical requirements and FE01–FE16 coverage are in [spec-map.md](spec-map.md); teammate dependencies and legacy API compatibility are in [backend-gaps.md](backend-gaps.md).
 
+## Device tabs, dialogs and step guides — 2026-11-16
+
+The device page now separates **ESP32** and **Kamera** into an accessible tab selector. Each name has a warning for unfinished setup or a check for saved setup, with loading/error states before inventory is known. Saved setup means an ESP32 registration exists, or all registered cameras have configuration and a delivery camera is selected. Connection verification remains separate and visible on each device.
+
+Inline instructions and registration forms have moved out of the inventory. An unfinished category shows a guide link followed by **Daftarkan perangkat**, which opens a registration dialog. Completed ESP32 registration hides that action to retain the one-device limit; cameras can still be added. Registration preserves server rejection, write-only camera secrets, one-time masked ESP32 credentials, account guards, and authoritative camera selection.
+
+Admin-only `/devices/setup/esp32` and `/devices/setup/cameras` pages provide one illustration and paragraph per step, with touch swiping, progress, and keyboard/button navigation. Reading a guide does not change setup state. Returning from a guide keeps its category selected; the registration action opens the appropriate dialog. The ESP32 source remains scaffold material. BARDI local-test evidence is acknowledged, while repeated capture, full authored instructions and backend verification remain pending. No hardware pinout, provisioning service, streaming client or native dependency was added.
+
+Verification passed: all **68 frontend tests**, Oxfmt/Oxlint, Vue type checking, production build, existing navigation/mock flows, and the dedicated device browser runner. The device runner checks both step sequences and loaded images, native Chromium swipes, keyboard navigation, modal focus containment/return, failure and busy handling, camera completion/selection, one-time credential cleanup, stale inventory/reference responses, session expiry, role guards, and 320px with 200% text. Browser review exposed a native Tab focus gap and an overflowing off-screen status label; both were corrected and the complete runner passed. Production still rejects fixture credentials without mock fallback. Native APK and physical hardware remain unverified.
+
+Previews: [tabs](screenshots/devices-tabs-mobile.png), [camera tab](screenshots/devices-camera-tab-mobile.png), [ESP32 guide](screenshots/device-guide-esp32-mobile.png), [camera guide](screenshots/device-guide-camera-mobile.png), [registration dialog](screenshots/device-registration-camera-mobile.png), [large text](screenshots/devices-large-text.png). Only synthetic, non-secret states were captured.
+
 ## Package search and empty state — 2026-11-16
 
 The mobile pull-to-refresh instruction is now part of the page subtitle, outside the gesture area. There is no extra instruction below **Pengiriman terbaru**. Desktop continues to use browser reload.

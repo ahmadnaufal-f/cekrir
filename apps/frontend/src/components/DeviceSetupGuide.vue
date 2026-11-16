@@ -6,11 +6,12 @@ import { configuredReference } from '../lib/setup-reference'
 import { ServiceError } from '../services/contracts'
 import type { AppServices } from '../services/contracts'
 import type { AppUser, SetupContent } from '../types/app'
+import type { DeviceCategory } from '../types/device-ui'
 
 const props = defineProps<{
   services: AppServices
   user: AppUser
-  kind: 'esp32' | 'bardi'
+  kind: DeviceCategory
 }>()
 const emit = defineEmits<{ sessionExpired: [] }>()
 
@@ -101,28 +102,17 @@ onUnmounted(() => {
     :class="`device-guide--${kind}`"
     :aria-labelledby="`${kind}-guide-title`"
   >
-    <h3 :id="`${kind}-guide-title`">
+    <header class="device-guide__header">
+      <h2 :id="`${kind}-guide-title`">{{ deviceGuideCopy.common.title }}</h2>
       <AppIcon :name="kind === 'esp32' ? 'device' : 'camera'" />
-      {{ copy.title }}
-    </h3>
+    </header>
 
     <p v-if="!isAdmin" class="device-guide__notice" role="alert">
       {{ deviceGuideCopy.common.adminOnly }}
     </p>
 
     <template v-else>
-      <p class="device-guide__description">{{ copy.description }}</p>
-
-      <ol class="device-guide__steps">
-        <li v-for="step in copy.steps" :key="step">{{ step }}</li>
-      </ol>
-
-      <p v-if="kind === 'esp32'" class="device-guide__notice" role="note">
-        {{ deviceGuideCopy.esp32.scaffoldNote }}
-      </p>
-      <p v-else class="device-guide__notice" role="status">
-        {{ deviceGuideCopy.bardi.pending }}
-      </p>
+      <p class="device-guide__notice" role="note">{{ copy.statusNote }}</p>
 
       <p
         v-if="loadState === 'loading'"
@@ -159,13 +149,9 @@ onUnmounted(() => {
           rel="noopener noreferrer"
         >
           <AppIcon name="external" />
-          {{
-            kind === 'esp32'
-              ? deviceGuideCopy.esp32.guideLink
-              : deviceGuideCopy.bardi.guideLink
-          }}
+          {{ copy.guideLink }}
         </a>
-        <p v-if="!hasReference && kind === 'esp32'" class="device-guide__state">
+        <p v-if="!hasReference" class="device-guide__state">
           {{ deviceGuideCopy.common.linkUnavailable }}
         </p>
         <p v-if="hasReference" class="device-guide__external-note">
@@ -178,77 +164,69 @@ onUnmounted(() => {
 
 <style scoped>
 .device-guide {
-  margin-top: 20px;
-  padding-top: 18px;
-  border-top: 1px solid #e9ece3;
-  color: #435d4c;
+  margin-top: 24px;
+  padding: 20px 0 0;
+  border-top: 1px solid #dce3d7;
+  color: #233d37;
 }
 
-.device-guide h3 {
+.device-guide__header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.9375rem;
-  font-weight: 650;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.device-guide__description,
-.device-guide__steps,
+.device-guide__header h2 {
+  font-size: 1.0625rem;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+}
+
+.device-guide__header :deep(.app-icon) {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: #536c53;
+}
+
 .device-guide__notice,
 .device-guide__state,
 .device-guide__error,
 .device-guide__external-note {
   max-width: 72ch;
-  font-size: 0.8125rem;
-  line-height: 1.65;
-}
-
-.device-guide__description {
-  margin-top: 8px;
-  color: #53675a;
-}
-
-.device-guide__steps {
-  display: grid;
-  gap: 8px;
-  margin: 14px 0 0;
-  padding-left: 1.25rem;
-  color: #435d4c;
-}
-
-.device-guide__steps li {
-  padding-left: 2px;
+  font-size: 0.875rem;
+  line-height: 1.7;
 }
 
 .device-guide__notice {
-  margin-top: 14px;
+  margin-top: 13px;
   color: #53675a;
 }
 
 .device-guide__state {
-  margin-top: 14px;
+  margin-top: 13px;
   color: #53675a;
 }
 
 .device-guide__error {
-  margin-top: 14px;
+  margin-top: 13px;
   color: #925b3a;
 }
 
 .device-guide__retry {
-  gap: 8px;
   display: inline-flex;
   min-height: 44px;
   align-items: center;
+  gap: 8px;
   margin-top: 8px;
   padding: 8px 12px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: #eef2e8;
-  color: #536c53;
+  color: #435d4c;
   font: inherit;
-  font-size: 0.8125rem;
-  font-weight: 600;
+  font-size: 0.875rem;
+  font-weight: 650;
 }
 
 .device-guide__retry:hover {
@@ -260,25 +238,26 @@ onUnmounted(() => {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  margin-top: 14px;
+  margin-top: 15px;
 }
 
 .device-guide__references a {
-  gap: 8px;
   display: inline-flex;
   min-height: 44px;
   align-items: center;
+  gap: 8px;
   padding: 9px 12px;
-  border-radius: 7px;
-  background: #234e41;
-  color: #f6f7ef;
-  font-size: 0.8125rem;
-  font-weight: 600;
+  border: 1px solid #d4e0d1;
+  border-radius: 8px;
+  background: #e8efe5;
+  color: #234e41;
+  font-size: 0.875rem;
+  font-weight: 650;
   text-decoration: none;
 }
 
 .device-guide__references a:hover {
-  background: #173e32;
+  background: #dde9db;
 }
 
 .device-guide__external-note {

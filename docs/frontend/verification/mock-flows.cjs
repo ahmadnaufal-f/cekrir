@@ -42,6 +42,9 @@ const assert = require('node:assert/strict')
     }
     await login()
     await route('/devices')
+    await page
+      .getByRole('button', { name: 'Daftarkan perangkat', exact: true })
+      .click()
     await page.getByLabel('Nama perangkat', { exact: true }).fill('Scanner uji')
     await page
       .getByRole('button', { name: 'Daftarkan ESP32', exact: true })
@@ -91,6 +94,9 @@ const assert = require('node:assert/strict')
     })
     await route('/devices')
     await page
+      .getByRole('button', { name: 'Daftarkan perangkat', exact: true })
+      .click()
+    await page
       .getByLabel('Nama perangkat', { exact: true })
       .fill('Tidak boleh mengganti')
     await page
@@ -102,7 +108,9 @@ const assert = require('node:assert/strict')
         { exact: true },
       )
       .waitFor()
+    await page.getByRole('button', { name: 'Tutup', exact: true }).click()
     await page.getByText('Scanner uji', { exact: true }).waitFor()
+    await page.getByRole('tab', { name: /^Kamera/ }).click()
     const cameras = page.locator('.camera-card')
     await cameras
       .nth(0)
@@ -132,6 +140,9 @@ const assert = require('node:assert/strict')
         .count(),
       1,
     )
+    await page
+      .getByRole('button', { name: 'Daftarkan perangkat', exact: true })
+      .click()
     await page
       .getByLabel('Nama kamera', { exact: true })
       .fill('Kamera uji baru')
@@ -319,22 +330,16 @@ const assert = require('node:assert/strict')
       }
     })
     await nav.getByRole('link', { name: 'Perangkat', exact: true }).click()
+    assert.equal(
+      await page.locator('.device-guide').count(),
+      0,
+      'guides are no longer inline',
+    )
+    await page
+      .getByRole('link', { name: 'Lihat panduan ESP32', exact: true })
+      .click()
     const espGuide = page.locator('.device-guide--esp32')
-    const bardiGuide = page.locator('.device-guide--bardi')
     await espGuide.getByRole('alert').waitFor()
-    await bardiGuide
-      .getByRole('heading', { name: 'Petunjuk kamera BARDI', exact: true })
-      .waitFor()
-    assert.equal(
-      await bardiGuide.getByRole('link').count(),
-      0,
-      'pending BARDI guide does not invent a URL',
-    )
-    assert.equal(
-      await bardiGuide.locator('.device-guide__external-note').count(),
-      0,
-      'no external-link hint without an available reference',
-    )
     await espGuide
       .getByRole('button', { name: 'Coba lagi', exact: true })
       .click()
@@ -353,6 +358,10 @@ const assert = require('node:assert/strict')
       fullPage: true,
       animations: 'disabled',
     })
+    await route('/devices')
+    await page
+      .getByRole('button', { name: 'Daftarkan perangkat', exact: true })
+      .click()
     await page
       .getByLabel('Nama perangkat', { exact: true })
       .fill('ESP32 Kantor')
@@ -368,19 +377,33 @@ const assert = require('node:assert/strict')
     await page
       .getByRole('button', { name: 'Selesai dan hapus kredensial' })
       .click()
-    const espDisclosure = page.locator('.device-help-disclosure')
-    await espDisclosure.waitFor()
     assert.equal(
-      await espGuide.count(),
+      await page
+        .getByRole('link', { name: 'Lihat panduan ESP32', exact: true })
+        .count(),
       0,
-      'registered device guide starts collapsed',
     )
-    await espDisclosure.locator('summary').click()
-    await firmwareGuide.waitFor()
-    await espDisclosure.locator('summary').click()
-    await espGuide.waitFor({ state: 'detached' })
+    await page.getByRole('tab', { name: /^Kamera/ }).click()
+    await page
+      .getByRole('link', { name: 'Lihat panduan kamera', exact: true })
+      .click()
+    const bardiGuide = page.locator('.device-guide--bardi')
+    await bardiGuide.waitFor()
+    assert.equal(
+      await bardiGuide.getByRole('link').count(),
+      0,
+      'pending BARDI reference does not invent a URL',
+    )
+    assert.equal(
+      await bardiGuide.locator('.device-guide__external-note').count(),
+      0,
+    )
+    await route('/devices')
+    await page
+      .getByRole('button', { name: 'Daftarkan perangkat', exact: true })
+      .click()
     await page.getByLabel('Nama kamera', { exact: true }).fill('CCTV Kantor')
-    await page.locator('.camera-form__details summary').click()
+    await page.locator('.registration-details summary').click()
     await page
       .getByLabel('Alamat RTSP', { exact: true })
       .fill('rtsp://demo.invalid/mock-only')
@@ -391,14 +414,17 @@ const assert = require('node:assert/strict')
       .getByRole('heading', { name: 'CCTV Kantor', exact: true })
       .waitFor()
     assert.equal(
-      await bardiGuide.isVisible(),
+      await page
+        .getByRole('link', { name: 'Lihat panduan kamera', exact: true })
+        .isVisible(),
       true,
-      'camera help remains until one is selected',
     )
     await page
       .getByRole('button', { name: 'Jadikan kamera pengiriman', exact: true })
       .click()
-    await bardiGuide.waitFor({ state: 'detached' })
+    await page
+      .getByRole('link', { name: 'Lihat panduan kamera', exact: true })
+      .waitFor({ state: 'hidden' })
     assert.equal(
       await page
         .getByRole('link', {
@@ -428,7 +454,7 @@ const assert = require('node:assert/strict')
             'missing delivery 404',
             'image decode failure keeps tracking',
             'first-member guide only after successful empty load, form focus, guide clears after create',
-            'independent device guides, retry, one-time secret cleanup, lazy help after registration',
+            'separate device guides, reference retry, one-time secret cleanup and conditional guide links',
             'camera guide until configuration and selected camera are complete',
           ],
           pageErrors: errors,

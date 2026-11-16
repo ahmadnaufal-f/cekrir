@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, shallowRef, watch } from 'vue'
 import type { AppServices } from './services/contracts'
 import type { AppUser } from './types/app'
+import type { DeviceCategory } from './types/device-ui'
 import AppHeader from './components/AppHeader.vue'
 import AppNavigation from './components/AppNavigation.vue'
 import AppIcon from './components/AppIcon.vue'
@@ -9,6 +10,7 @@ import AuthScreen from './screens/AuthScreen.vue'
 import DeliveriesScreen from './screens/DeliveriesScreen.vue'
 import DeliveryDetailScreen from './screens/DeliveryDetailScreen.vue'
 import DevicesScreen from './screens/DevicesScreen.vue'
+import DeviceSetupScreen from './screens/DeviceSetupScreen.vue'
 import MembersScreen from './screens/MembersScreen.vue'
 import SettingsScreen from './screens/SettingsScreen.vue'
 import NotificationSettings from './screens/NotificationSettings.vue'
@@ -27,11 +29,29 @@ const ready = shallowRef(false)
 const refreshKey = shallowRef(0)
 const signingOut = shallowRef(false)
 const notice = shallowRef('')
+const deviceCategory = shallowRef<DeviceCategory>('esp32')
+const registrationRequest = shallowRef<DeviceCategory | null>(null)
 const { requested, navigate } = useNavigation()
 let pendingDirectLink = requested.value.startsWith('/deliveries/')
   ? requested.value
   : null
 const route = computed(() => guardRoute(requested.value, user.value))
+const guideKind = computed<DeviceCategory | null>(() => {
+  if (route.value === '/devices/setup/esp32') return 'esp32'
+  if (route.value === '/devices/setup/cameras') return 'bardi'
+  return null
+})
+function openDeviceGuide(kind: DeviceCategory) {
+  deviceCategory.value = kind
+  navigate(kind === 'esp32' ? '/devices/setup/esp32' : '/devices/setup/cameras')
+}
+function leaveDeviceGuide(register = false) {
+  const kind = guideKind.value
+  if (!kind) return
+  deviceCategory.value = kind
+  registrationRequest.value = register ? kind : null
+  navigate('/devices')
+}
 const deliveryId = computed(() =>
   route.value.startsWith('/deliveries/')
     ? decodeURIComponent(route.value.slice(12))
@@ -65,6 +85,8 @@ watch([user, requested, ready], () => {
   if (target !== requested.value) navigate(target, true)
 })
 function authenticated(next: AppUser) {
+  deviceCategory.value = 'esp32'
+  registrationRequest.value = null
   user.value = next
   notice.value = ''
   // The detail service reauthorizes this ID against the newly signed-in household.
@@ -74,6 +96,7 @@ function authenticated(next: AppUser) {
     navigate(target || '/deliveries', true)
 }
 function expired() {
+  registrationRequest.value = null
   pendingDirectLink = deliveryId.value ? deliveryRoute(deliveryId.value) : null
   // A 401 invalidates UI state; the push controller rejects stale account work.
   user.value = null
@@ -90,6 +113,8 @@ async function logout() {
       return
     }
     await services.auth.logout()
+    deviceCategory.value = 'esp32'
+    registrationRequest.value = null
     pendingDirectLink = null
     user.value = null
     refreshKey.value++
@@ -118,7 +143,8 @@ function resume() {
 function focusMain() {
   document.getElementById('main-content')?.focus({ preventScroll: true })
 }
-watch(route, () => {
+watch(route, (value) => {
+  if (value !== '/devices') registrationRequest.value = null
   queueMicrotask(() => {
     window.scrollTo(0, 0)
     focusMain()
@@ -214,6 +240,20 @@ onUnmounted(() => {
             :key="user.id"
             :services="services"
             :user="user"
+            v-model:category="deviceCategory"
+            :registration-request="registrationRequest"
+            @registration-handled="registrationRequest = null"
+            @guide="openDeviceGuide"
+            @session-expired="expired"
+          />
+          <DeviceSetupScreen
+            v-else-if="guideKind && user.role === 'admin'"
+            :key="`${user.id}:${guideKind}`"
+            :services="services"
+            :user="user"
+            :kind="guideKind"
+            @back="leaveDeviceGuide()"
+            @register="leaveDeviceGuide(true)"
             @session-expired="expired"
           />
           <MembersScreen
