@@ -4,6 +4,42 @@ Reviewed and implemented on 2026-11-15 against `bc45600de0906a4b7995ac7111802525
 
 **Verified level: frontend UI with explicit mocks.** This is not live frontend integration, Android phone validation, or the complete hardware demonstration. Canonical requirements and FE01–FE16 coverage are in [spec-map.md](spec-map.md); teammate dependencies and legacy API compatibility are in [backend-gaps.md](backend-gaps.md).
 
+## Package search and empty state — 2026-11-16
+
+The mobile pull-to-refresh instruction is now part of the page subtitle, outside the gesture area. There is no extra instruction below **Pengiriman terbaru**. Desktop continues to use browser reload.
+
+Reusable `EmptyState` and `SearchInput` components handle an empty location and delivery filtering. Search appears when the location has more than one delivery, remains available with zero or one match, and can be cleared with keyboard focus retained. An empty location explains when packages will appear; an unmatched search suggests changing or clearing the query. Queries match resi or courier across every mock page, with a 250ms debounce, cursor reset, and stale-response/account guards. Loading uses skeletons; summary totals remain location-wide. The draft search contract and live integration gap are recorded in [backend-gaps.md](backend-gaps.md).
+
+Browser verification covers later-page results, courier/case/whitespace matches, pagination, literal queries with no matches, keyboard clear/focus, out-of-order responses, rapid edits, filtered pull refresh, empty/single-delivery locations, desktop and 320px with 200% text. Previews: [search](screenshots/package-search-mobile.png), [no matches](screenshots/package-no-results-mobile.png), [empty location](screenshots/package-empty-mobile.png), [large text](screenshots/package-search-large-text.png).
+
+The complete package-page change passed all 60 frontend tests, Oxfmt/Oxlint, Vue type checking, production build, and the retained navigation, mock-flow, package, pull-refresh, skeleton and production browser checks. An independent Luna 6 review found no material issue in the search/empty-state integration. All search and totals evidence uses explicit fixtures; live adapters remain unavailable.
+
+## Loading skeletons — 2026-11-16
+
+The pull-to-refresh indicator is the only visible refresh status; the old list-refresh banner has been removed. Summary values use neutral skeleton blocks while pending, with no visible “Memuat ringkasan…” message. Package cards show matching metadata and pill placeholders on initial load and refresh. Pagination keeps existing cards and appends placeholders for the next page. Busy semantics remain available to assistive technology, decorative skeletons are hidden from it, and keyboard focus returns to the same package after a background refresh.
+
+Delayed mock browser checks cover initial load, independent summary/list completion, pagination, refresh, focus restoration, one refresh status, and absence of visible summary loading text. Previews: [initial loading](screenshots/package-loading-skeletons-mobile.png), [pagination](screenshots/package-pagination-skeletons-mobile.png), [pull refresh](screenshots/pull-refresh-loading-mobile.png).
+
+## Pull-to-refresh — 2026-11-16
+
+The package page no longer has a **Muat ulang** button. A downward touch pull from the top of the package content refreshes the list and summary together. The page title and subtitle sit outside the gesture area and stay in place while its content moves. The existing viewport scroll is preserved; short, upward, horizontal, canceled, multi-touch, and below-top gestures do not refresh. The release threshold is 128px of finger travel with resistance and a bounded visual offset. Feedback waits for both data sources and remains visible if a resume update supersedes the initial requests. A drag does not open a package; a following deliberate tap does. Mouse clicks remain usable on hybrid devices.
+
+Desktop users use their browser reload control, as requested; no in-app mouse or keyboard refresh replacement was added. Error-specific retry controls remain. Browser reload retains the existing memory-only demo session behavior. Touch listeners and page overscroll containment are scoped to the active package page, with cleanup on navigation/unmount. Reduced-motion preferences are respected.
+
+Verification uses synthesized Chromium CDP touch input against explicit fixtures, including normal scrolling, release/cancel, one combined request pair, delayed totals, superseding updates, errors, taps, enlarged text, and browser reload. Physical Android/APK and WebKit gestures remain unverified. The existing 56 frontend tests, type check, formatting/lint, production build, and page/browser flows are also retained.
+
+Previews: [refreshing](screenshots/pull-refresh-loading-mobile.png), [large text](screenshots/pull-refresh-loading-large-text.png).
+
+## Package page cards and totals — 2026-11-16
+
+The package page now has a separate summary card for **Hari ini** and **Total keseluruhan**, followed by individual linked package cards containing the resi, courier name, and scan timestamp without a visible scan-time heading. Compact **Foto** and **Pelacakan** pills show check, loading, and stop icons, with full status names for assistive technology and reduced-motion support. Cards keep exact-ID detail navigation and browser link behavior.
+
+Totals come from a separate typed service operation, not the currently loaded cards. Explicit mocks aggregate the entire authenticated location; live aggregation remains unavailable. Today follows the device's local calendar date, shown on the card, and refreshes across midnight and app resume. Loading/errors use unavailable values rather than fabricated zeros. Failed totals do not block the list, and responses from an old account are ignored. The reporting time zone and backend aggregate contract remain teammate decisions in [backend-gaps.md](backend-gaps.md).
+
+Verification includes 56 frontend tests, type checking, lint/format checks, production build, and browser checks for pagination totals, midnight rollover, summary failure/retry, malformed values, account switching, session expiry, badge semantics/reduced motion, keyboard detail access, and responsive layouts. The dedicated browser runner freezes synthetic data at 2026-11-15 in UTC; its totals are fixtures, not live deliveries.
+
+Previews: [mobile](screenshots/package-page-mobile.png), [cards](screenshots/package-cards-mobile.png), [desktop](screenshots/package-page-desktop.png), [320px with 200% text](screenshots/package-page-large-text.png), [summary error](screenshots/package-summary-error-mobile.png).
+
 ## Floating navigation and contextual guidance — 2026-11-16
 
 The previous hamburger layout has been replaced by a floating bottom bar using Cekrir's palette and outline icons. Admins see **Paket**, **Perangkat**, and **Anggota**. Members retain delivery-only access; admin route guards remain enforced. Account and notification settings open from the top-right initials avatar. The brand and avatar stay at the top while scrolling and gain individual raised surfaces away from scroll position zero. Tight layouts and enlarged text use icons with accessible names. The page reserves space for the bar and restores the top/content focus on route changes.

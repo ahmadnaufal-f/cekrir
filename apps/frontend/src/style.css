@@ -601,6 +601,9 @@ html {
   scroll-padding-top: 7rem;
   scroll-padding-bottom: 10rem;
 }
+html:has(.pull-to-refresh) {
+  overscroll-behavior-y: contain;
+}
 .app-shell.app-shell--authenticated {
   padding-bottom: calc(8rem + env(safe-area-inset-bottom, 0px));
 }

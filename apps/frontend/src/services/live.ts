@@ -108,7 +108,12 @@ export function createLiveServices(): AppServices {
       signup: unavailable,
       logout: async () => {},
     },
-    deliveries: { list: unavailable, detail: unavailable, photo: unavailable },
+    deliveries: {
+      totals: unavailable,
+      list: unavailable,
+      detail: unavailable,
+      photo: unavailable,
+    },
     devices: {
       inventory: unavailable,
       registerEsp32: unavailable,
