@@ -93,7 +93,7 @@ const assert = require('node:assert/strict')
     await capture('signup-mobile')
     await page.getByRole('button', { name: 'Masuk', exact: true }).click()
     await login()
-    await page.getByRole('button', { name: /DEMO-SPX-1001/ }).waitFor()
+    await page.getByRole('link', { name: /DEMO-SPX-1001/ }).waitFor()
     const nav = page.locator('#main-navigation')
     const header = page.locator('.site-header')
     const avatar = page.getByRole('link', {
@@ -215,12 +215,11 @@ const assert = require('node:assert/strict')
     assert.equal(
       await page
         .getByRole('button', { name: 'Muat ulang', exact: true })
-        .locator('svg')
         .count(),
-      1,
+      0,
     )
     await capture('admin-deliveries-mobile')
-    await page.getByRole('button', { name: /DEMO-SPX-1001/ }).click()
+    await page.getByRole('link', { name: /DEMO-SPX-1001/ }).click()
     await page.locator('img').waitFor()
     await capture('delivery-complete-mobile')
     await route('/deliveries/delivery-demo-both-unavailable')

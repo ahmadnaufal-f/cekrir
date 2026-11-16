@@ -3,6 +3,7 @@
 const paths = {
   package: 'm3 7 9-4 9 4v10l-9 4-9-4V7Zm0 0 9 4 9-4M12 11v10M7.5 5l9 4',
   camera: 'M8 5 6.5 8H3v12h18V8h-3.5L16 5H8Zm8 9a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z',
+  search: 'm21 21-4.34-4.34M19 10.5a8.5 8.5 0 1 1-17 0 8.5 8.5 0 0 1 17 0Z',
   refresh: 'M20 8a8 8 0 0 0-14-2L3 9m0-6v6h6M4 16a8 8 0 0 0 14 2l3-3m0 6v-6h-6',
   device: 'M7 7h10v10H7V7ZM9 3v4m6-4v4M9 17v4m6-4v4M3 9h4m-4 6h4m10-6h4m-4 6h4',
   users:
@@ -17,6 +18,8 @@ const paths = {
   plus: 'M12 5v14M5 12h14',
   copy: 'M9 9h12v12H9V9Zm-4 6H3V3h12v2',
   check: 'm5 12 4 4L19 6',
+  loading: 'M12 3a9 9 0 1 0 9 9',
+  stop: 'M7 3h10l4 4v10l-4 4H7l-4-4V7l4-4Zm2 9h6',
   external: 'M14 3h7v7m0-7L10 14M10 3H3v18h18v-7',
   logout: 'M9 3H3v18h6m6-16 7 7-7 7M8 12h14',
   bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4',
@@ -32,6 +35,7 @@ defineProps<{ name: IconName }>()
 <template>
   <svg
     class="app-icon"
+    :class="{ 'app-icon--loading': name === 'loading' }"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -52,5 +56,18 @@ defineProps<{ name: IconName }>()
   height: 1.125rem;
   flex: none;
   vertical-align: -0.2em;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-icon--loading {
+    transform-origin: center;
+    animation: app-icon-rotate 1.1s linear infinite;
+  }
+}
+
+@keyframes app-icon-rotate {
+  to {
+    transform: rotate(1turn);
+  }
 }
 </style>

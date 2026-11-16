@@ -4,6 +4,9 @@ import type {
   SignupInput,
   DeliverySummary,
   DeliveryDetail,
+  DeliveryTotals,
+  DeliveryTotalsQuery,
+  DeliveryListQuery,
   DeviceInventory,
   DeviceRegistration,
   CameraInput,
@@ -36,8 +39,10 @@ export interface AuthService {
   logout(): Promise<void>
 }
 export interface DeliveryService {
+  totals(query: DeliveryTotalsQuery): Promise<DeliveryTotals>
   list(
     cursor?: string,
+    query?: DeliveryListQuery,
   ): Promise<{ items: DeliverySummary[]; nextCursor: string | null }>
   detail(id: string): Promise<DeliveryDetail>
   photo(id: string): Promise<Blob>
