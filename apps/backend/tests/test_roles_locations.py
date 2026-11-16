@@ -1,11 +1,21 @@
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 
-from cekrir.db.model import Location, RolePermission, User
+from cekrir.db.model import Location, Permission, Role, RolePermission, User
 from cekrir.db.session import build_engine, build_session_factory
+
+
+def test_roles_and_permissions_have_uuid_identifiers():
+    role_id, permission_id = uuid4(), uuid4()
+    role = Role(id=role_id, code="admin")
+    permission = Permission(id=permission_id, code="users:read")
+    association = RolePermission(role_id=role.id, permission_id=permission.id)
+    user = User(role_record=role)
+    assert user.role == "admin"
+    assert (association.role_id, association.permission_id) == (role_id, permission_id)
 
 
 def test_location_admin_and_role_permissions_in_postgres(database_url):
@@ -14,6 +24,8 @@ def test_location_admin_and_role_permissions_in_postgres(database_url):
     admin_id, member_id = uuid4(), uuid4()
     try:
         with sessions.begin() as session:
+            admin_role = session.scalar(select(Role).where(Role.code == "admin"))
+            member_role = session.scalar(select(Role).where(Role.code == "member"))
             session.add_all(
                 [
                     User(
@@ -21,30 +33,38 @@ def test_location_admin_and_role_permissions_in_postgres(database_url):
                         email=f"{admin_id}@test.invalid",
                         full_name="Admin",
                         password_hash="x",
-                        role="admin",
+                        role_record=admin_role,
                     ),
                     User(
                         id=member_id,
                         email=f"{member_id}@test.invalid",
                         full_name="Member",
                         password_hash="x",
-                        role="member",
+                        role_record=member_role,
                     ),
                 ]
             )
         with sessions.begin() as session:
-            assert session.get(RolePermission, ("admin", "users:role:update")) is not None
-            assert session.get(RolePermission, ("member", "users:role:update")) is None
+            admin_role = session.scalar(select(Role).where(Role.code == "admin"))
+            member_role = session.scalar(select(Role).where(Role.code == "member"))
+            permission = session.scalar(
+                select(Permission).where(Permission.code == "users:role:update")
+            )
+            assert session.get(RolePermission, (admin_role.id, permission.id)) is not None
+            assert session.get(RolePermission, (member_role.id, permission.id)) is None
+            admin = session.get(User, admin_id)
             session.add_all(
                 [
-                    Location(name="Home", admin_user_id=admin_id),
-                    Location(name="Office", admin_user_id=admin_id),
+                    Location(name="Home", admin=admin),
+                    Location(name="Office", admin=admin),
                 ]
             )
         with pytest.raises(IntegrityError), sessions.begin() as session:
-            session.add(Location(name="Invalid", admin_user_id=member_id))
+            session.add(Location(name="Invalid", admin=session.get(User, member_id)))
         with pytest.raises(IntegrityError), sessions.begin() as session:
-            session.get(User, admin_id).role = "member"
+            session.get(User, admin_id).role_record = session.scalar(
+                select(Role).where(Role.code == "member")
+            )
     finally:
         with sessions.begin() as session:
             session.execute(

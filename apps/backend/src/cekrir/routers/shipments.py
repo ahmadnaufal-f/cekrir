@@ -1,22 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
-from cekrir.db.repository import ShipmentRepository
 from cekrir.db.session import get_session
-from cekrir.schemas import ResiInput, ShipmentRead
+from cekrir.dependencies import get_provider, get_publisher
+from cekrir.schemas import ShipmentRead
+from cekrir.services import shipments
 from cekrir.services.notifications import NotificationPublisher
-from cekrir.services.shipments import refresh_shipment, register_shipment
 from cekrir.services.tracking import TrackingProvider
+from cekrir.validation.shipments import ResiInput
 
 router = APIRouter(prefix="/api/v1", tags=["shipments"])
-
-
-def get_provider(request: Request) -> TrackingProvider:
-    return request.app.state.tracking_provider
-
-
-def get_publisher(request: Request) -> NotificationPublisher:
-    return request.app.state.notification_publisher
 
 
 @router.get("/shipments", response_model=list[ShipmentRead])
@@ -25,7 +18,7 @@ def list_shipments(
     offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_session),
 ):
-    return ShipmentRepository(session).list_shipments(limit, offset)
+    return shipments.list_shipments(session, limit, offset)
 
 
 @router.post("/shipments", response_model=ShipmentRead, status_code=201)
@@ -36,10 +29,8 @@ def create_shipment(
     provider: TrackingProvider = Depends(get_provider),
     publisher: NotificationPublisher = Depends(get_publisher),
 ):
-    shipment, created, notification = register_shipment(session, payload, provider)
+    shipment, created = shipments.submit_shipment(session, payload, provider, publisher)
     response.status_code = 201 if created else 200
-    if notification:
-        publisher.publish(notification)
     return shipment
 
 
@@ -50,13 +41,7 @@ def check_shipment(
     provider: TrackingProvider = Depends(get_provider),
     publisher: NotificationPublisher = Depends(get_publisher),
 ):
-    shipment_model = ShipmentRepository(session).get_shipment(shipment_id)
-    if shipment_model is None:
-        session.rollback()
-        raise HTTPException(status_code=404, detail="Shipment not found")
-    shipment = ShipmentRead.model_validate(shipment_model)
-    session.rollback()
-    updated, notification = refresh_shipment(session, shipment, provider)
-    if notification:
-        publisher.publish(notification)
-    return updated
+    try:
+        return shipments.check_shipment(session, shipment_id, provider, publisher)
+    except shipments.ShipmentNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

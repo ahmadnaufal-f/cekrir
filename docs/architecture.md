@@ -32,6 +32,8 @@ Couriers cannot reliably be inferred from the barcode alone. The scanner require
 
 ## Data and boundaries
 
+HTTP and WebSocket routers call services, translate service errors into protocol responses, and declare request/response types. Request models and frame validation live in `apps/backend/src/cekrir/validation`; account, shipment, detection, payment, and notification workflows live under `services`.
+
 `Shipment` stores the latest tracking snapshot, history supplied by the provider, source, camera ID, and timestamps. `Notification` stores durable in-app events. UUID identifiers keep clients independent of database sequence IDs.
 
 PostgreSQL stores UUID identifiers, timezone-aware timestamps, enum status/source values, JSONB tracking history, and users. SQLAlchemy models are split into modules under `apps/backend/src/cekrir/db/model`; Alembic owns versioned migrations under `apps/backend/migrations`. FastAPI creates a pooled SQLAlchemy engine and request-scoped sessions; migrations are applied as a separate deploy step. Existing Prisma files are historical only. See [database setup](database.md).

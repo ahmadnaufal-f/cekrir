@@ -18,11 +18,18 @@ if TYPE_CHECKING:
 class Location(Base):
     __tablename__ = "locations"
     __table_args__ = (
-        CheckConstraint("admin_role = 'admin'", name="admin_role"),
+        CheckConstraint("admin_role_code = 'admin'", name="admin_role_code"),
         ForeignKeyConstraint(
-            ["admin_user_id", "admin_role"],
-            ["cekrir_user.id", "cekrir_user.role"],
-            name="locations_admin_user_role_fkey",
+            ["admin_user_id", "admin_role_id"],
+            ["cekrir_user.id", "cekrir_user.role_id"],
+            name="locations_admin_user_role_id_fkey",
+            ondelete="RESTRICT",
+            onupdate="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["admin_role_id", "admin_role_code"],
+            ["roles.id", "roles.code"],
+            name="locations_admin_role_fkey",
             ondelete="RESTRICT",
             onupdate="RESTRICT",
         ),
@@ -37,7 +44,8 @@ class Location(Base):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     admin_user_id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
-    admin_role: Mapped[str] = mapped_column(
+    admin_role_id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    admin_role_code: Mapped[str] = mapped_column(
         String(24), nullable=False, server_default=text("'admin'")
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -45,4 +53,6 @@ class Location(Base):
         nullable=False,
         server_default=text("CURRENT_TIMESTAMP"),
     )
-    admin: Mapped[User] = relationship(back_populates="locations")
+    admin: Mapped[User] = relationship(
+        back_populates="locations", foreign_keys=[admin_user_id, admin_role_id]
+    )

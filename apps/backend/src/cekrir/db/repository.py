@@ -5,14 +5,13 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from cekrir.db.model import Notification, Shipment, ShipmentSource, ShipmentStatus, User
+from cekrir.db.model import Notification, Role, Shipment, ShipmentSource, ShipmentStatus, User
 from cekrir.schemas import (
-    DetectionInput,
     NotificationRead,
-    ResiInput,
     ShipmentRead,
     TrackingSnapshot,
 )
+from cekrir.validation.shipments import DetectionInput, ResiInput
 
 
 class ShipmentRepository:
@@ -152,6 +151,12 @@ class UserRepository:
 
     def by_id(self, user_id: UUID) -> User | None:
         return self.session.get(User, user_id)
+
+    def role_by_code(self, code: str) -> Role:
+        role = self.session.scalar(select(Role).where(Role.code == code))
+        if role is None:
+            raise RuntimeError(f"Required role is missing: {code}")
+        return role
 
     def list_users(self) -> list[User]:
         return list(self.session.scalars(select(User).order_by(User.email.asc())))

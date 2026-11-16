@@ -9,7 +9,7 @@ import httpx
 from dotenv import load_dotenv
 from pydantic import ValidationError
 
-from cekrir.schemas import DetectionInput
+from cekrir.validation.shipments import DetectionInput
 
 logger = logging.getLogger("cekrir.scanner")
 

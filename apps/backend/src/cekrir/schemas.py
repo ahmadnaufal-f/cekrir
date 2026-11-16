@@ -2,35 +2,9 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 ShipmentStatus = Literal["pending", "in_transit", "delivered", "exception"]
-
-
-class CourierInput(BaseModel):
-    courier: str = Field(min_length=2, max_length=32, pattern=r"^[a-z0-9_-]+$")
-
-    @field_validator("courier", mode="before")
-    @classmethod
-    def normalize_courier(cls, value: object) -> object:
-        return value.strip().lower() if isinstance(value, str) else value
-
-
-class ResiInput(CourierInput):
-    resi_number: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9-]+$")
-
-    @field_validator("resi_number", mode="before")
-    @classmethod
-    def normalize_resi(cls, value: object) -> object:
-        return value.strip().upper() if isinstance(value, str) else value
-
-
-class DetectionInput(ResiInput):
-    camera_id: str = Field(min_length=1, max_length=100)
-
-
-class CameraFrameInput(CourierInput):
-    camera_id: str = Field(min_length=1, max_length=100)
 
 
 class FrameDetection(BaseModel):
@@ -94,4 +68,28 @@ class UserRead(BaseModel):
     full_name: str
     role: Literal["admin", "member"]
     is_active: bool
+    created_at: datetime
+
+
+class TokenRead(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: Literal["bearer"] = "bearer"
+    expires_in: int
+    refresh_expires_in: int
+    user: UserRead
+
+
+class VerificationPending(BaseModel):
+    detail: str = "Check your email for a verification link."
+
+
+class PaymentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    reference: str
+    amount: int
+    currency: Literal["IDR"]
+    status: Literal["draft"]
     created_at: datetime

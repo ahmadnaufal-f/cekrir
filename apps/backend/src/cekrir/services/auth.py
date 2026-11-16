@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from cekrir.config import Settings
-from cekrir.db.model import RolePermission, User
+from cekrir.db.model import Permission, RolePermission, User
 from cekrir.db.repository import UserRepository
 
 
@@ -83,7 +83,9 @@ def authenticate_token(token: str, settings: Settings, session_factory: sessionm
             return None
         permissions = set(
             session.scalars(
-                select(RolePermission.permission_name).where(RolePermission.role_name == user.role)
+                select(Permission.code)
+                .join(RolePermission, RolePermission.permission_id == Permission.id)
+                .where(RolePermission.role_id == user.role_id)
             )
         )
         return {
@@ -108,7 +110,7 @@ def ensure_bootstrap_admin(session_factory: sessionmaker[Session], settings: Set
                     password_hash=hash_password(
                         settings.bootstrap_admin_password.get_secret_value()
                     ),
-                    role="admin",
+                    role_record=repository.role_by_code("admin"),
                     email_verified_at=datetime.now(UTC),
                 )
             )

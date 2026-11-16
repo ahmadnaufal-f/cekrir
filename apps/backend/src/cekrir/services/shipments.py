@@ -2,12 +2,16 @@ from sqlalchemy.orm import Session
 
 from cekrir.db.repository import ShipmentRepository
 from cekrir.schemas import (
-    DetectionInput,
     NotificationRead,
-    ResiInput,
     ShipmentRead,
 )
+from cekrir.services.notifications import NotificationPublisher
 from cekrir.services.tracking import TrackingProvider
+from cekrir.validation.shipments import DetectionInput, ResiInput
+
+
+class ShipmentNotFound(Exception):
+    pass
 
 
 def register_shipment(
@@ -35,3 +39,37 @@ def refresh_shipment(
 ) -> tuple[ShipmentRead, NotificationRead | None]:
     snapshot = provider.lookup(shipment.resi_number, shipment.courier)
     return ShipmentRepository(session).refresh(shipment.id, snapshot, provider.name)
+
+
+def list_shipments(session: Session, limit: int, offset: int) -> list[ShipmentRead]:
+    return ShipmentRepository(session).list_shipments(limit, offset)
+
+
+def submit_shipment(
+    session: Session,
+    payload: ResiInput,
+    provider: TrackingProvider,
+    publisher: NotificationPublisher,
+) -> tuple[ShipmentRead, bool]:
+    shipment, created, notification = register_shipment(session, payload, provider)
+    if notification:
+        publisher.publish(notification)
+    return shipment, created
+
+
+def check_shipment(
+    session: Session, shipment_id: str, provider: TrackingProvider, publisher: NotificationPublisher
+) -> ShipmentRead:
+    model = ShipmentRepository(session).get_shipment(shipment_id)
+    if model is None:
+        session.rollback()
+        raise ShipmentNotFound("Shipment not found")
+    shipment = ShipmentRead.model_validate(model)
+    session.rollback()
+    try:
+        updated, notification = refresh_shipment(session, shipment, provider)
+    except LookupError as exc:
+        raise ShipmentNotFound("Shipment not found") from exc
+    if notification:
+        publisher.publish(notification)
+    return updated

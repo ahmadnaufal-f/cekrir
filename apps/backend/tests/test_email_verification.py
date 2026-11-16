@@ -7,10 +7,10 @@ from uuid import uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from cekrir.config import Settings
-from cekrir.db.model import User
+from cekrir.db.model import Role, User
 from cekrir.db.session import build_engine, build_session_factory, get_session
 from cekrir.middleware import RolePermissionMiddleware
 from cekrir.routers.auth import router
@@ -84,6 +84,7 @@ def test_unverified_user_cannot_sign_in():
             pass
 
     app = FastAPI()
+    app.state.settings = Settings(_env_file=None)
     app.add_middleware(RolePermissionMiddleware)
     app.include_router(router)
     app.dependency_overrides[get_session] = lambda: FakeSession()
@@ -110,13 +111,14 @@ def test_verification_is_single_use_with_concurrent_postgres_requests(database_u
     token = new_verification_token()
     try:
         with sessions.begin() as session:
+            member = session.scalar(select(Role).where(Role.code == "member"))
             session.add(
                 User(
                     id=user_id,
                     email=f"{user_id}@test.invalid",
                     full_name="Test",
                     password_hash="x",
-                    role="member",
+                    role_record=member,
                 )
             )
             session.flush()

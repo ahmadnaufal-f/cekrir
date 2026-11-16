@@ -6,10 +6,15 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from cekrir.db.model import Payment
+from cekrir.validation.payments import PaymentCreate
 
 
 class IdempotencyConflict(Exception):
     """The same user's key was used for different payment details."""
+
+
+class PaymentNotFound(Exception):
+    pass
 
 
 @dataclass(frozen=True)
@@ -59,3 +64,16 @@ def get_payment(session: Session, user_id: UUID, payment_id: UUID) -> Payment | 
     return session.scalar(
         select(Payment).where(Payment.id == payment_id, Payment.user_id == user_id)
     )
+
+
+def submit_payment(
+    session: Session, user_id: UUID, key: str, payload: PaymentCreate
+) -> tuple[Payment, bool]:
+    return create_payment(session, user_id, key, PaymentDetails(**payload.model_dump()))
+
+
+def read_payment(session: Session, user_id: UUID, payment_id: UUID) -> Payment:
+    payment = get_payment(session, user_id, payment_id)
+    if payment is None:
+        raise PaymentNotFound("Payment not found")
+    return payment

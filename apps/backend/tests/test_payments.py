@@ -7,10 +7,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from cekrir.config import Settings
-from cekrir.db.model import Payment, User
+from cekrir.db.model import Payment, Role, User
 from cekrir.db.session import build_engine, build_session_factory, get_session
 from cekrir.middleware import RolePermissionMiddleware
 from cekrir.routers.payments import PaymentCreate, router
@@ -36,6 +36,7 @@ def test_payment_routes_require_auth_and_idempotency_key():
         email="person@example.com",
         full_name="Person",
         role="member",
+        role_id=uuid4(),
         is_active=True,
         email_verified_at=datetime.now(UTC),
     )
@@ -74,6 +75,7 @@ def test_payment_idempotency_and_ownership_in_postgres(database_url):
     sessions = build_session_factory(engine)
     user_ids = [uuid4(), uuid4()]
     with sessions.begin() as session:
+        member = session.scalar(select(Role).where(Role.code == "member"))
         session.add_all(
             [
                 User(
@@ -81,7 +83,7 @@ def test_payment_idempotency_and_ownership_in_postgres(database_url):
                     email=f"{user_id}@test.invalid",
                     full_name="Test",
                     password_hash="x",
-                    role="member",
+                    role_record=member,
                 )
                 for user_id in user_ids
             ]

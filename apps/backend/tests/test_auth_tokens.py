@@ -27,6 +27,7 @@ def user():
         email="person@example.com",
         full_name="Example Person",
         role="member",
+        role_id=uuid4(),
         is_active=True,
         email_verified_at=datetime.now(UTC),
         created_at=datetime.now(UTC),

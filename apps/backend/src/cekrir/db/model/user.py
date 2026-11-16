@@ -13,13 +13,14 @@ from cekrir.db.model.base import Base
 
 if TYPE_CHECKING:
     from cekrir.db.model.location import Location
+    from cekrir.db.model.role import Role
 
 
 class User(Base):
     __tablename__ = "cekrir_user"
     __table_args__ = (
         Index("cekrir_user_email_key", "email", unique=True),
-        Index("cekrir_user_id_role_key", "id", "role", unique=True),
+        Index("cekrir_user_id_role_id_key", "id", "role_id", unique=True),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -31,12 +32,12 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), nullable=False)
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[str] = mapped_column(
-        String(24),
-        ForeignKey("roles.name", ondelete="RESTRICT"),
+    role_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("roles.id", ondelete="RESTRICT"),
         nullable=False,
-        server_default=text("'member'"),
     )
+    role_record: Mapped[Role] = relationship(lazy="joined")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     email_verified_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True, precision=3)
@@ -46,4 +47,12 @@ class User(Base):
         nullable=False,
         server_default=text("CURRENT_TIMESTAMP"),
     )
-    locations: Mapped[list[Location]] = relationship(back_populates="admin", passive_deletes=True)
+    locations: Mapped[list[Location]] = relationship(
+        back_populates="admin",
+        passive_deletes=True,
+        foreign_keys="[Location.admin_user_id, Location.admin_role_id]",
+    )
+
+    @property
+    def role(self) -> str:
+        return self.role_record.code

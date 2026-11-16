@@ -122,7 +122,8 @@ apps/
   backend/
     src/cekrir/
       routers/        # HTTP and WebSocket endpoints
-      services/       # Tracking adapters and shipment workflow
+      validation/     # Request models and bounded frame validation
+      services/       # Account, detection, shipment and payment workflows
       middleware/     # JWT authentication and role permissions
       db/
         model/        # SQLAlchemy models and model index
