@@ -4,6 +4,16 @@ Reviewed and implemented on 2026-11-15 against `bc45600de0906a4b7995ac7111802525
 
 **Verified level: frontend UI with explicit mocks.** This is not live frontend integration, Android phone validation, or the complete hardware demonstration. Canonical requirements and FE01–FE16 coverage are in [spec-map.md](spec-map.md); teammate dependencies and legacy API compatibility are in [backend-gaps.md](backend-gaps.md).
 
+## Floating navigation and contextual guidance — 2026-11-16
+
+The previous hamburger layout has been replaced by a floating bottom bar using Cekrir's palette and outline icons. Admins see **Paket**, **Perangkat**, and **Anggota**. Members retain delivery-only access; admin route guards remain enforced. Account and notification settings open from the top-right initials avatar. The brand and avatar stay at the top while scrolling and gain individual raised surfaces away from scroll position zero. Tight layouts and enlarged text use icons with accessible names. The page reserves space for the bar and restores the top/content focus on route changes.
+
+Guidance is now contextual: missing ESP32 registration shows instructions beside its form; after registration, help loads on expansion. Camera help appears for missing, unselected, or incompletely configured cameras. First-member guidance appears only after a successful empty list response and focuses the existing form. Guide requests keep independent retry/authentication/stale-response handling. Old `/setup` links redirect to Devices. Firmware remains a scaffold and BARDI guidance remains pending validation. Public copy continues to use **lokasi penerimaan**; internal `householdId`/`householdName` contracts remain unchanged.
+
+Verification includes 53 frontend tests, type check, production build, Oxfmt/Oxlint checks, browser navigation captures, and injected mock flows. Browser checks cover mobile, tablet, desktop, and 320px with 200% text, including scroll-state changes, keyboard navigation, avatar access, guide recovery and first setup. These UI changes add no live backend or native integration.
+
+Previews: [mobile](screenshots/admin-navigation-mobile.png), [scrolled](screenshots/admin-navigation-scrolled-mobile.png), [tablet](screenshots/admin-navigation-tablet.png), [desktop](screenshots/admin-navigation-desktop.png), [large text](screenshots/admin-navigation-large-text.png), [first device setup](screenshots/first-device-guides-mobile.png), [first member](screenshots/first-member-guide-mobile.png).
+
 ## Delivered behaviour
 
 - Common login and admin signup; member navigation and direct admin-route guards; household delivery list and exact-ID detail routes.

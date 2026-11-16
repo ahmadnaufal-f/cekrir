@@ -1,6 +1,15 @@
 <script setup lang="ts">
-import { computed, onUnmounted, reactive, shallowRef, watch } from 'vue'
+import AppIcon from '../components/AppIcon.vue'
+import {
+  computed,
+  onUnmounted,
+  reactive,
+  shallowRef,
+  useTemplateRef,
+  watch,
+} from 'vue'
 import { adminCopy } from '../lib/admin-copy'
+import { memberGuideCopy } from '../lib/member-guide-copy'
 import { ServiceError } from '../services/contracts'
 import type { AppServices } from '../services/contracts'
 import type { AppUser, MemberInput } from '../types/app'
@@ -25,6 +34,7 @@ const completion = shallowRef<MemberCompletion | null>(null)
 const completionPasswordVisible = shallowRef(false)
 const completionNotice = shallowRef('')
 const form = reactive({ displayName: '', loginId: '', initialPassword: '' })
+const displayNameInput = useTemplateRef<HTMLInputElement>('displayNameInput')
 const isAdmin = computed(() => props.user.role === 'admin')
 
 let requestGeneration = 0
@@ -127,6 +137,10 @@ async function createMember(): Promise<void> {
   }
 }
 
+function focusDisplayNameInput(): void {
+  displayNameInput.value?.focus()
+}
+
 function dismissCompletion(): void {
   completion.value = null
   completionPasswordVisible.value = false
@@ -219,6 +233,7 @@ onUnmounted(() => {
             type="button"
             @click="completionPasswordVisible = !completionPasswordVisible"
           >
+            <AppIcon :name="completionPasswordVisible ? 'eyeOff' : 'eye'" />
             {{
               completionPasswordVisible
                 ? copy.completionHidePassword
@@ -230,6 +245,7 @@ onUnmounted(() => {
             type="button"
             @click="copyInitialPassword"
           >
+            <AppIcon name="copy" />
             {{ copy.completionCopyPassword }}
           </button>
         </div>
@@ -245,6 +261,7 @@ onUnmounted(() => {
           type="button"
           @click="dismissCompletion"
         >
+          <AppIcon name="check" />
           {{ copy.completionDismiss }}
         </button>
       </section>
@@ -274,12 +291,43 @@ onUnmounted(() => {
               type="button"
               @click="loadMembers(requestGeneration)"
             >
+              <AppIcon name="refresh" />
               {{ adminCopy.common.retry }}
             </button>
           </div>
-          <p v-else-if="members.length === 0" class="admin-empty">
-            {{ copy.empty }}
-          </p>
+          <div
+            v-else-if="listState === 'ready' && members.length === 0"
+            class="member-empty-guide"
+            role="group"
+            aria-labelledby="member-empty-guide-title"
+          >
+            <div class="member-empty-guide__heading">
+              <span class="member-empty-guide__icon" aria-hidden="true">
+                <AppIcon name="users" />
+              </span>
+              <div>
+                <h3 id="member-empty-guide-title">
+                  {{ memberGuideCopy.title }}
+                </h3>
+                <p>{{ memberGuideCopy.intro }}</p>
+              </div>
+            </div>
+            <ol class="member-empty-guide__steps">
+              <li v-for="step in memberGuideCopy.steps" :key="step.title">
+                <strong>{{ step.title }}</strong>
+                <p>{{ step.body }}</p>
+              </li>
+            </ol>
+            <button
+              class="admin-button admin-button--primary member-empty-guide__action"
+              type="button"
+              aria-controls="member-display-name"
+              @click="focusDisplayNameInput"
+            >
+              <AppIcon name="plus" />
+              {{ memberGuideCopy.action }}
+            </button>
+          </div>
           <ul v-else class="member-list">
             <li v-for="member in members" :key="member.id" class="member-card">
               <span class="member-card__avatar" aria-hidden="true">{{
@@ -305,6 +353,8 @@ onUnmounted(() => {
             <label class="admin-field">
               <span>{{ copy.displayName }}</span>
               <input
+                id="member-display-name"
+                ref="displayNameInput"
                 v-model.trim="form.displayName"
                 required
                 maxlength="100"
@@ -360,6 +410,7 @@ onUnmounted(() => {
               type="submit"
               :disabled="saving"
             >
+              <AppIcon name="plus" />
               {{ saving ? copy.creating : copy.create }}
             </button>
           </form>
@@ -473,6 +524,73 @@ onUnmounted(() => {
   margin-top: 12px;
 }
 
+.member-empty-guide {
+  margin-top: 18px;
+  padding-top: 20px;
+  border-top: 1px solid #e9ece3;
+  color: #53675a;
+}
+
+.member-empty-guide__heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.member-empty-guide__icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #e5ebdd;
+  color: #426749;
+}
+
+.member-empty-guide__heading h3 {
+  margin: 2px 0 5px;
+  color: #233d37;
+  font-size: 1.0625rem;
+  letter-spacing: -0.35px;
+  line-height: 1.35;
+}
+
+.member-empty-guide__heading p,
+.member-empty-guide__steps p {
+  color: #53675a;
+  font-size: 0.875rem;
+  line-height: 1.65;
+}
+
+.member-empty-guide__steps {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0 0;
+  padding-left: 21px;
+}
+
+.member-empty-guide__steps li {
+  padding-left: 3px;
+}
+
+.member-empty-guide__steps li::marker {
+  color: #426749;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.member-empty-guide__steps strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #435d4c;
+  font-size: 0.875rem;
+}
+
+.member-empty-guide__action {
+  margin-top: 20px;
+}
+
 .member-list {
   display: grid;
   gap: 10px;
@@ -570,6 +688,7 @@ onUnmounted(() => {
 }
 
 .admin-button {
+  gap: 8px;
   display: inline-flex;
   min-height: 44px;
   align-items: center;

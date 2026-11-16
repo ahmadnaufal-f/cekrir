@@ -152,9 +152,15 @@ async function submit() {
             autocomplete="organization"
             required
             :aria-invalid="!!errors.householdName"
-            aria-describedby="household-error"
+            :aria-describedby="
+              errors.householdName
+                ? 'household-hint household-error'
+                : 'household-hint'
+            "
             maxlength="100"
-          /><span
+          />
+          <p id="household-hint" class="field-help">{{ copy.householdHint }}</p>
+          <span
             v-if="errors.householdName"
             id="household-error"
             class="field-error"

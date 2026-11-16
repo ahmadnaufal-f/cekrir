@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, shallowRef, watch } from 'vue'
 import DeliveryResourceStates from '../components/DeliveryResourceStates.vue'
+import AppIcon from '../components/AppIcon.vue'
 import {
   deliveryCopy,
   deliveryRequestError,
@@ -175,6 +176,7 @@ onUnmounted(() => {
         :disabled="loading || refreshing"
         @click="retryList"
       >
+        <AppIcon name="refresh" />
         {{ refreshing ? deliveryCopy.listReloading : ui.refresh }}
       </button>
     </header>
@@ -182,6 +184,7 @@ onUnmounted(() => {
     <div v-if="listError" class="banner banner--error" role="alert">
       <span>{{ listErrorMessage }}</span>
       <button class="text-button" type="button" @click="retryList">
+        <AppIcon name="refresh" />
         {{ deliveryCopy.retryList }}
       </button>
     </div>
@@ -261,6 +264,7 @@ onUnmounted(() => {
       >
         <span>{{ moreErrorMessage }}</span>
         <button class="text-button" type="button" @click="loadMore">
+          <AppIcon name="refresh" />
           {{ deliveryCopy.retryMore }}
         </button>
       </div>

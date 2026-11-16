@@ -29,7 +29,7 @@ describe('navigation', () => {
   it('allows admins to open management routes directly', () => {
     expect(guardRoute('/devices', admin)).toBe('/devices')
     expect(guardRoute('/members', admin)).toBe('/members')
-    expect(guardRoute('/setup', admin)).toBe('/setup')
+    expect(guardRoute('/setup', admin)).toBe('/devices')
   })
 
   it('sends signed-out users to login except for signup', () => {

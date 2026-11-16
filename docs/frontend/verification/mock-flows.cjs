@@ -98,7 +98,7 @@ const assert = require('node:assert/strict')
       .click()
     await page
       .getByText(
-        'Rumah tangga hanya dapat memiliki satu ESP32. Perangkat lama tetap tersimpan.',
+        'Setiap lokasi penerimaan hanya dapat memiliki satu ESP32. Perangkat lama tetap tersimpan.',
         { exact: true },
       )
       .waitFor()
@@ -220,6 +220,194 @@ const assert = require('node:assert/strict')
     await page.getByText('Foto tidak tersedia', { exact: true }).waitFor()
     await page.getByText('Contoh status pelacakan', { exact: true }).waitFor()
     await page.getByText('DEMO-SPX-1001', { exact: true }).first().waitFor()
+    await route('/settings')
+    await page.getByRole('button', { name: 'Keluar', exact: true }).click()
+    await page.getByRole('heading', { name: 'Masuk', exact: true }).waitFor()
+    await page
+      .getByRole('button', { name: 'Buat lokasi dan akun admin', exact: true })
+      .click()
+    await page.getByLabel('Nama Anda', { exact: true }).fill('Admin Kantor')
+    await page
+      .getByLabel('Email', { exact: true })
+      .fill('kantor-guide@demo.test')
+    await page
+      .getByLabel('Nama lokasi penerimaan', { exact: true })
+      .fill('Kantor Demo')
+    await page.getByLabel('Kata sandi', { exact: true }).fill('guide-demo1234')
+    await page
+      .getByRole('button', { name: 'Buat lokasi dan akun admin', exact: true })
+      .click()
+    await page
+      .getByRole('heading', { name: 'Paket diterima', exact: true })
+      .waitFor()
+    await page.evaluate(() => {
+      const original = window.harness.services.members.list
+      let fail = true
+      window.harness.services.members.list = async () => {
+        if (fail) {
+          fail = false
+          throw new Error('mock list failure')
+        }
+        return original()
+      }
+    })
+    const nav = page.locator('#main-navigation')
+    await nav.getByRole('link', { name: 'Anggota', exact: true }).click()
+    await page
+      .getByRole('alert')
+      .filter({ hasText: 'Daftar anggota belum dapat dimuat.' })
+      .waitFor()
+    assert.equal(
+      await page.locator('.member-empty-guide').count(),
+      0,
+      'no empty guide on a failed member request',
+    )
+    await page.getByRole('button', { name: 'Coba lagi', exact: true }).click()
+    await page
+      .getByRole('heading', { name: 'Tambahkan anggota pertama', exact: true })
+      .waitFor()
+    const shots = require('node:path').resolve(__dirname, '../screenshots')
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await page.screenshot({
+      path: shots + '/first-member-guide-mobile.png',
+      fullPage: true,
+      animations: 'disabled',
+    })
+    await page
+      .getByRole('button', { name: 'Isi nama anggota', exact: true })
+      .click()
+    const nameInput = page.getByLabel('Nama tampilan', { exact: true })
+    assert.equal(
+      await nameInput.evaluate((el) => el === document.activeElement),
+      true,
+    )
+    const inputBox = await nameInput.boundingBox()
+    const navBox = await nav.boundingBox()
+    assert.ok(
+      inputBox.y >= 70 && inputBox.y + inputBox.height < navBox.y,
+      'guided form focus stays clear of floating controls',
+    )
+    await nameInput.fill('Rekan Kantor')
+    await page.getByLabel('ID masuk', { exact: true }).fill('rekan-kantor')
+    await page
+      .getByLabel('Kata sandi awal', { exact: true })
+      .fill('member-demo1234')
+    await page
+      .getByRole('button', { name: 'Buat akun anggota', exact: true })
+      .click()
+    await page
+      .getByRole('heading', { name: 'Akun anggota siap', exact: true })
+      .waitFor()
+    await page
+      .getByRole('button', { name: 'Selesai dan hapus kata sandi' })
+      .click()
+    await page.getByText('Rekan Kantor', { exact: true }).waitFor()
+    assert.equal(
+      await page.locator('.member-empty-guide').count(),
+      0,
+      'first-member guide clears after creation',
+    )
+    await page.evaluate(() => {
+      const original = window.harness.services.setup.content
+      let fail = true
+      window.harness.services.setup.content = async (kind) => {
+        if (kind === 'esp32' && fail) {
+          fail = false
+          throw new Error('mock guide failure')
+        }
+        return original(kind)
+      }
+    })
+    await nav.getByRole('link', { name: 'Perangkat', exact: true }).click()
+    const espGuide = page.locator('.device-guide--esp32')
+    const bardiGuide = page.locator('.device-guide--bardi')
+    await espGuide.getByRole('alert').waitFor()
+    await bardiGuide
+      .getByRole('heading', { name: 'Petunjuk kamera BARDI', exact: true })
+      .waitFor()
+    assert.equal(
+      await bardiGuide.getByRole('link').count(),
+      0,
+      'pending BARDI guide does not invent a URL',
+    )
+    assert.equal(
+      await bardiGuide.locator('.device-guide__external-note').count(),
+      0,
+      'no external-link hint without an available reference',
+    )
+    await espGuide
+      .getByRole('button', { name: 'Coba lagi', exact: true })
+      .click()
+    const firmwareGuide = espGuide.getByRole('link', {
+      name: 'Baca panduan ESP32',
+      exact: true,
+    })
+    await firmwareGuide.waitFor()
+    assert.match(
+      await firmwareGuide.getAttribute('href'),
+      /^https:\/\/github\.com\/ahmadnaufal-f\/cekrir\/blob\/[a-f0-9]+\/apps\/esp32\/README\.md$/,
+    )
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await page.screenshot({
+      path: shots + '/first-device-guides-mobile.png',
+      fullPage: true,
+      animations: 'disabled',
+    })
+    await page
+      .getByLabel('Nama perangkat', { exact: true })
+      .fill('ESP32 Kantor')
+    await page
+      .getByRole('button', { name: 'Daftarkan ESP32', exact: true })
+      .click()
+    await page
+      .getByRole('heading', {
+        name: 'Simpan kredensial perangkat',
+        exact: true,
+      })
+      .waitFor()
+    await page
+      .getByRole('button', { name: 'Selesai dan hapus kredensial' })
+      .click()
+    const espDisclosure = page.locator('.device-help-disclosure')
+    await espDisclosure.waitFor()
+    assert.equal(
+      await espGuide.count(),
+      0,
+      'registered device guide starts collapsed',
+    )
+    await espDisclosure.locator('summary').click()
+    await firmwareGuide.waitFor()
+    await espDisclosure.locator('summary').click()
+    await espGuide.waitFor({ state: 'detached' })
+    await page.getByLabel('Nama kamera', { exact: true }).fill('CCTV Kantor')
+    await page.locator('.camera-form__details summary').click()
+    await page
+      .getByLabel('Alamat RTSP', { exact: true })
+      .fill('rtsp://demo.invalid/mock-only')
+    await page
+      .getByRole('button', { name: 'Tambahkan kamera', exact: true })
+      .click()
+    await page
+      .getByRole('heading', { name: 'CCTV Kantor', exact: true })
+      .waitFor()
+    assert.equal(
+      await bardiGuide.isVisible(),
+      true,
+      'camera help remains until one is selected',
+    )
+    await page
+      .getByRole('button', { name: 'Jadikan kamera pengiriman', exact: true })
+      .click()
+    await bardiGuide.waitFor({ state: 'detached' })
+    assert.equal(
+      await page
+        .getByRole('link', {
+          name: 'Buka akun dan notifikasi: Admin Kantor',
+          exact: true,
+        })
+        .isVisible(),
+      true,
+    )
     assert.deepEqual(errors, [])
     console.log(
       JSON.stringify(
@@ -239,6 +427,9 @@ const assert = require('node:assert/strict')
             'foreign household 403',
             'missing delivery 404',
             'image decode failure keeps tracking',
+            'first-member guide only after successful empty load, form focus, guide clears after create',
+            'independent device guides, retry, one-time secret cleanup, lazy help after registration',
+            'camera guide until configuration and selected camera are complete',
           ],
           pageErrors: errors,
         },

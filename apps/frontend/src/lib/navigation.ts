@@ -32,6 +32,7 @@ export function guardRoute(route: AppRoute, user: AppUser | null): AppRoute {
   if (!user) return route === '/signup' ? route : '/login'
   if (route === '/login' || route === '/signup') return '/deliveries'
   if (adminRoutes.has(route) && user.role !== 'admin') return '/deliveries'
+  if (route === '/setup') return '/devices'
   return route
 }
 export function deliveryRoute(id: string): AppRoute {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import AppIcon from './AppIcon.vue'
 import { deliveryCopy } from '../lib/delivery-copy'
 import { ui } from '../lib/strings'
 import type { ResourceState } from '../types/app'
@@ -30,16 +31,18 @@ const trackingLabel = computed(() => {
       class="delivery-resource-state"
       :class="`delivery-resource-state--${photoState}`"
     >
-      <span class="delivery-resource-state__name">{{ ui.photo }}</span>
+      <span class="delivery-resource-state__name"
+        ><AppIcon name="camera" />{{ ui.photo }}</span
+      >
       <span>{{ photoLabel }}</span>
     </li>
     <li
       class="delivery-resource-state"
       :class="`delivery-resource-state--${trackingState}`"
     >
-      <span class="delivery-resource-state__name">{{
-        deliveryCopy.resourceTracking
-      }}</span>
+      <span class="delivery-resource-state__name"
+        ><AppIcon name="tracking" />{{ deliveryCopy.resourceTracking }}</span
+      >
       <span>{{ trackingLabel }}</span>
     </li>
   </ul>
@@ -79,6 +82,9 @@ const trackingLabel = computed(() => {
 }
 
 .delivery-resource-state__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-weight: 650;
 }
 </style>

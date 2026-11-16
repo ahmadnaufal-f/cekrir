@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onUnmounted, shallowRef, watch } from 'vue'
+import AppIcon from './AppIcon.vue'
 import { deliveryCopy, deliveryRequestStatus } from '../lib/delivery-copy'
 import { ui } from '../lib/strings'
 import type { DeliveryService } from '../services/contracts'
@@ -116,11 +117,13 @@ onUnmounted(() => {
           <p>{{ deliveryCopy.photoLoadFailed }}</p>
         </div>
         <button class="button button--quiet" type="button" @click="loadPhoto()">
+          <AppIcon name="refresh" />
           {{ deliveryCopy.retryPhoto }}
         </button>
       </div>
     </div>
     <figcaption class="delivery-photo__caption">
+      <AppIcon name="camera" />
       {{ ui.photo }}
       <span v-if="isDemo && viewState === 'ready'"
         >· {{ deliveryCopy.demoPhoto }}</span

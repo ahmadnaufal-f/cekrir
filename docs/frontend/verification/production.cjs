@@ -29,7 +29,7 @@ const assert = require('node:assert/strict')
     await page.getByRole('button', { name: 'Masuk', exact: true }).click()
     await page
       .getByRole('alert')
-      .filter({ hasText: 'Integrasi rumah tangga belum tersedia.' })
+      .filter({ hasText: 'Integrasi lokasi penerimaan belum tersedia.' })
       .waitFor()
     assert.equal(
       await page

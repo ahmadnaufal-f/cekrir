@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AppUser } from '../types/app'
+import AppIcon from '../components/AppIcon.vue'
 import { ui } from '../lib/strings'
 import { shellCopy as copy } from '../lib/shell-copy'
 defineProps<{ user: AppUser; signingOut: boolean }>()
@@ -28,6 +29,7 @@ const emit = defineEmits<{ logout: [] }>()
       :disabled="signingOut"
       @click="emit('logout')"
     >
+      <AppIcon name="logout" />
       {{ signingOut ? copy.signingOut : ui.logout }}
     </button>
   </section>

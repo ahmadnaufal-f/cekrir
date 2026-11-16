@@ -32,8 +32,14 @@ const assert = require('node:assert/strict')
     page.on('pageerror', (e) => errors.push(e.message))
     const shots =
       require('node:path').resolve(__dirname, '../screenshots') + '/'
-    async function capture(name) {
-      await page.screenshot({ path: shots + name + '.png', fullPage: true })
+    async function capture(name, fullPage = true) {
+      await page.evaluate(() => window.scrollTo(0, 0))
+      await page.mouse.move(0, 0)
+      await page.screenshot({
+        path: shots + name + '.png',
+        fullPage,
+        animations: 'disabled',
+      })
       assert.equal(
         await page.evaluate(
           () => document.documentElement.scrollWidth > innerWidth,
@@ -53,6 +59,17 @@ const assert = require('node:assert/strict')
     async function route(value) {
       await page.evaluate((v) => (location.hash = v), value)
     }
+    async function checkBottomClearance() {
+      await page.evaluate(() =>
+        window.scrollTo(0, document.documentElement.scrollHeight),
+      )
+      const footer = await page.locator('footer').boundingBox()
+      const navigation = await page.locator('#main-navigation').boundingBox()
+      assert.ok(
+        footer.y + footer.height < navigation.y,
+        'footer can scroll clear of floating navigation',
+      )
+    }
     await page.goto('http://127.0.0.1:5173')
     await page.getByRole('heading', { name: 'Masuk', exact: true }).waitFor()
     await page.keyboard.press('Tab')
@@ -65,8 +82,143 @@ const assert = require('node:assert/strict')
     )
     await page.keyboard.press('Tab')
     await capture('login-mobile')
+    await page
+      .getByRole('button', { name: 'Buat lokasi dan akun admin', exact: true })
+      .click()
+    await page.getByLabel('Nama lokasi penerimaan', { exact: true }).waitFor()
+    assert.equal(
+      await page.locator('#householdName').getAttribute('aria-describedby'),
+      'household-hint',
+    )
+    await capture('signup-mobile')
+    await page.getByRole('button', { name: 'Masuk', exact: true }).click()
     await login()
     await page.getByRole('button', { name: /DEMO-SPX-1001/ }).waitFor()
+    const nav = page.locator('#main-navigation')
+    const header = page.locator('.site-header')
+    const avatar = page.getByRole('link', {
+      name: 'Buka akun dan notifikasi: Admin Demo',
+      exact: true,
+    })
+    assert.equal(await nav.getByRole('link').count(), 3)
+    assert.equal(await nav.locator('a svg[aria-hidden="true"]').count(), 3)
+    assert.deepEqual(
+      await nav
+        .locator('a')
+        .allTextContents()
+        .then((labels) => labels.map((label) => label.trim())),
+      ['Paket', 'Perangkat', 'Anggota'],
+    )
+    assert.equal(
+      await nav.evaluate((el) => getComputedStyle(el).position),
+      'fixed',
+    )
+    assert.equal(
+      await header.evaluate((el) =>
+        el.classList.contains('site-header--floating'),
+      ),
+      false,
+    )
+    await page.waitForFunction(
+      () =>
+        getComputedStyle(document.querySelector('.brand')).boxShadow === 'none',
+    )
+    assert.equal(
+      await page
+        .locator('.brand')
+        .evaluate((el) => getComputedStyle(el).boxShadow),
+      'none',
+    )
+    await capture('admin-navigation-mobile', false)
+    await checkBottomClearance()
+    await page.screenshot({
+      path: shots + 'admin-navigation-bottom-mobile.png',
+      fullPage: false,
+      animations: 'disabled',
+    })
+    await page.evaluate(() => window.scrollTo(0, 0))
+    const navTop = (await nav.boundingBox()).y
+    await page.evaluate(() => window.scrollTo(0, 600))
+    await page.waitForFunction(() =>
+      document
+        .querySelector('.site-header')
+        .classList.contains('site-header--floating'),
+    )
+    assert.equal(Math.round((await nav.boundingBox()).y), Math.round(navTop))
+    for (const control of [page.locator('.brand'), avatar]) {
+      const box = await control.boundingBox()
+      assert.ok(
+        box.y >= 0 && box.y < 100,
+        'brand/avatar stay at the top while scrolling',
+      )
+    }
+    await page.screenshot({
+      path: shots + 'admin-navigation-scrolled-mobile.png',
+      fullPage: false,
+      animations: 'disabled',
+    })
+    await nav.getByRole('link', { name: 'Perangkat', exact: true }).click()
+    await page
+      .getByRole('heading', { name: 'Perangkat', exact: true })
+      .waitFor()
+    await page.waitForFunction(
+      () =>
+        window.scrollY === 0 &&
+        !document
+          .querySelector('.site-header')
+          .classList.contains('site-header--floating'),
+    )
+    assert.equal(
+      await page
+        .locator('#main-content')
+        .evaluate((el) => el === document.activeElement),
+      true,
+      'navigation focuses the new content',
+    )
+    await avatar.click()
+    await page
+      .getByRole('heading', { name: 'Akun dan notifikasi', exact: true })
+      .waitFor()
+    assert.equal(await avatar.getAttribute('aria-current'), 'page')
+    assert.equal(await nav.locator('[aria-current="page"]').count(), 0)
+    await nav.getByRole('link', { name: 'Paket', exact: true }).click()
+    await nav.locator('a').first().focus()
+    await page.keyboard.press('Tab')
+    assert.equal(
+      await nav
+        .locator('a')
+        .nth(1)
+        .evaluate((el) => el === document.activeElement),
+      true,
+    )
+    await page.keyboard.press('Enter')
+    await page
+      .getByRole('heading', { name: 'Perangkat', exact: true })
+      .waitFor()
+    await nav.getByRole('link', { name: 'Paket', exact: true }).click()
+    await page
+      .getByRole('heading', { name: 'Paket diterima', exact: true })
+      .waitFor()
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await capture('admin-navigation-desktop', false)
+    await checkBottomClearance()
+    await page.setViewportSize({ width: 768, height: 900 })
+    await capture('admin-navigation-tablet', false)
+    await page.setViewportSize({ width: 320, height: 800 })
+    const largeText = await page.addStyleTag({
+      content: 'html{font-size:200%}',
+    })
+    await capture('admin-navigation-large-text', false)
+    await checkBottomClearance()
+    await largeText.evaluate((el) => el.remove())
+    await page.setViewportSize({ width: 390, height: 844 })
+    assert.equal(
+      await page
+        .getByRole('button', { name: 'Muat ulang', exact: true })
+        .locator('svg')
+        .count(),
+      1,
+    )
     await capture('admin-deliveries-mobile')
     await page.getByRole('button', { name: /DEMO-SPX-1001/ }).click()
     await page.locator('img').waitFor()
@@ -118,9 +270,9 @@ const assert = require('node:assert/strict')
     await capture('members-mobile')
     await route('/setup')
     await page
-      .getByRole('heading', { name: /Panduan/ })
-      .first()
+      .getByRole('heading', { name: 'Perangkat', exact: true })
       .waitFor()
+    await page.waitForFunction(() => location.hash === '#/devices')
     await capture('setup-mobile')
     await route('/settings')
     await page
@@ -130,6 +282,17 @@ const assert = require('node:assert/strict')
     await page.getByRole('button', { name: 'Keluar', exact: true }).click()
     await page.getByRole('heading', { name: 'Masuk', exact: true }).waitFor()
     await login('anggota')
+    assert.equal(
+      await nav.getByRole('link').count(),
+      1,
+      'member navigation excludes admin pages',
+    )
+    await page
+      .getByRole('link', {
+        name: 'Buka akun dan notifikasi: Anggota Demo',
+        exact: true,
+      })
+      .waitFor()
     await capture('member-deliveries-mobile')
     await route('/devices')
     await page.waitForTimeout(100)
@@ -148,6 +311,9 @@ const assert = require('node:assert/strict')
     await page.setViewportSize({ width: 320, height: 800 })
     await page.addStyleTag({ content: 'html{font-size:200%}' })
     await capture('member-deliveries-large-text')
+    await capture('member-navigation-large-text', false)
+    await checkBottomClearance()
+    assert.equal(await nav.isVisible(), true)
     assert.deepEqual(errors, [])
     console.log(
       JSON.stringify(

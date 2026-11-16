@@ -6,6 +6,8 @@ The frontend work leaves `apps/backend` and `apps/esp32` unchanged. Proposed `/v
 
 Owners: the teammate owns backend, scanner firmware, and hardware integration; the project initiator owns frontend and BARDI validation. Contract and new technology selections need their agreement.
 
+The contextual setup UI added on 2026-11-16 does not verify device connectivity. Agree how a one-time ESP32 registration credential maps to firmware authentication: the existing shared ingestion key is not yet an agreed per-device credential. Inline guidance keeps this integration pending and links to the reviewed firmware scaffold; BARDI guide references remain unavailable until validated. Guide visibility reflects registered configuration and camera selection, rather than a successful hardware connection.
+
 ## Legacy API compatibility
 
 | Existing operation                                                                          | Supported semantics                             | Frontend boundary                                                                                         |

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, shallowRef, watch } from 'vue'
 import DeliveryPhoto from '../components/DeliveryPhoto.vue'
+import AppIcon from '../components/AppIcon.vue'
 import {
   deliveryCopy,
   deliveryRequestError,
@@ -154,12 +155,14 @@ onUnmounted(() => {
       type="button"
       @click="emit('back')"
     >
+      <AppIcon name="back" />
       {{ deliveryCopy.backToList }}
     </button>
 
     <div v-if="detailError" class="banner banner--error" role="alert">
       <span>{{ detailErrorMessage }}</span>
       <button class="text-button" type="button" @click="retryDetail">
+        <AppIcon name="refresh" />
         {{ deliveryCopy.retryDetails }}
       </button>
     </div>
@@ -220,7 +223,9 @@ onUnmounted(() => {
         </dl>
 
         <section class="delivery-tracking" aria-labelledby="tracking-heading">
-          <h2 id="tracking-heading">{{ deliveryCopy.trackingSection }}</h2>
+          <h2 id="tracking-heading">
+            <AppIcon name="tracking" /> {{ deliveryCopy.trackingSection }}
+          </h2>
           <p
             v-if="detail.trackingState === 'pending'"
             class="delivery-tracking__message"

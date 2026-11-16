@@ -2,7 +2,7 @@ import { ServiceError } from '../services/contracts'
 
 export const deliveryCopy = {
   backToList: 'Kembali ke daftar',
-  listDescription: 'Lihat paket yang terdeteksi di rumah tangga ini.',
+  listDescription: 'Lihat paket yang terdeteksi di lokasi penerimaan ini.',
   listHeading: 'Pengiriman terbaru',
   listRefreshing: 'Memperbarui daftar pengiriman…',
   listReloading: 'Memuat ulang…',
