@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" fill="none">
+  <rect width="800" height="500" rx="32" fill="#F6F7F2"/>
+  <circle cx="650" cy="94" r="42" fill="#E4EADD"/>
+  <path d="M100 398h600" stroke="#C8D4C5" stroke-width="3" stroke-linecap="round"/>
+  <rect x="86" y="78" width="378" height="332" rx="24" fill="#FFFEFA" stroke="#CAD7C7" stroke-width="3"/>
+  <rect x="118" y="112" width="54" height="54" rx="15" fill="#E4EFE6"/>
+  <path d="M135 139h20m-10-10v20" stroke="#234E41" stroke-width="4" stroke-linecap="round"/>
+  <path d="M193 125h200" stroke="#A7B6A4" stroke-width="9" stroke-linecap="round"/>
+  <path d="M193 146h142" stroke="#D4DDD0" stroke-width="7" stroke-linecap="round"/>
+  <rect x="119" y="194" width="310" height="59" rx="11" fill="#F8F9F4" stroke="#D6DED0" stroke-width="2"/>
+  <circle cx="145" cy="223" r="9" fill="#B6C5B0"/>
+  <path d="M168 223h162" stroke="#9CAB99" stroke-width="7" stroke-linecap="round"/>
+  <rect x="119" y="272" width="310" height="59" rx="11" fill="#F8F9F4" stroke="#D6DED0" stroke-width="2"/>
+  <path d="M141 301h164" stroke="#C4D0C0" stroke-width="7" stroke-linecap="round"/>
+  <rect x="119" y="351" width="167" height="37" rx="10" fill="#234E41"/>
+  <path d="M144 370h111" stroke="#F6F7F2" stroke-width="6" stroke-linecap="round"/>
+  <path d="M510 240h145" stroke="#234E41" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 12"/>
+  <circle cx="648" cy="240" r="58" fill="#E8EEE2" stroke="#AFC0AB" stroke-width="3"/>
+  <rect x="612" y="211" width="72" height="58" rx="12" fill="#FFFEFA" stroke="#234E41" stroke-width="3"/>
+  <path d="M624 211v-12m16 12v-12m16 12v-12m16 12v-12M624 269v12m16-12v12m16-12v12m16-12v12m-72-46h-12m12 17h-12m84-17h12m-12 17h12" stroke="#234E41" stroke-width="3" stroke-linecap="round"/>
+  <path d="M629 231h38m-38 14h26" stroke="#9DB39D" stroke-width="4" stroke-linecap="round"/>
+  <path d="m609 139 12 12 23-26" stroke="#588264" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="585" y="113" width="83" height="83" rx="24" stroke="#B5C8B2" stroke-width="3"/>
+</svg>

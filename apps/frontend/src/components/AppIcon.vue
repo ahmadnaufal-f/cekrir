@@ -18,6 +18,8 @@ const paths = {
   plus: 'M12 5v14M5 12h14',
   copy: 'M9 9h12v12H9V9Zm-4 6H3V3h12v2',
   check: 'm5 12 4 4L19 6',
+  warning: 'M12 3 2 21h20L12 3Zm0 6v5m0 3v.01',
+  next: 'm9 5 7 7-7 7',
   loading: 'M12 3a9 9 0 1 0 9 9',
   stop: 'M7 3h10l4 4v10l-4 4H7l-4-4V7l4-4Zm2 9h6',
   external: 'M14 3h7v7m0-7L10 14M10 3H3v18h18v-7',

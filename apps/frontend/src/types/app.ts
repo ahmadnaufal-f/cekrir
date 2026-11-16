@@ -103,6 +103,8 @@ export type AppRoute =
   | '/deliveries'
   | `/deliveries/${string}`
   | '/devices'
+  | '/devices/setup/esp32'
+  | '/devices/setup/cameras'
   | '/members'
   | '/setup'
   | '/settings'
