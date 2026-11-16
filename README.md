@@ -16,6 +16,13 @@ Three apps, one repository:
 
 The default tracking provider is an explicitly labeled **offline demo**. It never calls a courier API. The HTTP provider and camera worker can be enabled separately. Integrations stay configurable until a real tracking API and notification channel are selected.
 
+## Documentation
+
+- [Product requirements (PRD)](docs/prd.md): scope, decisions, research, and open questions.
+- [Backend deployment discussion](docs/backend-deployment.md): laptop, tunnel, and cloud options for team review.
+
+These pages were imported from Notion so they can be read and discussed on GitHub. Their planning statuses are preserved; implementation details are documented below and in the existing engineering docs.
+
 ## Start locally
 
 Install **Node.js 24 LTS**, pnpm 11, [uv](https://docs.astral.sh/uv/getting-started/installation/), and **Docker with Compose**. uv can install the required Python version. An existing PostgreSQL server can also be used instead of Docker.
