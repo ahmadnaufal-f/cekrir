@@ -84,3 +84,14 @@ class NotificationRead(BaseModel):
     title: str
     message: str
     created_at: datetime
+
+
+class UserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    email: str
+    full_name: str
+    role: Literal["admin", "member"]
+    is_active: bool
+    created_at: datetime

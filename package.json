@@ -15,14 +15,13 @@
     "check:backend": "uv run --project apps/backend ruff check apps/backend && uv run --project apps/backend ruff format --check apps/backend",
     "test": "pnpm run test:backend && pnpm --filter @cekrir/frontend test",
     "test:backend": "pnpm run db:test:deploy && uv run --project apps/backend pytest apps/backend/tests",
-    "format": "prisma format && uv run --project apps/backend ruff format apps/backend && oxfmt",
-    "db:up": "docker compose up -d --wait postgres",
+    "format": "uv run --project apps/backend ruff format apps/backend && oxfmt",
+    "db:up": "docker compose up -d --wait postgres redis",
     "db:down": "docker compose down",
-    "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy",
-    "db:validate": "prisma validate",
-    "db:studio": "prisma studio",
-    "db:test:deploy": "node scripts/prisma-test.mjs",
+    "db:migrate": "uv run --project apps/backend alembic -c apps/backend/alembic.ini revision --autogenerate",
+    "db:deploy": "uv run --project apps/backend alembic -c apps/backend/alembic.ini upgrade head",
+    "db:validate": "uv run --project apps/backend alembic -c apps/backend/alembic.ini check",
+    "db:test:deploy": "uv run --project apps/backend python apps/backend/scripts/migrate_test_db.py",
     "firmware:build": "uv run --no-project --python 3.12 --with-requirements apps/esp32/requirements.txt platformio run --project-dir apps/esp32",
     "firmware:upload": "uv run --no-project --python 3.12 --with-requirements apps/esp32/requirements.txt platformio run --project-dir apps/esp32 --target upload",
     "firmware:monitor": "uv run --no-project --python 3.12 --with-requirements apps/esp32/requirements.txt platformio device monitor --baud 115200",
@@ -37,8 +36,7 @@
     "concurrently": "^10.0.7",
     "dotenv": "17.4.2",
     "oxfmt": "0.78.0",
-    "oxlint": "1.93.0",
-    "prisma": "7.10.1"
+    "oxlint": "1.93.0"
   },
   "packageManager": "pnpm@11.28.12"
 }

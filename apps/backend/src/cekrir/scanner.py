@@ -30,6 +30,9 @@ def main() -> None:
     args = parser.parse_args()
     if args.interval <= 0 or args.cooldown <= 0:
         parser.error("interval and cooldown must be positive")
+    key = os.getenv("CEKRIR_INGEST_API_KEY")
+    if not key:
+        parser.error("Set CEKRIR_INGEST_API_KEY for camera worker authentication")
     # Validate configuration before opening the camera.
     try:
         DetectionInput(resi_number="CHECK", courier=args.courier, camera_id=args.camera_id)
@@ -50,8 +53,7 @@ def main() -> None:
         capture.release()
         parser.exit(1, "Could not open camera. Check CEKRIR_CAMERA_SOURCE and network access.\n")
     api_url = os.getenv("CEKRIR_API_BASE_URL", "http://127.0.0.1:8000/api/v1").rstrip("/")
-    key = os.getenv("CEKRIR_INGEST_API_KEY")
-    headers = {"X-Ingest-Key": key} if key else {}
+    headers = {"X-Ingest-Key": key}
     seen: dict[str, float] = {}
     next_scan = 0.0
     try:

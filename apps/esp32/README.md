@@ -40,7 +40,7 @@ For a trusted development LAN, explicitly set `kAllowPlainHttp = true`, use your
 uv run --directory apps/backend uvicorn cekrir.main:app --host 0.0.0.0 --port 8000
 ```
 
-For example, set `kApiBaseUrl` to `http://192.168.1.20:8000/api/v1`. Set `CEKRIR_INGEST_API_KEY` in `apps/backend/.env` and the matching `kIngestApiKey` in the device config. The key protects camera ingestion only; the rest of this prototype API still needs user authorization before internet exposure.
+For example, set `kApiBaseUrl` to `http://192.168.1.20:8000/api/v1`. Set `CEKRIR_INGEST_API_KEY` in `apps/backend/.env` and the matching non-empty `kIngestApiKey` in the device config. The device requires this key to submit frames. It protects camera ingestion only; the rest of this prototype API still needs user authorization before internet exposure.
 
 ## Flash and monitor
 
@@ -59,7 +59,7 @@ Builds are checked for both profiles in CI. Successful cross-compilation does no
 
 - Requires PSRAM and initializes JPEG capture at SVGA, quality 12, with one frame buffer.
 - Reconnects Wi-Fi and submits a new frame roughly every three seconds while online.
-- Sends `POST /api/v1/detections/frame?courier=jne&camera_id=esp32-front-door`, raw `image/jpeg`, and the optional `X-Ingest-Key` header.
+- Sends `POST /api/v1/detections/frame?courier=jne&camera_id=esp32-front-door`, raw `image/jpeg`, and the required `X-Ingest-Key` header.
 - Processes one frame at a time, releases camera buffers, and never records video or writes captures to flash.
 - Uses bounded network timeouts and exponential retry delays capped at 60 seconds. Failed/offline frames are discarded; a later attempt captures a new one.
 - Waits 15 seconds after a detected barcode, including an existing shipment, to reduce repeated uploads. A new package can be missed during that cooldown; adjust it for the physical workflow.

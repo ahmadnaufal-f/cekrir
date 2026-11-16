@@ -25,7 +25,7 @@
 | Team              | Project initiator owns PM, frontend, and CCTV setup. Teammate owns backend and ESP32                             |
 | Availability      | Weekday nights and full weekends, with Codex assisted coding                                                     |
 | Mobile app        | Vue, Vite, and Capacitor. Android is the MVP. iOS is a future extension                                          |
-| Backend           | Python with FastAPI direction and PostgreSQL preference. Prisma's intended role still needs clarification        |
+| Backend           | Python with FastAPI, PostgreSQL, SQLAlchemy ORM, and Alembic migrations                                            |
 | Scanner           | ESP32 camera and proximity sensor. Python backend decodes barcode images                                         |
 | Courier feedback  | Light and buzzer signal successful decoding, without waiting for CCTV, tracking lookup, or push completion       |
 | CCTV              | Multiple cameras can be registered. Admin designates one for delivery capture                                    |
@@ -89,7 +89,7 @@ flowchart TD
 
 The arrows show application requests. The tunnel transport itself is established outbound by the laptop agent, allowing requests back over that connection. [ngrok](https://ngrok.com/docs/gateway/agent) and [Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/) document this model.
 
-**Authentication:** HTTPS encrypts transport. Our application must still authenticate users and check household access on delivery and photo requests. The tunnel URL is not an authentication credential. Keep tunnel agent credentials on the laptop.
+**Authentication:** HTTPS encrypts transport. The backend now has JWT authentication and basic member/admin role checks; household access still needs server-side ownership checks on delivery and photo requests. The tunnel URL is not an authentication credential. Keep tunnel agent credentials on the laptop.
 
 **Tradeoff:** This can demonstrate phones using mobile data without introducing a separate camera connector service. It retains dependence on the laptop, backend process, tunnel agent, and internet. Prefer a stable API hostname so the installed app does not need a new backend address after every restart. Tunnel provider and plan are undecided.
 
@@ -130,7 +130,7 @@ The connector performs camera access and returns a JPEG or a capture failure. It
 
 **Storage evidence:** [Render](https://render.com/docs/disks) documents that its default service filesystem is ephemeral. [Railway volumes](https://docs.railway.com/volumes/reference) provide explicitly persistent storage. This illustrates why storage must be selected rather than inferred from application hosting.
 
-**Database tooling:** The teammate previously preferred Prisma alongside Python. The PRD records that Prisma Client Python is archived. Clarify whether Prisma means schema and migrations, runtime queries, or something else before defining deployment commands. No alternative ORM is selected here.
+**Database tooling:** The original planning record discussed Prisma with Python. The current backend uses SQLAlchemy for ORM access and Alembic for migrations; the earlier Prisma files remain historical. Run Alembic migrations as a separate deploy step.
 
 ## 8. Cloud and tunnel candidates
 

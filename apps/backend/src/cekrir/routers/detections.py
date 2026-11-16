@@ -2,22 +2,43 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import ValidationError
+from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from cekrir.api.dependencies import get_provider, get_repository, require_ingest_key
-from cekrir.repository import ShipmentRepository
-from cekrir.schemas import CameraFrameInput, CameraFrameResult, DetectionInput, FrameDetection
+from cekrir.db.session import get_session
+from cekrir.routers.shipments import get_provider, get_publisher
+from cekrir.schemas import (
+    CameraFrameInput,
+    CameraFrameResult,
+    DetectionInput,
+    DetectionResult,
+    FrameDetection,
+)
 from cekrir.services.barcodes import MAX_FRAME_BYTES, InvalidCameraFrame, decode_frame
+from cekrir.services.notifications import NotificationPublisher
 from cekrir.services.shipments import register_shipment
 from cekrir.services.tracking import TrackingProvider
 
-router = APIRouter(prefix="/api/v1/detections", tags=["detections"])
+router = APIRouter(prefix="/api/v1", tags=["detections"])
+camera_router = APIRouter(prefix="/api/v1/detections", tags=["detections"])
 
 
-@router.post(
+@router.post("/detections", response_model=DetectionResult)
+def ingest_detection(
+    payload: DetectionInput,
+    session: Session = Depends(get_session),
+    provider: TrackingProvider = Depends(get_provider),
+    publisher: NotificationPublisher = Depends(get_publisher),
+):
+    shipment, created, notification = register_shipment(session, payload, provider)
+    if notification:
+        publisher.publish(notification)
+    return DetectionResult(created=created, shipment=shipment)
+
+
+@camera_router.post(
     "/frame",
     response_model=CameraFrameResult,
-    dependencies=[Depends(require_ingest_key)],
     openapi_extra={
         "requestBody": {
             "required": True,
@@ -28,8 +49,9 @@ router = APIRouter(prefix="/api/v1/detections", tags=["detections"])
 async def ingest_camera_frame(
     request: Request,
     metadata: Annotated[CameraFrameInput, Query()],
-    repository: ShipmentRepository = Depends(get_repository),
+    session: Session = Depends(get_session),
     provider: TrackingProvider = Depends(get_provider),
+    publisher: NotificationPublisher = Depends(get_publisher),
 ):
     if request.headers.get("content-type", "").split(";")[0].lower() != "image/jpeg":
         raise HTTPException(status_code=415, detail="Content-Type must be image/jpeg")
@@ -60,12 +82,14 @@ async def ingest_camera_frame(
             continue
         candidates[payload.resi_number] = payload
     if len(candidates) != 1:
-        # Shipping labels may contain several unrelated codes. Never guess
-        # between multiple valid-looking candidates in a single frame.
         return CameraFrameResult(ambiguous=len(candidates) > 1)
 
     payload = next(iter(candidates.values()))
-    shipment, created = await run_in_threadpool(register_shipment, repository, payload, provider)
+    shipment, created, notification = await run_in_threadpool(
+        register_shipment, session, payload, provider
+    )
+    if notification:
+        await run_in_threadpool(publisher.publish, notification)
     return CameraFrameResult(
         detected_count=1,
         detections=[
