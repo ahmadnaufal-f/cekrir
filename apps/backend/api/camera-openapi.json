@@ -1,0 +1,145 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Cekrir live camera",
+    "version": "0.1.0",
+    "description": "Standalone LAN camera server, separate from the main API; see API.md."
+  },
+  "paths": {
+    "/camera/frame": {
+      "post": {
+        "summary": "Receive Frame",
+        "operationId": "receive_frame_camera_frame_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/camera/latest.jpg": {
+      "get": {
+        "summary": "Latest Frame",
+        "operationId": "latest_frame_camera_latest_jpg_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": []
+          }
+        ]
+      }
+    },
+    "/camera/stream": {
+      "get": {
+        "summary": "Video Stream",
+        "operationId": "video_stream_camera_stream_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "multipart/x-mixed-replace": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "description": "Continuous multipart MJPEG; boundary is frame."
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": []
+          }
+        ]
+      }
+    },
+    "/camera/video": {
+      "get": {
+        "summary": "Video Page",
+        "operationId": "video_page_camera_video_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": []
+          }
+        ]
+      }
+    },
+    "/camera": {
+      "get": {
+        "summary": "Camera Page",
+        "operationId": "camera_page_camera_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "HTTPBasic": {
+        "type": "http",
+        "scheme": "basic"
+      }
+    }
+  }
+}
