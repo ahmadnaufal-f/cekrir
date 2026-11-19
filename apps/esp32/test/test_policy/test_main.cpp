@@ -2,6 +2,9 @@
 
 #include "scan_policy.h"
 
+void setUp() {}
+void tearDown() {}
+
 void test_retry_delay_is_bounded() {
   TEST_ASSERT_EQUAL_UINT32(6000, scan_policy::retryDelay(3000, 60000));
   TEST_ASSERT_EQUAL_UINT32(60000, scan_policy::retryDelay(48000, 60000));

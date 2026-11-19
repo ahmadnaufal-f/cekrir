@@ -10,7 +10,7 @@ pnpm --filter @cekrir/frontend test
 pnpm run build
 ```
 
-Oxfmt 0.78.0 replaces the separate Prettier dependency, configuration, and commands. Its [migration command](https://oxc.rs/docs/guide/usage/formatter/migrate-from-prettier) preserved single quotes, no semicolons, trailing commas, 80-column lines, and the existing ignored backend/native/generated paths. Formatting the pnpm lockfile is left to pnpm; Prisma and Ruff still format their respective sources.
+Oxfmt 0.78.0 replaces the separate Prettier dependency, configuration, and commands. Its [migration command](https://oxc.rs/docs/guide/usage/formatter/migrate-from-prettier) preserved single quotes, no semicolons, trailing commas, 80-column lines, and the existing ignored backend/native/generated paths. Formatting the pnpm lockfile is left to pnpm; Alembic migrations and Ruff format the Python backend.
 
 Oxlint 1.93.0 uses the [recommended configuration workflow](https://oxc.rs/docs/guide/usage/linter/quickstart): a committed config, default correctness rules as errors, the built-in TypeScript/Unicorn/Oxc rules, and Vue/Vitest plugins. CI fails on warnings. Browser and Node environments are scoped to their files. Vitest's explicit mock-type-parameter rule is disabled because the existing implementation callbacks infer their types; the other enabled correctness rules remain active. The route validator has one documented suppression because rejecting control characters is intentional.
 
@@ -22,11 +22,11 @@ Oxlint checks Vue script blocks. Keep `vue-tsc --noEmit` for Vue template and Ty
 | `pnpm run lint:fix`        | Apply Oxlint's safe fixes                                              |
 | `pnpm run format:check`    | Check formatting with Oxfmt                                            |
 | `pnpm run format:frontend` | Format frontend source and HTML with Oxfmt                             |
-| `pnpm run format`          | Format Prisma, Python via Ruff, and supported files via Oxfmt          |
+| `pnpm run format`          | Format Python via Ruff and supported files via Oxfmt                   |
 | `pnpm run check:frontend`  | Oxlint plus Vue/TypeScript checking, without backend/database setup    |
-| `pnpm run check`           | Formatting, Oxlint, Prisma validation, Ruff, and Vue/TypeScript checks |
+| `pnpm run check`           | Formatting, Oxlint, Alembic schema check, Ruff, and Vue/TypeScript checks |
 
-The install-script allowlist uses pnpm 11's `allowBuilds` setting for Prisma and its engines, plus the existing macOS-only fsevents dependency. Unlisted dependency build scripts retain pnpm 11's defaults. Native generated projects and build outputs are excluded from format/lint checks.
+The install-script allowlist uses pnpm 11's `allowBuilds` setting for the remaining native dependencies. Unlisted dependency build scripts retain pnpm 11's defaults. Native generated projects and build outputs are excluded from format/lint checks.
 
 CI installs the version from `packageManager` with `pnpm/action-setup` and uses a frozen lockfile. Vercel invokes `corepack pnpm` explicitly for install/build so the pinned major is used without relying on the platform's default pnpm. Builds remain frontend-only; this does not deploy the backend or enable production mocks.
 
@@ -34,6 +34,6 @@ For editors, use the [official Oxc integration](https://oxc.rs/docs/guide/usage/
 
 ## Migration verification
 
-The frozen pnpm 11 install, `format:check`, `check:frontend`, all 53 frontend Vitest tests, and the production build passed. The full `pnpm run check` also passed, including Prisma schema validation and Ruff, using a configured local `DATABASE_URL` for schema validation. The exact `corepack pnpm` install/build commands in `vercel.json` passed locally. Existing direct application dependency versions were preserved when converting the lockfile.
+The frozen pnpm 11 install, `format:check`, `check:frontend`, all 53 frontend Vitest tests, and the production build passed during the prior frontend tooling update. The current backend database commands use Alembic; see [database setup](database.md) for migration and schema-check commands.
 
-Backend database integration tests were not run because the local Docker socket was unavailable. This migration changes a backend test setup hint to name pnpm; backend application code, schema, firmware, and the uv lockfile are unchanged. The migration updates CI and Vercel build configuration; it does not include a production release.
+The backend now uses SQLAlchemy and Alembic with a Redis live-notification channel. Historical results above predate that backend change and do not verify its migrations or runtime behavior.

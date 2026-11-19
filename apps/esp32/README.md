@@ -12,8 +12,115 @@ Two board profiles are provided; select the one that matches the actual module:
 | ------------------------------ | ------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
 | `xiao_esp32s3_sense` (default) | Seeed XIAO ESP32S3 **Sense**, including its camera expansion board | Convenient USB programming and PSRAM; a useful starting point for evaluation |
 | `ai_thinker_esp32cam`          | AI Thinker ESP32-CAM with OV2640 and PSRAM                         | Usually needs a compatible USB serial programmer or ESP32-CAM-MB             |
+| `esp32_s3_cam`                 | Common dual-USB ESP32-S3 CAM N16R8                                | Candidate pinout; compare against the actual board before using              |
 
 An ESP32/S3 chip name alone does not define a camera pinout. Other camera boards need a separate pin mapping and PlatformIO environment. Verify the exact model, sensor, PSRAM, power supply, programming interface, and lens focus distance with the vendor. Test a sample with real labels before buying a batch: focus, lighting, motion blur, barcode size, and camera distance determine whether scanning works. The default capture size is 800×600; higher resolution cannot fix an out-of-focus label.
+
+## Wi-Fi camera on Windows
+
+The `esp32_s3_cam_wifi_camera` firmware sends pictures to a Python camera server on the local network, roughly once a second, and also supports requesting a picture directly from the ESP32. The board does not need to stay connected to the computer.
+
+1. Edit `include/wifi_camera_config.h`: set `kWifiSsid` and `kWifiPassword` to your 2.4 GHz Wi-Fi details. Keep the generated `kCameraPassword`. If the file does not exist, copy `include/wifi_camera_config.example.h` to that name and set a strong camera password too. This local file is ignored by Git; keep it private. Credentials are also stored in the flashed firmware.
+2. Connect the ESP32 to the PC by USB. Double-click `upload_wifi_camera.bat` in the `apps/esp32` folder to build and upload the Wi-Fi camera firmware. It uses `COM10` by default; edit the `PORT` line in the file if needed, or run `upload_wifi_camera.bat COM3` in Command Prompt to use another port. Uploading replaces the firmware currently on the board.
+
+   Alternatively, from the repository root in Command Prompt:
+
+   ```bat
+   "%USERPROFILE%\.platformio\penv\Scripts\platformio.exe" run --project-dir apps/esp32 --environment esp32_s3_cam_wifi_camera --target upload --upload-port COM10
+   ```
+
+   If Command Prompt is already in `apps\esp32`, use `--project-dir .` instead of `--project-dir apps/esp32`. Replace `COM10` if the board uses a different port.
+3. The board joins Wi-Fi after it starts. You can disconnect the USB cable from the PC and connect it to a suitable power adapter. Wait for it to start, and connect your PC to the same Wi-Fi network.
+4. Open `http://cekrir-camera.local/` in a browser. If the name does not work, use the camera's IP address instead; the address during setup was `http://192.168.0.122/`, but it can change after restarting or reconnecting.
+5. When asked to sign in, use `camera` as the username and the `kCameraPassword` value from your local config file as the password. Click **Take a picture**. Refresh the picture page to request another picture.
+
+### Send pictures to the Python server
+
+1. In `include/wifi_camera_config.h`, set `kBackendUrl` to your PC's local IPv4 address, for example `http://192.168.0.145:8001/camera/frame`. Find the PC address by running `ipconfig` in Command Prompt and looking under the active network adapter. If this address changes, update the URL and upload the firmware again using `upload_wifi_camera.bat`.
+2. On the PC, double-click `apps/backend/run_camera.bat`. Keep its window open. The camera server reads the camera username and password from your local `wifi_camera_config.h`; it does not require PostgreSQL or Redis.
+3. Power on the ESP32 and wait for it to join Wi-Fi. On the server PC, open `http://localhost:8001/camera`. Sign in with the same camera username and password. The page refreshes the picture every second. The direct image endpoint is `http://localhost:8001/camera/latest.jpg`; the ESP32 uploads to `POST /camera/frame`.
+4. Press `Ctrl+C` in the server window to stop it. The server keeps only the latest picture in memory and clears it when stopped. If uploads stop, the last picture remains visible until the server restarts or receives a new picture.
+
+The picture firmware captures at 640 × 480 and attempts an upload every second. If no picture arrives, check that the PC and ESP32 can reach each other on the same local network, the URL contains the PC's current IP address, and the PC firewall allows incoming connections on port 8001. Try pressing the board's reset button. The serial monitor reports `Backend upload OK` after the first successful picture and periodically thereafter, or an error if an upload fails. Uploads retry when the server is unavailable; slow or failed connections may make the interval longer than one second. The standalone camera server uses port 8001 and is separate from the main backend API.
+
+### Live video
+
+For a smoother live view, connect the ESP32 by USB and double-click `upload_wifi_video.bat`. It builds and uploads the `esp32_s3_cam_wifi_video` environment, replacing the current firmware. This uses the same Wi-Fi settings and backend URL as the picture firmware. To return to one picture per second, upload using `upload_wifi_camera.bat`.
+
+Start `apps/backend/run_camera.bat`, then open `http://localhost:8001/camera/video` and sign in with the same camera username and password. If the server was already running before you updated the code, stop it with `Ctrl+C` and start it again to load the new endpoint. The ESP32 sends individual JPEG frames as quickly as it can, up to about 10 per second, at 320 × 240 resolution. The backend combines received frames into an MJPEG stream at `GET /camera/stream`. Actual speed depends on Wi-Fi, capture and server response times; there is no audio or recording. If the ESP32 stops sending, the browser can continue showing its last frame.
+
+To find the current IP address, reconnect the board to the PC and use this command in Command Prompt, then press the board's reset button if no startup messages appear:
+
+```bat
+"%USERPROFILE%\.platformio\penv\Scripts\platformio.exe" device monitor --port COM10 --baud 115200
+```
+
+Look for `Camera IP` and close the monitor with `Ctrl+C`. You can also find the board in your router's connected-device list or reserve its IP address in the router. If a request fails, try restarting the board, check that both devices use the same network, and check for guest-network isolation or a VPN blocking local connections.
+
+The browser connection uses plain HTTP: the password and pictures are not encrypted in transit. Use it only on a trusted local network and do not expose it to the internet. The existing `capture.bat` and Python capture tool require the separate USB diagnostic firmware described below; they do not capture from the Wi-Fi firmware. To switch between them, upload the matching PlatformIO environment.
+
+## Camera check on Windows
+
+The `esp32_s3_cam_camera_check` environment builds a separate diagnostic firmware for the common ESP32-S3 CAM N16R8 mapping. It does not need Wi-Fi, backend credentials, or a running API. The candidate mapping is in `include/camera_pins.h`; compare it with the vendor's board diagram before uploading. The ESP32-S3 chip marking alone does not establish the camera wiring.
+
+PlatformIO Core is installed on this PC at `C:\Users\vince\.platformio\penv\Scripts\platformio.exe`. In PowerShell, from the repository root:
+
+```powershell
+$pio = "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe"
+& $pio device list
+& $pio run --project-dir apps/esp32 --environment esp32_s3_cam_camera_check
+```
+
+The connected USB serial adapter was detected as `COM10`; check the list again if you reconnect it. **Uploading replaces the firmware currently on the board.** Back up any firmware or data you need first. For a board with 16 MB of readable flash, this saves a complete image to the ignored `captures` directory:
+
+```powershell
+New-Item -ItemType Directory -Force apps/esp32/captures | Out-Null
+$esptool = "$env:USERPROFILE\.platformio\packages\tool-esptool\esptool.exe"
+& $esptool --port COM10 --baud 460800 read-flash 0 0x1000000 apps/esp32/captures/esp32-flash-backup.bin
+```
+
+The backup can contain credentials or private device data. Keep it private and do not commit it. If flash encryption or read protection is enabled, verify the vendor's recovery procedure before treating a readback as a restorable backup. A complete 16 MB read alone does not prove it can be restored.
+
+To restore that raw backup on the same unencrypted board, after checking that the file is complete and the correct board is on `COM10`, run:
+
+```powershell
+& $esptool --port COM10 --baud 460800 write-flash --flash-mode keep --flash-freq keep --flash-size keep 0x0 apps/esp32/captures/esp32-flash-backup.bin
+```
+
+This replaces the board's entire 16 MB flash with the backup, including any configuration changed since it was saved. Flash encryption and secure boot were disabled on the board checked in this session; verify the actual board before restoring on another device. The restore procedure has not been exercised here.
+
+With the correct board pinout and a completed backup, upload and inspect the diagnostic:
+
+```powershell
+& $pio run --project-dir apps/esp32 --environment esp32_s3_cam_camera_check --target upload --upload-port COM10
+& $pio device monitor --port COM10 --baud 115200
+```
+
+Press reset if startup output is missing. A healthy run reports a camera sensor PID and `Capture OK` with dimensions and a JPEG byte count every three seconds. Initialization or capture errors point to the pin map, camera ribbon, sensor, power, or PSRAM configuration. Close the monitor with `Ctrl+C` before opening the port from another program.
+
+To capture and open an image on Windows, double-click `capture.bat` in the `apps/esp32` folder. It uses `COM10` by default. If your board uses another port, edit the `PORT` line near the top of the batch file or run `capture.bat COM3` from Command Prompt with the correct port. Each capture replaces `captures/camera-check.jpg`.
+
+You can also save an image using the Python environment installed by PlatformIO, which includes `pyserial`:
+
+```powershell
+$pioPython = "$env:USERPROFILE\.platformio\penv\Scripts\python.exe"
+& $pioPython apps/esp32/tools/capture_camera_check.py --port COM10
+```
+
+Open `apps/esp32/captures/camera-check.jpg` and check focus, lighting, orientation, and whether a real label is readable. The byte count alone does not establish image quality. To capture five images at five-second intervals, add `--count 5 --interval 5`; the same output file is replaced on each capture. The capture directory is ignored by Git.
+
+The `src` folder contains firmware that runs on the ESP32. The `tools` folder contains the optional Python image receiver and its tests, which run on the PC. The `captures` folder contains locally saved images and flash backups.
+
+After editing `camera_check.cpp`, rerun the build command and upload the newly built diagnostic, then repeat the monitor and image capture. The board itself captures periodically once flashed; it does not compile itself. Change `kCheckIntervalMs` in that file to adjust the diagnostic's interval, then rebuild and upload. To return to the application firmware, configure `include/config.h`, then build and upload the `esp32_s3_cam` environment using the same commands with that environment name. The application scan interval is `kScanIntervalMs` in `config.h`; a detected barcode uses `kDetectionCooldownMs` instead.
+
+For the normal firmware after each change, build and run the host-side policy tests with:
+
+```powershell
+& $pio run --project-dir apps/esp32 --environment esp32_s3_cam
+& $pio test --project-dir apps/esp32 --environment native
+```
+
+The native tests check scan timing, retry limits, and input encoding on the PC. They do not test the camera sensor. Flash the application build and test a real label against the running API to check the full device-to-backend flow. The firmware needs a configured `config.h` for that step; without it, startup stops at configuration validation.
 
 ## Configure and build
 
@@ -40,7 +147,7 @@ For a trusted development LAN, explicitly set `kAllowPlainHttp = true`, use your
 uv run --directory apps/backend uvicorn cekrir.main:app --host 0.0.0.0 --port 8000
 ```
 
-For example, set `kApiBaseUrl` to `http://192.168.1.20:8000/api/v1`. Set `CEKRIR_INGEST_API_KEY` in `apps/backend/.env` and the matching `kIngestApiKey` in the device config. The key protects camera ingestion only; the rest of this prototype API still needs user authorization before internet exposure.
+For example, set `kApiBaseUrl` to `http://192.168.1.20:8000/api/v1`. Set `CEKRIR_INGEST_API_KEY` in `apps/backend/.env` and the matching non-empty `kIngestApiKey` in the device config. The device requires this key to submit frames. It protects camera ingestion only; the rest of this prototype API still needs user authorization before internet exposure.
 
 ## Flash and monitor
 
@@ -59,7 +166,7 @@ Builds are checked for both profiles in CI. Successful cross-compilation does no
 
 - Requires PSRAM and initializes JPEG capture at SVGA, quality 12, with one frame buffer.
 - Reconnects Wi-Fi and submits a new frame roughly every three seconds while online.
-- Sends `POST /api/v1/detections/frame?courier=jne&camera_id=esp32-front-door`, raw `image/jpeg`, and the optional `X-Ingest-Key` header.
+- Sends `POST /api/v1/detections/frame?courier=jne&camera_id=esp32-front-door`, raw `image/jpeg`, and the required `X-Ingest-Key` header.
 - Processes one frame at a time, releases camera buffers, and never records video or writes captures to flash.
 - Uses bounded network timeouts and exponential retry delays capped at 60 seconds. Failed/offline frames are discarded; a later attempt captures a new one.
 - Waits 15 seconds after a detected barcode, including an existing shipment, to reduce repeated uploads. A new package can be missed during that cooldown; adjust it for the physical workflow.

@@ -7,7 +7,7 @@ namespace config {
 constexpr char kWifiSsid[] = "CHANGE_ME";
 constexpr char kWifiPassword[] = "CHANGE_ME";
 constexpr char kApiBaseUrl[] = "https://api.example.invalid/api/v1";
-constexpr char kIngestApiKey[] = "";  // Match backend CEKRIR_INGEST_API_KEY.
+constexpr char kIngestApiKey[] = "CHANGE_ME";  // Match backend CEKRIR_INGEST_API_KEY.
 constexpr char kCameraId[] = "esp32-front-door";
 constexpr char kCourier[] = "jne";  // The barcode alone does not identify a courier.
 

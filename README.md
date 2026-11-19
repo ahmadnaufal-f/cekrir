@@ -10,16 +10,18 @@ Three apps, one repository:
 
 | App             | Stack                                      | Purpose                                                             |
 | --------------- | ------------------------------------------ | ------------------------------------------------------------------- |
-| `apps/backend`  | Python 3.12+, FastAPI, psycopg, PostgreSQL | Detection ingestion, tracking, persistence, notification feed       |
+| `apps/backend`  | Python 3.12+, FastAPI, SQLAlchemy, Alembic, PostgreSQL, Redis | Authenticated detection, tracking, persistence, live notification feed |
 | `apps/frontend` | Vue 3, TypeScript, Vite, Capacitor         | Household delivery UI; Android acceptance target, iOS unverified    |
 | `apps/esp32`    | Arduino C++, PlatformIO                    | Camera firmware that sends JPEG frames to the barcode detection API |
 
-The default tracking provider is an explicitly labeled **offline demo**. It never calls a courier API. The HTTP provider and camera worker can be enabled separately. Integrations stay configurable until a real tracking API and notification channel are selected.
+The default tracking provider is an explicitly labeled **offline demo**. It never calls a courier API. The HTTP provider and camera worker can be enabled separately. Shipment and notification routes use JWT authentication; camera submissions can use the optional ingestion key. Live notification events use Redis Pub/Sub, while PostgreSQL remains the durable notification store.
 
 ## Documentation
 
 - [Product requirements (PRD)](docs/prd.md): scope, decisions, research, and open questions.
 - [Backend deployment discussion](docs/backend-deployment.md): laptop, tunnel, and cloud options for team review.
+- [Payment preparation](docs/payments.md): idempotent drafts and QRIS integration requirements.
+- [Roles, permissions, and locations](docs/roles-locations.md): access checks and location ownership.
 
 These pages were imported from Notion so they can be read and discussed on GitHub. Their planning statuses are preserved; implementation details are documented below and in the existing engineering docs.
 
@@ -45,11 +47,13 @@ pnpm run dev
 - API documentation: <http://127.0.0.1:8000/docs>
 - Health: <http://127.0.0.1:8000/health>
 
+To enable admin-only tracking refresh and role management, set both `CEKRIR_BOOTSTRAP_ADMIN_EMAIL` and `CEKRIR_BOOTSTRAP_ADMIN_PASSWORD` in `apps/backend/.env` before the first API start. Configure SMTP for `POST /api/v1/auth/register`; new members confirm their email before signing in. See [authentication and role setup](docs/integrations.md#authentication-and-roles).
+
 The frontend defaults to live mode and reports unsupported household operations. To review the frontend without a backend, run `VITE_APP_MODE=mock pnpm run dev:frontend`. Sign in with `admin@demo.test` or `anggota`, password `demo1234`. These are synthetic development accounts; sessions and new fixture records are in memory only. Production builds ignore mock mode and exclude the fixture module. The manual shipment client remains as legacy scaffold code, separate from household events.
 
-Backend demo tracking always reports `in_transit`; it is sample data. PostgreSQL persists in the Compose `postgres_data` volume. The root dev command starts both apps and stops them together with Ctrl+C; `pnpm run db:down` stops PostgreSQL while preserving its volume.
+Backend demo tracking always reports `in_transit`; it is sample data. PostgreSQL persists in the Compose `postgres_data` volume. The root dev command starts both apps and stops them together with Ctrl+C; `pnpm run db:down` stops PostgreSQL and Redis while preserving the PostgreSQL volume.
 
-**Prisma owns the database schema and versioned SQL migrations.** FastAPI uses psycopg and a connection pool because Prisma's supported client targets JavaScript/TypeScript. The schema is defined once in `prisma/schema.prisma`; the Python backend does not create or migrate tables. See [database setup](docs/database.md) for schema changes, testing, and deployment.
+**SQLAlchemy owns the backend ORM models and Alembic owns versioned migrations.** The model package is in `apps/backend/src/cekrir/db/model`; run committed migrations with `pnpm run db:deploy`. Existing Prisma migration files are retained as a historical record and are no longer used. See [database setup](docs/database.md) for schema changes, testing, and deployment.
 
 ## Try a camera detection without a camera
 
@@ -61,7 +65,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/detections \
   -d '{"resi_number":"CEKRIR987654","courier":"jne","camera_id":"front-door"}'
 ```
 
-This legacy backend detection creates a shipment and feed notification; it does not populate the household mock UI or deliver remote push. Its permanent courier/resi uniqueness differs from the target household delivery-event deduplication window. If `CEKRIR_INGEST_API_KEY` is configured, also send the matching `X-Ingest-Key` header.
+This backend detection creates a shipment and feed notification. If `CEKRIR_INGEST_API_KEY` is configured, send the matching `X-Ingest-Key` header; otherwise use an admin bearer token. It does not populate the household mock UI or deliver remote push. Its permanent courier/resi uniqueness differs from the target household delivery-event deduplication window.
 
 ## ESP32 camera scanner
 
@@ -87,22 +91,21 @@ Run these from the repository root:
 | `pnpm run dev`                                              | Run FastAPI and Vite                                      |
 | `pnpm run dev:backend`                                      | Run FastAPI only                                          |
 | `pnpm run dev:frontend`                                     | Run Vite only                                             |
-| `pnpm run check`                                            | Oxfmt, Oxlint, Prisma, Python lint, Vue/TypeScript checks |
+| `pnpm run check`                                            | Oxfmt, Oxlint, Alembic schema check, Python lint, Vue/TypeScript checks |
 | `pnpm test`                                                 | API integration tests and frontend API tests              |
 | `pnpm run build`                                            | Type check and build the frontend                         |
 | `pnpm run format`                                           | Format Python and web/docs/config files                   |
-| `pnpm run db:up`                                            | Start local PostgreSQL and wait for readiness             |
+| `pnpm run db:up`                                            | Start local PostgreSQL and Redis and wait for readiness    |
 | `pnpm run db:down`                                          | Stop local PostgreSQL; keep persisted data                |
-| `pnpm run db:deploy`                                        | Apply committed Prisma migrations                         |
-| `pnpm run db:migrate --name change_name`                    | Create and apply a development migration                  |
-| `pnpm run db:studio`                                        | Inspect PostgreSQL data with Prisma Studio                |
+| `pnpm run db:deploy`                                        | Apply committed Alembic migrations                       |
+| `pnpm run db:migrate -- -m "change_name"`                  | Generate an Alembic migration for review                  |
 | `pnpm run firmware:build`                                   | Cross-compile the default ESP32S3 camera profile          |
 | `pnpm run firmware:build --environment ai_thinker_esp32cam` | Cross-compile the AI Thinker profile                      |
 | `pnpm run firmware:test`                                    | Run firmware policy tests on the host                     |
 | `pnpm run firmware:upload --environment xiao_esp32s3_sense` | Flash a connected device                                  |
 | `pnpm run firmware:monitor`                                 | Open the serial monitor at 115200 baud                    |
 
-`pnpm test` applies Prisma migrations to `TEST_DATABASE_URL` and runs the API tests against that dedicated PostgreSQL database. Compose creates `cekrir_test` on its first initialization. Tests clear its shipment/notification tables; they require a database name ending in `_test` and reject the application database. Frontend tests do not need PostgreSQL.
+`pnpm test` applies Alembic migrations to `TEST_DATABASE_URL` and runs the API tests against that dedicated PostgreSQL database. Compose creates `cekrir_test` on its first initialization. Tests clear its shipment/notification tables; they require a database name ending in `_test` and reject the application database. Frontend tests do not need PostgreSQL.
 
 Python dependencies live in `apps/backend/pyproject.toml` and `apps/backend/uv.lock`. The frontend is a pnpm workspace defined in `pnpm-workspace.yaml`, with a root `pnpm-lock.yaml`. Commit both lockfiles when dependencies change. CI runs the same checks with frozen dependency installation.
 
@@ -118,10 +121,15 @@ Capacitor uses `apps/frontend/dist` as its web bundle. See [mobile setup](docs/m
 apps/
   backend/
     src/cekrir/
-      api/            # HTTP routes and dependencies
-      services/       # Tracking adapters and shipment workflow
+      routers/        # HTTP and WebSocket endpoints
+      validation/     # Request models and bounded frame validation
+      services/       # Account, detection, shipment and payment workflows
+      middleware/     # JWT authentication and role permissions
+      db/
+        model/        # SQLAlchemy models and model index
+        repository.py # SQLAlchemy persistence queries
+        session.py    # Engine and request-scoped sessions
       scanner.py      # Optional CCTV/webcam barcode worker
-      repository.py   # PostgreSQL queries and atomic writes
       schemas.py      # Validated API contracts
     tests/
   frontend/
@@ -140,10 +148,9 @@ docs/
   database.md
   integrations.md
   mobile.md
-prisma/
-  schema.prisma       # Canonical PostgreSQL schema
-  migrations/         # Versioned SQL migrations
-prisma.config.ts      # Shared DATABASE_URL and Prisma tooling
+apps/backend/migrations/
+  versions/           # Versioned Alembic migrations
+apps/backend/alembic.ini
 compose.yaml          # Local PostgreSQL with persistent storage
 ```
 
@@ -151,6 +158,6 @@ See [architecture and next steps](docs/architecture.md) and [tracking/CCTV integ
 
 ## Scope of this scaffold
 
-This is a **development prototype**. The app and API bind to loopback by default. Household account and role flows exist only as frontend fixtures. Backend authorization, delivery-event persistence, protected CCTV capture, and Android remote push remain gaps. The optional ingestion key only protects camera submissions; it is not user authorization. See the frontend handoff documents for the per-operation status.
+This is a **development prototype**. The app and API bind to loopback by default. The backend now has basic member/admin JWT authentication for its shipment API, but the frontend account flows still use fixtures and backend records are not scoped to households. Household delivery events, protected CCTV capture, and Android remote push remain gaps. The optional ingestion key protects camera submissions; it is not a user identity. See the frontend handoff documents for the per-operation status.
 
 No license has been chosen; add one before distributing the project.

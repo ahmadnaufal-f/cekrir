@@ -8,7 +8,12 @@ dependencies = [
   "uvicorn[standard]>=0.34,<1",
   "pydantic-settings>=2.8,<3",
   "python-dotenv>=1.0,<2",
-  "psycopg[binary,pool]>=3.2,<4",
+  "psycopg[binary]>=3.2,<4",
+  "sqlalchemy>=2.0,<3",
+  "alembic>=1.13,<2",
+  "PyJWT>=2.10,<3",
+  "bcrypt>=4.2,<6",
+  "redis>=5,<7",
   "httpx>=0.28,<1",
   "pillow>=12,<14",
   "zxing-cpp>=3,<4",
@@ -38,4 +43,4 @@ line-length = 100
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
-"src/cekrir/api/*.py" = ["B008"]
+"src/cekrir/routers/*.py" = ["B008"]
