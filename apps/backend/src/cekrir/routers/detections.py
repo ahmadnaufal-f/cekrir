@@ -6,6 +6,7 @@ from starlette.concurrency import run_in_threadpool
 
 from cekrir.db.session import get_session
 from cekrir.dependencies import get_provider, get_publisher
+from cekrir.middleware import RequirePermission
 from cekrir.schemas import CameraFrameResult, DetectionResult
 from cekrir.services import detections
 from cekrir.services.barcodes import InvalidCameraFrame
@@ -18,7 +19,11 @@ router = APIRouter(prefix="/api/v1", tags=["detections"])
 camera_router = APIRouter(prefix="/api/v1/detections", tags=["detections"])
 
 
-@router.post("/detections", response_model=DetectionResult)
+@router.post(
+    "/detections",
+    response_model=DetectionResult,
+    dependencies=[Depends(RequirePermission("detections:create", allow_ingest_key=True))],
+)
 def ingest_detection(
     payload: DetectionInput,
     session: Session = Depends(get_session),
@@ -31,6 +36,7 @@ def ingest_detection(
 @camera_router.post(
     "/frame",
     response_model=CameraFrameResult,
+    dependencies=[Depends(RequirePermission("detections:create", allow_ingest_key=True))],
     openapi_extra={
         "requestBody": {
             "required": True,

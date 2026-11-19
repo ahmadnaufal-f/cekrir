@@ -1,16 +1,37 @@
 from secrets import compare_digest
 
 import anyio
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
+from starlette.routing import Match
 
 from cekrir.services.auth import authenticate_token
 
 
+class RequirePermission:
+    """Declare a permission on a route with Depends(RequirePermission(...))."""
+
+    def __init__(self, permission: str, *, allow_ingest_key: bool = False):
+        if not permission.strip():
+            raise ValueError("A permission is required")
+        self.permission = permission
+        self.allow_ingest_key = allow_ingest_key
+
+    def __call__(self, request: Request) -> None:
+        if self.allow_ingest_key and getattr(request.state, "ingest_authenticated", False):
+            return
+        principal = getattr(request.state, "principal", None)
+        if principal is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        if self.permission not in principal["permissions"]:
+            raise HTTPException(status_code=403, detail="Insufficient role")
+
+
 class RolePermissionMiddleware(BaseHTTPMiddleware):
-    """Authenticate API requests and apply the current route role policy."""
+    """Authenticate API requests; each protected route declares its own permission."""
 
     PUBLIC_PATHS = {
         "/health",
@@ -20,29 +41,19 @@ class RolePermissionMiddleware(BaseHTTPMiddleware):
         "/api/v1/auth/verify-email",
         "/api/v1/auth/resend-verification",
     }
-    ROUTE_PERMISSIONS = {
-        ("GET", "/api/v1/shipments"): "shipments:read",
-        ("POST", "/api/v1/shipments"): "shipments:create",
-        ("GET", "/api/v1/notifications"): "notifications:read",
-        ("POST", "/api/v1/detections"): "detections:create",
-        ("POST", "/api/v1/detections/frame"): "detections:create",
-        ("POST", "/api/v1/payments"): "payments:create",
-        ("GET", "/api/v1/auth/users"): "users:read",
-    }
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
         if path in self.PUBLIC_PATHS or not path.startswith("/api/v1/"):
             return await call_next(request)
 
-        is_ingest = request.method == "POST" and path in {
-            "/api/v1/detections",
-            "/api/v1/detections/frame",
-        }
+        permissions = self._route_permissions(request)
+        is_ingest = any(permission.allow_ingest_key for permission in permissions)
         if is_ingest and request.app.state.settings.ingest_api_key:
             if not self._has_valid_ingest_key(request):
                 return JSONResponse(status_code=401, content={"detail": "Invalid ingestion key"})
             request.state.principal = None
+            request.state.ingest_authenticated = True
             return await call_next(request)
 
         token = self._bearer_token(request)
@@ -59,8 +70,7 @@ class RolePermissionMiddleware(BaseHTTPMiddleware):
             return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
 
         request.state.principal = principal
-        permission = self._permission_for(request.method, path)
-        if permission is None or permission not in principal["permissions"]:
+        if not permissions:
             return JSONResponse(status_code=403, content={"detail": "Insufficient role"})
         return await call_next(request)
 
@@ -82,12 +92,30 @@ class RolePermissionMiddleware(BaseHTTPMiddleware):
             and compare_digest(supplied.encode(), expected.get_secret_value().encode())
         )
 
-    @classmethod
-    def _permission_for(cls, method: str, path: str) -> str | None:
-        if method == "GET" and path.startswith("/api/v1/payments/"):
-            return "payments:read"
-        if method == "PATCH" and path.startswith("/api/v1/auth/users/") and path.endswith("/role"):
-            return "users:role:update"
-        if method == "POST" and path.startswith("/api/v1/shipments/") and path.endswith("/refresh"):
-            return "shipments:refresh"
-        return cls.ROUTE_PERMISSIONS.get((method, path))
+    @staticmethod
+    def _route_permissions(request: Request) -> list[RequirePermission]:
+        def permissions(route):
+            return [
+                dependency.dependency
+                for dependency in route.dependencies
+                if isinstance(dependency.dependency, RequirePermission)
+            ]
+
+        def find(routes):
+            for route in routes:
+                if route.matches(request.scope)[0] != Match.FULL:
+                    continue
+                if isinstance(route, APIRoute):
+                    return permissions(route)
+                contexts = getattr(route, "effective_route_contexts", None)
+                if contexts is not None:
+                    for context in contexts():
+                        if context.matches(request.scope)[0] == Match.FULL:
+                            return permissions(context)
+                    return []
+                included = getattr(route, "original_router", None)
+                if included is not None:
+                    return find(included.routes)
+            return []
+
+        return find(request.app.routes)

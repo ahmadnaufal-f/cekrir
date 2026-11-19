@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from cekrir.db.session import get_session
+from cekrir.middleware import RequirePermission
 from cekrir.schemas import TokenRead, UserRead, VerificationPending
 from cekrir.services import accounts
 from cekrir.services.email_verification import EmailUnavailable
@@ -102,12 +103,18 @@ def verification_page():
     )
 
 
-@router.get("/users", response_model=list[UserRead])
+@router.get(
+    "/users", response_model=list[UserRead], dependencies=[Depends(RequirePermission("users:read"))]
+)
 def list_users(session: Session = Depends(get_session)):
     return accounts.list_accounts(session)
 
 
-@router.patch("/users/{user_id}/role", response_model=UserRead)
+@router.patch(
+    "/users/{user_id}/role",
+    response_model=UserRead,
+    dependencies=[Depends(RequirePermission("users:role:update"))],
+)
 def update_role(user_id: UUID, payload: RoleUpdate, session: Session = Depends(get_session)):
     try:
         return accounts.change_role(session, user_id, payload.role)

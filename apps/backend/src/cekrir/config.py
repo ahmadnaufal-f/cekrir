@@ -10,7 +10,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="CEKRIR_",
-        env_file=(Path(__file__).resolve().parents[4] / ".env", ".env"),
+        env_file=(
+            Path(__file__).resolve().parents[4] / ".env",
+            Path(__file__).resolve().parents[2] / ".env",
+        ),
         extra="ignore",
         populate_by_name=True,
     )

@@ -3,13 +3,18 @@ from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
 from cekrir.db.session import get_session
+from cekrir.middleware import RequirePermission
 from cekrir.schemas import NotificationRead
 from cekrir.services import notifications
 
 router = APIRouter(prefix="/api/v1", tags=["notifications"])
 
 
-@router.get("/notifications", response_model=list[NotificationRead])
+@router.get(
+    "/notifications",
+    response_model=list[NotificationRead],
+    dependencies=[Depends(RequirePermission("notifications:read"))],
+)
 def list_notifications(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
