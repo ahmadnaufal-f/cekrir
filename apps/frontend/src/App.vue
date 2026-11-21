@@ -1,251 +1,252 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, shallowRef, watch } from 'vue'
-import type { AppServices } from './services/contracts'
-import type { AppUser } from './types/app'
-import AppHeader from './components/AppHeader.vue'
-import AppNavigation from './components/AppNavigation.vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import type {
+  ApiServices,
+  PackageNotification,
+  User,
+} from './features/api/contracts'
+import { parseApiRoute, shipmentRoute, type Route } from './features/api/routes'
+import ApiAuth from './features/ApiAuth.vue'
+import ShipmentView from './features/ShipmentView.vue'
+import NotificationFeed from './features/NotificationFeed.vue'
+import UserRoles from './features/UserRoles.vue'
 import AppIcon from './components/AppIcon.vue'
-import AuthScreen from './screens/AuthScreen.vue'
-import DeliveriesScreen from './screens/DeliveriesScreen.vue'
-import DeliveryDetailScreen from './screens/DeliveryDetailScreen.vue'
-import DevicesScreen from './screens/DevicesScreen.vue'
-import MembersScreen from './screens/MembersScreen.vue'
-import SettingsScreen from './screens/SettingsScreen.vue'
-import NotificationSettings from './screens/NotificationSettings.vue'
-import { createPushController } from './composables/usePush'
-import {
-  createSimulatedPushBridge,
-  createUnavailablePushBridge,
-} from './lib/push'
-import { deliveryRoute, guardRoute, useNavigation } from './lib/navigation'
-import { ui, errorMessage } from './lib/strings'
-import { shellCopy as copy } from './lib/shell-copy'
-
-const { services } = defineProps<{ services: AppServices }>()
-const user = shallowRef<AppUser | null>(null)
-const ready = shallowRef(false)
-const refreshKey = shallowRef(0)
-const signingOut = shallowRef(false)
-const notice = shallowRef('')
-const { requested, navigate } = useNavigation()
-let pendingDirectLink = requested.value.startsWith('/deliveries/')
-  ? requested.value
+const { services } = defineProps<{ services: ApiServices }>()
+const user = shallowRef<User | null>(services.user())
+const route = ref<Route>(parseApiRoute(location.hash))
+const revision = ref(0)
+const liveStatus = ref('unavailable')
+const alert = shallowRef<PackageNotification | null>(null)
+const notice = ref('')
+let pendingLink: Route | null = route.value.startsWith('/shipments/')
+  ? route.value
   : null
-const route = computed(() => guardRoute(requested.value, user.value))
-const deliveryId = computed(() =>
-  route.value.startsWith('/deliveries/')
-    ? decodeURIComponent(route.value.slice(12))
+let disconnect: (() => void) | null = null
+const id = computed(() =>
+  route.value.startsWith('/shipments/')
+    ? decodeURIComponent(route.value.slice(11))
     : null,
 )
-const bridge =
-  services.mode === 'mock' && import.meta.env.DEV
-    ? createSimulatedPushBridge()
-    : createUnavailablePushBridge()
-const push = createPushController({
-  bridge,
-  service: services.push,
-  user,
-  navigationReady: ready,
-  onNavigate(id) {
-    if (!ready.value || !user.value) return false
-    navigate(deliveryRoute(id))
-    return true
+const nav = computed(() => [
+  { path: '/shipments' as Route, label: 'Paket', icon: 'package' as const },
+  {
+    path: '/notifications' as Route,
+    label: 'Notifikasi',
+    icon: 'bell' as const,
   },
-  onRefresh() {
-    refreshKey.value++
-  },
-})
-const pushState = push.state
-let disposed = false
-watch([user, requested, ready], () => {
-  if (!ready.value) return
-  if (!user.value && requested.value.startsWith('/deliveries/'))
-    pendingDirectLink = requested.value
-  const target = guardRoute(requested.value, user.value)
-  if (target !== requested.value) navigate(target, true)
-})
-function authenticated(next: AppUser) {
-  user.value = next
-  notice.value = ''
-  // The detail service reauthorizes this ID against the newly signed-in household.
-  const target = pendingDirectLink
-  pendingDirectLink = null
-  if (!pushState.value.pendingNavigation)
-    navigate(target || '/deliveries', true)
-}
-function expired() {
-  pendingDirectLink = deliveryId.value ? deliveryRoute(deliveryId.value) : null
-  // A 401 invalidates UI state; the push controller rejects stale account work.
-  user.value = null
-  notice.value = copy.sessionExpired
-  navigate('/login', true)
-}
-async function logout() {
-  if (signingOut.value) return
-  signingOut.value = true
-  notice.value = ''
-  try {
-    if (!(await push.beforeLogout())) {
-      notice.value = copy.logoutFailed
-      return
-    }
-    await services.auth.logout()
-    pendingDirectLink = null
-    user.value = null
-    refreshKey.value++
-    navigate('/login', true)
-    notice.value = copy.signedOut
-  } catch (cause) {
-    notice.value = errorMessage(cause)
-  } finally {
-    signingOut.value = false
-  }
-}
-function simulate(tap: boolean) {
-  if (!import.meta.env.DEV || services.mode !== 'mock' || !user.value) return
-  const payload = {
-    type: 'delivery.created',
-    eventId: `demo-event-${user.value.id}`,
-    deliveryId: 'delivery-demo-complete',
-    householdId: user.value.householdId,
-  }
-  if (tap) push.simulateTap(payload)
-  else push.simulateReceived(payload)
-}
-function resume() {
-  if (document.visibilityState === 'visible') refreshKey.value++
+  ...(user.value?.role === 'admin'
+    ? [{ path: '/members' as Route, label: 'Pengguna', icon: 'users' as const }]
+    : []),
+  { path: '/settings' as Route, label: 'Akun', icon: 'user' as const },
+])
+function navigate(value: Route, replace = false) {
+  route.value = value
+  if (replace) history.replaceState(null, '', `#${value}`)
+  else location.hash = value
 }
 function focusMain() {
-  document.getElementById('main-content')?.focus({ preventScroll: true })
+  document.getElementById('main-content')?.focus()
 }
-watch(route, () => {
-  queueMicrotask(() => {
-    window.scrollTo(0, 0)
-    focusMain()
-  })
-})
-onMounted(async () => {
-  document.addEventListener('visibilitychange', resume)
-  try {
-    const restored = await services.auth.restore()
-    if (!disposed) user.value = restored
-  } catch (cause) {
-    if (!disposed) notice.value = errorMessage(cause)
-  } finally {
-    if (!disposed) {
-      ready.value = true
-      push.setNavigationReady(true)
-    }
+function changedHash() {
+  route.value = parseApiRoute(location.hash)
+}
+function openShipment(value: string) {
+  navigate(shipmentRoute(value))
+}
+function logout() {
+  pendingLink = null
+  alert.value = null
+  services.auth.logout()
+  notice.value = 'Anda telah keluar.'
+  navigate('/login', true)
+}
+const unsubscribe = services.subscribe((next) => {
+  const previous = user.value
+  user.value = next
+  if (!next && previous) {
+    notice.value = 'Sesi berakhir. Silakan masuk lagi.'
+    pendingLink = id.value ? shipmentRoute(id.value) : null
+    alert.value = null
+    navigate('/login', true)
+  }
+  if (next && !previous) {
+    notice.value = ''
+    const target = pendingLink
+    pendingLink = null
+    navigate(target || '/shipments', true)
   }
 })
+watch(
+  () => user.value?.id,
+  (value) => {
+    disconnect?.()
+    disconnect = null
+    alert.value = null
+    if (value)
+      disconnect = services.notifications.connect({
+        event(notification) {
+          alert.value = notification
+          revision.value++
+        },
+        ready() {
+          revision.value++
+        },
+        status(status) {
+          liveStatus.value = status
+        },
+      })
+  },
+  { immediate: true },
+)
+watch(
+  [route, () => user.value?.role],
+  () => {
+    if (!user.value && route.value !== '/login') {
+      if (id.value) pendingLink = route.value
+      navigate('/login', true)
+    } else if (
+      user.value &&
+      (route.value === '/login' ||
+        (route.value === '/members' && user.value.role !== 'admin'))
+    )
+      navigate('/shipments', true)
+  },
+  { immediate: true },
+)
+watch(route, () =>
+  queueMicrotask(() => {
+    window.scrollTo(0, 0)
+    document.getElementById('main-content')?.focus({ preventScroll: true })
+  }),
+)
+function resume() {
+  if (document.visibilityState === 'visible') revision.value++
+}
+onMounted(() => {
+  window.addEventListener('hashchange', changedHash)
+  document.addEventListener('visibilitychange', resume)
+})
 onUnmounted(() => {
-  disposed = true
+  unsubscribe()
+  disconnect?.()
+  window.removeEventListener('hashchange', changedHash)
   document.removeEventListener('visibilitychange', resume)
-  push.dispose()
 })
 </script>
-
 <template>
-  <div class="app-shell" :class="{ 'app-shell--authenticated': user }">
-    <a href="#main-content" class="skip-link" @click.prevent="focusMain">{{
-      copy.skip
-    }}</a>
-    <AppHeader :user="user" :route="route" @navigate="navigate" />
-    <p class="app-status">
-      <span class="mode-label">{{
-        services.mode === 'mock' ? ui.mock : ui.live
-      }}</span>
+  <div class="app-shell api-shell">
+    <a class="skip-link" href="#main-content" @click.prevent="focusMain"
+      >Lewati ke konten</a
+    >
+    <header class="api-topbar">
+      <a
+        class="brand"
+        href="#/shipments"
+        @click.prevent="navigate(user ? '/shipments' : '/login')"
+        >cekrir<span class="brand__dot">.</span></a
+      ><a
+        v-if="user"
+        href="#/settings"
+        @click.prevent="navigate('/settings')"
+        >{{ user.full_name }}</a
+      >
+    </header>
+    <p class="mode-label">
+      {{ services.mode === 'mock' ? 'Demo · data simulasi' : 'Mode live' }}
     </p>
-    <p v-if="services.mode === 'mock'" class="mode-note">{{ ui.mockNote }}</p>
-    <div v-if="notice" class="banner session-banner" role="status">
-      {{ notice }}
-    </div>
-    <main id="main-content" class="main-content" tabindex="-1">
-      <p v-if="!ready" role="status">{{ copy.restore }}</p>
+    <p v-if="services.mode === 'mock'" class="banner">
+      Data simulasi, tanpa email, perangkat, atau notifikasi nyata.
+    </p>
+    <p v-if="notice" class="banner" role="status">{{ notice }}</p>
+    <aside v-if="alert && user" class="banner api-actions" role="status">
+      <span>{{ alert.title }} · {{ alert.message }}</span
+      ><button
+        class="text-button"
+        @click="
+          openShipment(alert.shipment_id);
+          alert = null
+        "
+      >
+        Lihat paket</button
+      ><button class="text-button" @click="alert = null">Tutup</button>
+    </aside>
+    <main id="main-content" tabindex="-1">
+      <ApiAuth v-if="!user" :services="services" />
       <template v-else>
-        <aside
-          v-if="pushState.banner && user"
-          class="banner push-banner"
-          role="status"
-        >
-          <p>{{ ui.deliveries }}</p>
-          <button class="button button--primary" @click="push.tapBanner()">
-            <AppIcon name="package" />
-            {{ copy.navigateDelivery }}</button
-          ><button class="text-button" @click="push.dismissBanner()">
-            <AppIcon name="close" />
-            {{ copy.dismiss }}
-          </button>
-        </aside>
-        <div v-if="services.mode === 'live'" class="banner live-note">
-          <strong>{{ copy.unavailable }}</strong>
-          <p>{{ copy.liveHelp }}</p>
-        </div>
-        <AuthScreen
-          v-if="!user"
-          :key="route"
+        <ShipmentView
+          v-if="route.startsWith('/shipments')"
+          :key="`${user.id}:${user.role}`"
           :services="services"
-          :signup="route === '/signup'"
-          @authenticated="authenticated"
-          @switch="navigate(route === '/signup' ? '/login' : '/signup')"
+          :user="user"
+          :id="id"
+          :revision="revision"
+          @open="openShipment"
+          @back="navigate('/shipments')"
         />
-        <template v-else>
-          <DeliveryDetailScreen
-            v-if="deliveryId"
-            :key="`${user.id}:${deliveryId}`"
-            :services="services"
-            :user="user"
-            :delivery-id="deliveryId"
-            :refresh-key="refreshKey"
-            @back="navigate('/deliveries')"
-            @session-expired="expired"
-          />
-          <DeliveriesScreen
-            v-else-if="route === '/deliveries'"
-            :key="user.id"
-            :services="services"
-            :user="user"
-            :refresh-key="refreshKey"
-            @open="navigate(deliveryRoute($event))"
-            @session-expired="expired"
-          />
-          <DevicesScreen
-            v-else-if="route === '/devices' && user.role === 'admin'"
-            :key="user.id"
-            :services="services"
-            :user="user"
-            @session-expired="expired"
-          />
-          <MembersScreen
-            v-else-if="route === '/members' && user.role === 'admin'"
-            :key="user.id"
-            :services="services"
-            :user="user"
-            @session-expired="expired"
-          />
-          <SettingsScreen
-            v-else
-            :user="user"
-            :signing-out="signingOut"
-            @logout="logout"
-            ><NotificationSettings
-              :state="pushState"
-              @enable="push.enable()"
-              @retry="push.retry()"
-              @simulate-received="simulate(false)"
-              @simulate-tap="simulate(true)"
-              @tap-banner="push.tapBanner()"
-              @dismiss-banner="push.dismissBanner()"
-          /></SettingsScreen>
-        </template>
+        <NotificationFeed
+          v-else-if="route === '/notifications'"
+          :key="user.id"
+          :services="services"
+          :revision="revision"
+          :live-status="liveStatus"
+          @open="openShipment"
+        />
+        <UserRoles
+          v-else-if="route === '/members' && user.role === 'admin'"
+          :key="user.id"
+          :services="services"
+        />
+        <section v-else>
+          <h1>Akun</h1>
+          <article class="panel">
+            <h2>{{ user.full_name }}</h2>
+            <p>{{ user.email }}</p>
+            <p>{{ user.role === 'admin' ? 'Admin' : 'Anggota' }}</p>
+            <p class="supporting">
+              Sesi disimpan sementara. Muat ulang halaman atau tutup aplikasi
+              untuk mengakhiri sesi lokal. Keluar tidak mencabut token di
+              server.
+            </p>
+            <button class="button button--quiet" @click="logout">Keluar</button>
+          </article>
+          <article class="panel">
+            <h2>Ketersediaan layanan</h2>
+            <p>
+              Catatan paket digunakan bersama; pemisahan lokasi penerimaan belum
+              tersedia.
+            </p>
+            <p>
+              Pengelolaan perangkat, foto pengiriman, pembayaran, dan notifikasi
+              latar belakang belum tersedia di aplikasi ini.
+            </p>
+            <p>
+              Pembaruan langsung:
+              {{
+                liveStatus === 'connected'
+                  ? 'terhubung'
+                  : services.mode === 'mock'
+                    ? 'simulasi'
+                    : 'sementara tidak tersedia'
+              }}. Daftar notifikasi dapat dimuat ulang.
+            </p>
+          </article>
+        </section>
       </template>
     </main>
-    <footer>{{ copy.privacy }}</footer>
-    <AppNavigation
-      v-if="user"
-      :role="user.role"
-      :route="route"
-      @navigate="navigate"
-    />
+    <nav v-if="user" class="api-nav" aria-label="Navigasi utama">
+      <a
+        v-for="link in nav"
+        :key="link.path"
+        :href="`#${link.path}`"
+        :aria-current="
+          route === link.path || (link.path === '/shipments' && id)
+            ? 'page'
+            : undefined
+        "
+        @click.prevent="navigate(link.path)"
+        ><AppIcon :name="link.icon" /><span>{{ link.label }}</span></a
+      >
+    </nav>
+    <footer>cekrir · Catatan paket dan pelacakan</footer>
   </div>
 </template>
