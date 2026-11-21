@@ -28,7 +28,7 @@ These pages were imported from Notion so they can be read and discussed on GitHu
 
 ## Start locally
 
-Install **Node.js 24 LTS**, pnpm 11, [uv](https://docs.astral.sh/uv/getting-started/installation/), and **Docker with Compose**. uv can install the required Python version. An existing PostgreSQL server can also be used instead of Docker.
+Install **Node.js 24 LTS**, pnpm 11, [uv](https://docs.astral.sh/uv/getting-started/installation/), and configure PostgreSQL and Redis accessible to the backend. uv can install the required Python version. For the VM Docker deployment, follow the [Ubuntu VM setup](docs/ubuntu-vm-setup.md).
 
 ```sh
 git clone https://github.com/ahmadnaufal-f/cekrir.git
@@ -39,7 +39,6 @@ uv sync --project apps/backend --frozen
 cp .env.example .env
 cp apps/backend/.env.example apps/backend/.env
 cp apps/frontend/.env.example apps/frontend/.env
-pnpm run db:up
 pnpm run db:deploy
 pnpm run dev
 ```
@@ -52,7 +51,7 @@ To enable admin-only tracking refresh and role management, set both `CEKRIR_BOOT
 
 The frontend defaults to live mode and reports unsupported household operations. To review the frontend without a backend, run `VITE_APP_MODE=mock pnpm run dev:frontend`. Sign in with `admin@demo.test` or `anggota`, password `demo1234`. These are synthetic development accounts; sessions and new fixture records are in memory only. Production builds ignore mock mode and exclude the fixture module. The manual shipment client remains as legacy scaffold code, separate from household events.
 
-Backend demo tracking always reports `in_transit`; it is sample data. PostgreSQL persists in the Compose `postgres_data` volume. The root dev command starts both apps and stops them together with Ctrl+C; `pnpm run db:down` stops PostgreSQL and Redis while preserving the PostgreSQL volume.
+Backend demo tracking always reports `in_transit`; it is sample data. The root dev command starts both apps and stops them together with Ctrl+C. The VM Compose setup stores PostgreSQL in its `vm_postgres_data` volume.
 
 **SQLAlchemy owns the backend ORM models and Alembic owns versioned migrations.** The model package is in `apps/backend/src/cekrir/db/model`; run committed migrations with `pnpm run db:deploy`. Existing Prisma migration files are retained as a historical record and are no longer used. See [database setup](docs/database.md) for schema changes, testing, and deployment.
 
@@ -96,8 +95,8 @@ Run these from the repository root:
 | `pnpm test`                                                 | API integration tests and frontend API tests              |
 | `pnpm run build`                                            | Type check and build the frontend                         |
 | `pnpm run format`                                           | Format Python and web/docs/config files                   |
-| `pnpm run db:up`                                            | Start local PostgreSQL and Redis and wait for readiness    |
-| `pnpm run db:down`                                          | Stop local PostgreSQL; keep persisted data                |
+| `pnpm run db:up`                                            | Start the VM Compose PostgreSQL and Redis services; requires `.env.vm` |
+| `pnpm run db:down`                                          | Stop the VM Compose services; keep persisted data         |
 | `pnpm run db:deploy`                                        | Apply committed Alembic migrations                       |
 | `pnpm run db:migrate -- -m "change_name"`                  | Generate an Alembic migration for review                  |
 | `pnpm run firmware:build`                                   | Cross-compile the default ESP32S3 camera profile          |
@@ -106,7 +105,7 @@ Run these from the repository root:
 | `pnpm run firmware:upload --environment xiao_esp32s3_sense` | Flash a connected device                                  |
 | `pnpm run firmware:monitor`                                 | Open the serial monitor at 115200 baud                    |
 
-`pnpm test` applies Alembic migrations to `TEST_DATABASE_URL` and runs the API tests against that dedicated PostgreSQL database. Compose creates `cekrir_test` on its first initialization. Tests clear its shipment/notification tables; they require a database name ending in `_test` and reject the application database. Frontend tests do not need PostgreSQL.
+`pnpm test` applies Alembic migrations to `TEST_DATABASE_URL` and runs the API tests against that dedicated PostgreSQL database. Create the test database separately; the VM Compose setup does not create or expose one. Tests clear its shipment/notification tables; they require a database name ending in `_test` and reject the application database. Frontend tests do not need PostgreSQL.
 
 Python dependencies live in `apps/backend/pyproject.toml` and `apps/backend/uv.lock`. The frontend is a pnpm workspace defined in `pnpm-workspace.yaml`, with a root `pnpm-lock.yaml`. Commit both lockfiles when dependencies change. CI runs the same checks with frozen dependency installation.
 
@@ -152,7 +151,7 @@ docs/
 apps/backend/migrations/
   versions/           # Versioned Alembic migrations
 apps/backend/alembic.ini
-compose.yaml          # Local PostgreSQL with persistent storage
+compose.yaml          # VM backend, PostgreSQL, Redis, and migrations
 ```
 
 See [architecture and next steps](docs/architecture.md) and [tracking/CCTV integration](docs/integrations.md).

@@ -2,7 +2,7 @@
 
 This guide installs Docker, runs the main FastAPI backend, PostgreSQL and Redis in containers, and installs Nginx on the VM as the HTTPS reverse proxy. PostgreSQL and Redis have no public ports; the API is published only at `127.0.0.1:8080` on the VM. Nginx forwards requests from ports 80 and 443 to it. Docker stores the database in a named volume so container restarts do not erase it.
 
-The repository files must contain `compose.vm.yaml`, `apps/backend/Dockerfile`, and `deploy/nginx/cekrir.conf`. Commit and push your changes first, or copy your working tree to the VM. No deployment happens when these files are added to the repository.
+The repository files must contain `compose.yaml`, `apps/backend/Dockerfile`, and `deploy/nginx/cekrir.conf`. Commit and push your changes first, or copy your working tree to the VM. No deployment happens when these files are added to the repository.
 
 ## 1. Prepare the VM
 
@@ -50,7 +50,7 @@ cd cekrir
 git checkout YOUR_BRANCH_NAME
 ```
 
-Replace `YOUR_BRANCH_NAME` with the branch containing these files. Confirm `ls compose.vm.yaml apps/backend/Dockerfile` succeeds. Private repositories need your normal GitHub authentication.
+Replace `YOUR_BRANCH_NAME` with the branch containing these files. Confirm `ls compose.yaml apps/backend/Dockerfile` succeeds. Private repositories need your normal GitHub authentication.
 
 ## 4. Configure secrets and seed accounts
 
@@ -73,9 +73,9 @@ In `nano`, edit the values and save with `Ctrl+O`, `Enter`, then `Ctrl+X`:
 ## 5. Build and start the containers
 
 ```bash
-sudo docker compose --env-file .env.vm -f compose.vm.yaml up -d --build
-sudo docker compose --env-file .env.vm -f compose.vm.yaml ps
-sudo docker compose --env-file .env.vm -f compose.vm.yaml logs --tail=80 migrate
+sudo docker compose --env-file .env.vm up -d --build
+sudo docker compose --env-file .env.vm ps
+sudo docker compose --env-file .env.vm logs --tail=80 migrate
 ```
 
 The first build downloads images and Python dependencies. Compose waits for PostgreSQL to be healthy, runs the Alembic migration service once, then starts the API after migration succeeds and Redis is healthy. The `migrate` container exiting with code 0 is normal. If the migration fails, check its logs and the seed settings; the API will not start successfully until migration completes.
@@ -121,7 +121,7 @@ Follow the prompts and enable the HTTP-to-HTTPS redirect. Certificates require a
 Open `https://api.example.com/health` and `https://api.example.com/docs`. You can now log in using the seeded admin credentials through `POST /api/v1/auth/login`. The API docs describe the other endpoints. Restart the API if you change runtime values in `.env.vm`:
 
 ```bash
-sudo docker compose --env-file .env.vm -f compose.vm.yaml up -d --force-recreate api
+sudo docker compose --env-file .env.vm up -d --force-recreate api
 ```
 
 ## 8. Operate and update
@@ -130,22 +130,22 @@ Run these from the project folder on the VM:
 
 ```bash
 # Check containers and logs
-sudo docker compose --env-file .env.vm -f compose.vm.yaml ps
-sudo docker compose --env-file .env.vm -f compose.vm.yaml logs --tail=100 api
-sudo docker compose --env-file .env.vm -f compose.vm.yaml logs --tail=100 db
+sudo docker compose --env-file .env.vm ps
+sudo docker compose --env-file .env.vm logs --tail=100 api
+sudo docker compose --env-file .env.vm logs --tail=100 db
 
 # After pulling new code, build and explicitly apply new migrations before restarting the API
 git pull
-sudo docker compose --env-file .env.vm -f compose.vm.yaml build migrate
-sudo docker compose --env-file .env.vm -f compose.vm.yaml run --rm migrate
-sudo docker compose --env-file .env.vm -f compose.vm.yaml up -d api
+sudo docker compose --env-file .env.vm build migrate
+sudo docker compose --env-file .env.vm run --rm migrate
+sudo docker compose --env-file .env.vm up -d api
 ```
 
 Before database migrations in an important environment, make and test a backup. For example, this saves a PostgreSQL custom-format dump to a private file in the current directory:
 
 ```bash
 umask 077
-sudo docker compose --env-file .env.vm -f compose.vm.yaml exec -T db pg_dump -U cekrir -d cekrir -Fc > cekrir-backup.dump
+sudo docker compose --env-file .env.vm exec -T db pg_dump -U cekrir -d cekrir -Fc > cekrir-backup.dump
 ```
 
 Store backups somewhere separate from the VM and test restoration. `docker compose down` stops the stack but preserves the named database volume; **do not use `down -v`** unless you intend to delete it. Changing `POSTGRES_PASSWORD` in `.env.vm` after the volume has already been initialized does not change the database user's password; update PostgreSQL and the configuration together using a planned credential rotation.
