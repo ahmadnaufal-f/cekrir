@@ -54,10 +54,18 @@ Replace `YOUR_BRANCH_NAME` with the branch containing these files. Confirm `ls a
 
 ## 4. Configure secrets and seed accounts
 
+If you already have an `.env` file, keep it and add any missing settings from `deploy/vm.env.example` instead of overwriting it. If upgrading from the previous VM setup, copy its settings first:
+
 ```bash
-cp deploy/vm.env.example .env.vm
-chmod 600 .env.vm
-nano .env.vm
+cp -n .env.vm .env
+```
+
+For a new setup, create `.env` from the example. The following command will not overwrite an existing `.env`:
+
+```bash
+cp -n deploy/vm.env.example .env
+chmod 600 .env
+nano .env
 ```
 
 In `nano`, edit the values and save with `Ctrl+O`, `Enter`, then `Ctrl+X`:
@@ -68,7 +76,7 @@ In `nano`, edit the values and save with `Ctrl+O`, `Enter`, then `Ctrl+X`:
 - To enable Resend, uncomment and fill `CEKRIR_EMAIL_PROVIDER=resend`, `CEKRIR_RESEND_API_KEY`, `CEKRIR_RESEND_FROM`, and the HTTPS `CEKRIR_VERIFICATION_URL`. A verified Resend sending domain is required. Otherwise the server starts, but registration cannot send verification emails until email delivery is configured.
 - If you have a web frontend, set `CEKRIR_CORS_ORIGINS` to its exact HTTPS origin as a JSON array. Do not put API keys in the frontend.
 
-`.env.vm` contains private credentials. Keep the file private, do not commit or paste it into chat, and back it up securely. Compose reads it through `--env-file`; the Docker build excludes backend `.env` files.
+`.env` contains private credentials. Keep the file private, do not commit or paste it into chat, and back it up securely. Compose reads it through `--env-file`; the Docker build excludes backend `.env` files.
 
 **If the VM already has database data**, verify the old Compose project name before starting the new configuration:
 
@@ -77,21 +85,21 @@ sudo docker compose ls --all
 sudo docker volume ls --filter name=vm_postgres_data
 ```
 
-The volume is normally named `<project-name>_vm_postgres_data`. The moved Compose file defaults to project name `cekrir`, preserving `cekrir_vm_postgres_data`. If your existing volume has another project prefix, add `COMPOSE_PROJECT_NAME=your-old-project-name` to `.env.vm` before running Compose. Verify the exact old volume and take a tested backup first; otherwise Compose could create a new empty volume. The project name can also be overridden by a shell environment variable or the `-p` option.
+The volume is normally named `<project-name>_vm_postgres_data`. The moved Compose file defaults to project name `cekrir`, preserving `cekrir_vm_postgres_data`. If your existing volume has another project prefix, add `COMPOSE_PROJECT_NAME=your-old-project-name` to `.env` before running Compose. Verify the exact old volume and take a tested backup first; otherwise Compose could create a new empty volume. The project name can also be overridden by a shell environment variable or the `-p` option.
 
 Earlier Compose versions initialized PostgreSQL with user `cekrir`. An existing volume does not automatically switch to user `postgres` or adopt a new password. Before starting the updated configuration, confirm that its database has the `postgres` role with the intended password. If not, keep using the existing database credentials until the role is provisioned; do not delete the volume. When backing up an older database, use its existing PostgreSQL user in the `pg_dump -U` option.
 
 ## 5. Build and start the containers
 
 ```bash
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml build --pull --no-cache api
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml up -d db redis
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml run --rm --env-from-file .env.vm api alembic -c /workspace/apps/backend/alembic.ini upgrade head
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml up -d api
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml ps
+sudo docker compose --env-file .env -f apps/backend/compose.yaml build --pull --no-cache api
+sudo docker compose --env-file .env -f apps/backend/compose.yaml up -d db redis
+sudo docker compose --env-file .env -f apps/backend/compose.yaml run --rm --env-from-file .env api alembic -c /workspace/apps/backend/alembic.ini upgrade head
+sudo docker compose --env-file .env -f apps/backend/compose.yaml up -d api
+sudo docker compose --env-file .env -f apps/backend/compose.yaml ps
 ```
 
-The first build downloads base images and Python dependencies. It builds one shared image from `apps/backend/Dockerfile`; the `db`, `redis`, and `api` services run that image in three separate containers with different commands. The database container retains the official PostgreSQL entrypoint and the PostgreSQL 17 Alpine base. The build installs available Alpine package updates, but this does not guarantee that all image vulnerabilities are fixed. Scan the completed image before deployment. The `run --rm` command temporarily uses the API image to apply Alembic migrations, then removes that one-off container. It loads the seed credentials from `.env.vm` for that command. If the migration fails, fix the error and rerun it before starting the API. Compose waits for PostgreSQL and Redis to be healthy before starting the API.
+The first build downloads base images and Python dependencies. It builds one shared image from `apps/backend/Dockerfile`; the `db`, `redis`, and `api` services run that image in three separate containers with different commands. The database container retains the official PostgreSQL entrypoint and the PostgreSQL 17 Alpine base. The build installs available Alpine package updates, but this does not guarantee that all image vulnerabilities are fixed. Scan the completed image before deployment. The `run --rm` command temporarily uses the API image to apply Alembic migrations, then removes that one-off container. It loads the seed credentials from `.env` for that command. If the migration fails, fix the error and rerun it before starting the API. Compose waits for PostgreSQL and Redis to be healthy before starting the API.
 
 The API's Uvicorn command is visible in `apps/backend/compose.yaml` under `api.command`. It starts `cekrir.main:app` on port 8000 inside the container. The shared image defaults to PostgreSQL; Compose supplies the Redis and API commands for the other containers.
 
@@ -109,21 +117,21 @@ You do **not** need to install PostgreSQL separately on Ubuntu. The shared image
 
 - Database: `cekrir`
 - Database user: `postgres`
-- Password: the `POSTGRES_PASSWORD` value you put in `.env.vm`
+- Password: the `POSTGRES_PASSWORD` value you put in `.env`
 
-The Dockerfile supplies the `postgres` user and `cekrir` database defaults; Compose supplies the password from `.env.vm`. The official PostgreSQL entrypoint creates them only when the database volume is empty. The one-off Alembic command then creates the tables and seed records. The backend connects to the database using the Docker service name `db`; neither PostgreSQL nor Redis is exposed on the VM's public network. The `vm_postgres_data` Docker volume keeps the database files when containers restart.
+The Dockerfile supplies the `postgres` user and `cekrir` database defaults; Compose supplies the password from `.env`. The official PostgreSQL entrypoint creates them only when the database volume is empty. The one-off Alembic command then creates the tables and seed records. The backend connects to the database using the Docker service name `db`; neither PostgreSQL nor Redis is exposed on the VM's public network. The `vm_postgres_data` Docker volume keeps the database files when containers restart.
 
 If the existing volume was initialized with the earlier `cekrir` PostgreSQL user, changing `POSTGRES_USER` here does not create a `postgres` role or change its password. Confirm the existing roles and take a backup before switching credentials; the earlier `cekrir` user may still be needed to access that database.
 
 Check that PostgreSQL is ready and that Alembic created its tables:
 
 ```bash
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml exec db pg_isready -U postgres -d cekrir
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml exec db psql -U postgres -d cekrir -c '\dt'
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml exec db psql -U postgres -d cekrir -c 'SELECT version_num FROM alembic_version;'
+sudo docker compose --env-file .env -f apps/backend/compose.yaml exec db pg_isready -U postgres -d cekrir
+sudo docker compose --env-file .env -f apps/backend/compose.yaml exec db psql -U postgres -d cekrir -c '\dt'
+sudo docker compose --env-file .env -f apps/backend/compose.yaml exec db psql -U postgres -d cekrir -c 'SELECT version_num FROM alembic_version;'
 ```
 
-You should see `accepting connections`, a table list, and the latest migration version. These commands use `psql` **inside the database container**, so the VM does not need a separate PostgreSQL client installation. The password and database are initialized only when the volume is first created; changing the value in `.env.vm` later does not automatically change the database password.
+You should see `accepting connections`, a table list, and the latest migration version. These commands use `psql` **inside the database container**, so the VM does not need a separate PostgreSQL client installation. The password and database are initialized only when the volume is first created; changing the value in `.env` later does not automatically change the database password.
 
 Test from the VM:
 
@@ -163,10 +171,10 @@ sudo certbot renew --dry-run
 
 Follow the prompts and enable the HTTP-to-HTTPS redirect. Certificates require a real domain and internet-reachable port 80; a raw IP address is not sufficient for this workflow. Certbot changes the Nginx configuration and installs certificate renewal. See the [Certbot Nginx instructions](https://certbot.eff.org/instructions?ws=nginx&os=ubuntufocal).
 
-Open `https://api.example.com/health` and `https://api.example.com/docs`. You can now log in using the seeded admin credentials through `POST /api/v1/auth/login`. The API docs describe the other endpoints. Restart the API if you change runtime values in `.env.vm`:
+Open `https://api.example.com/health` and `https://api.example.com/docs`. You can now log in using the seeded admin credentials through `POST /api/v1/auth/login`. The API docs describe the other endpoints. Restart the API if you change runtime values in `.env`:
 
 ```bash
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml up -d --force-recreate api
+sudo docker compose --env-file .env -f apps/backend/compose.yaml up -d --force-recreate api
 ```
 
 ## 8. Operate and update
@@ -175,29 +183,29 @@ Run these from the project folder on the VM. **If this VM already has PostgreSQL
 
 ```bash
 # Check containers and logs
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml ps
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml logs --tail=100 api
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml logs --tail=100 db
+sudo docker compose --env-file .env -f apps/backend/compose.yaml ps
+sudo docker compose --env-file .env -f apps/backend/compose.yaml logs --tail=100 api
+sudo docker compose --env-file .env -f apps/backend/compose.yaml logs --tail=100 db
 
 # Back up the existing database before updating; keep this file outside the VM too
 umask 077
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml exec -T db pg_dump -U postgres -d cekrir -Fc > cekrir-backup.dump
+sudo docker compose --env-file .env -f apps/backend/compose.yaml exec -T db pg_dump -U postgres -d cekrir -Fc > cekrir-backup.dump
 
 # After testing the new image and backup restoration, pull and update
 git pull
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml build --pull --no-cache api
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml run --rm --env-from-file .env.vm api alembic -c /workspace/apps/backend/alembic.ini upgrade head
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml up -d
+sudo docker compose --env-file .env -f apps/backend/compose.yaml build --pull --no-cache api
+sudo docker compose --env-file .env -f apps/backend/compose.yaml run --rm --env-from-file .env api alembic -c /workspace/apps/backend/alembic.ini upgrade head
+sudo docker compose --env-file .env -f apps/backend/compose.yaml up -d
 ```
 
 Before database migrations in an important environment, make and test a backup. For example, this saves a PostgreSQL custom-format dump to a private file in the current directory:
 
 ```bash
 umask 077
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml exec -T db pg_dump -U postgres -d cekrir -Fc > cekrir-backup.dump
+sudo docker compose --env-file .env -f apps/backend/compose.yaml exec -T db pg_dump -U postgres -d cekrir -Fc > cekrir-backup.dump
 ```
 
-Store backups somewhere separate from the VM and test restoration. `sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml down` stops the stack but preserves the named database volume; **do not add `-v`** unless you intend to delete it. Changing `POSTGRES_PASSWORD` in `.env.vm` after the volume has already been initialized does not change the database user's password; update PostgreSQL and the configuration together using a planned credential rotation.
+Store backups somewhere separate from the VM and test restoration. `sudo docker compose --env-file .env -f apps/backend/compose.yaml down` stops the stack but preserves the named database volume; **do not add `-v`** unless you intend to delete it. Changing `POSTGRES_PASSWORD` in `.env` after the volume has already been initialized does not change the database user's password; update PostgreSQL and the configuration together using a planned credential rotation.
 
 ## 9. Connect cameras and email
 
@@ -207,7 +215,7 @@ For location emails, first assign the camera ID and members to an admin-owned lo
 
 ## Troubleshooting
 
-- **The API will not start:** inspect the `db` and `api` logs. If migrations failed, check the output from the one-off Alembic command. Confirm `.env.vm` has all required values and the database password uses hexadecimal characters.
+- **The API will not start:** inspect the `db` and `api` logs. If migrations failed, check the output from the one-off Alembic command. Confirm `.env` has all required values and the database password uses only letters and numbers.
 - **Nginx returns 502:** run `curl http://127.0.0.1:8080/health` on the VM, then check the API logs. Confirm Nginx points to port 8080.
 - **Certbot fails:** verify the domain resolves to this VM and port 80 is reachable in the cloud firewall; check `sudo nginx -t`.
 - **Browser frontend reports CORS errors:** set `CEKRIR_CORS_ORIGINS` to the exact frontend HTTPS origin and recreate the API container.

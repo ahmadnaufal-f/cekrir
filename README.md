@@ -95,7 +95,7 @@ Run these from the repository root:
 | `pnpm test`                                                 | API integration tests and frontend API tests              |
 | `pnpm run build`                                            | Type check and build the frontend                         |
 | `pnpm run format`                                           | Format Python and web/docs/config files                   |
-| `pnpm run db:up`                                            | Start the VM Compose PostgreSQL and Redis services; requires `.env.vm` |
+| `pnpm run db:up`                                            | Start the VM Compose PostgreSQL and Redis services; requires `.env` |
 | `pnpm run db:down`                                          | Stop the VM Compose services; keep persisted data         |
 | `pnpm run db:deploy`                                        | Apply committed Alembic migrations                       |
 | `pnpm run db:migrate -- -m "change_name"`                  | Generate an Alembic migration for review                  |
