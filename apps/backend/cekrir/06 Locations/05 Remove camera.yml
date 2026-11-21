@@ -1,0 +1,12 @@
+info:
+  name: "Remove camera"
+  type: http
+  seq: 21
+
+http:
+  method: DELETE
+  url: "{{baseUrl}}/api/v1/locations/{{locationId}}/cameras/{{cameraId}}"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+

@@ -1,0 +1,17 @@
+info:
+  name: "Register"
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/auth/register"
+  body:
+    type: json
+    data: |-
+      {
+        "email": "{{newEmail}}",
+        "full_name": "Test User",
+        "password": "{{newPassword}}"
+      }
+

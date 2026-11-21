@@ -1,0 +1,19 @@
+info:
+  name: "Create shipment"
+  type: http
+  seq: 11
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/shipments"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "resi_number": "{{trackingNumber}}",
+        "courier": "jne"
+      }
+

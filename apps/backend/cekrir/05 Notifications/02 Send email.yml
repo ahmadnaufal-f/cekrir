@@ -1,0 +1,22 @@
+info:
+  name: "Send email"
+  type: http
+  seq: 16
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/notifications/email"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+    - name: Idempotency-Key
+      value: "{{emailIdempotencyKey}}"
+  body:
+    type: json
+    data: |-
+      {
+        "user_id": "{{userId}}",
+        "subject": "Cekrir test notification",
+        "message": "This is a test notification."
+      }
+

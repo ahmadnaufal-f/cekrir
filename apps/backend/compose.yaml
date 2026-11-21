@@ -43,6 +43,14 @@ services:
       - CEKRIR_REDIS_URL=redis://redis:6379/0
       - CEKRIR_JWT_SECRET_KEY=${CEKRIR_JWT_SECRET_KEY:?Set CEKRIR_JWT_SECRET_KEY}
       - CEKRIR_INGEST_API_KEY=${CEKRIR_INGEST_API_KEY:?Set CEKRIR_INGEST_API_KEY}
+      # Alembic seed migration reads these when it creates the first accounts.
+      - CEKRIR_SEED_ADMIN_EMAIL=${CEKRIR_SEED_ADMIN_EMAIL:-}
+      - CEKRIR_SEED_ADMIN_PASSWORD=${CEKRIR_SEED_ADMIN_PASSWORD:-}
+      - CEKRIR_SEED_MEMBER_EMAIL=${CEKRIR_SEED_MEMBER_EMAIL:-}
+      - CEKRIR_SEED_MEMBER_PASSWORD=${CEKRIR_SEED_MEMBER_PASSWORD:-}
+      - CEKRIR_SEED_LOCATION=${CEKRIR_SEED_LOCATION:-}
+      - CEKRIR_BOOTSTRAP_ADMIN_EMAIL=${CEKRIR_BOOTSTRAP_ADMIN_EMAIL:-}
+      - CEKRIR_BOOTSTRAP_ADMIN_PASSWORD=${CEKRIR_BOOTSTRAP_ADMIN_PASSWORD:-}
       - CEKRIR_EMAIL_PROVIDER=${CEKRIR_EMAIL_PROVIDER:-smtp}
       - CEKRIR_RESEND_API_KEY
       - CEKRIR_RESEND_FROM
@@ -58,7 +66,7 @@ services:
       - CEKRIR_TRACKING_API_URL
       - CEKRIR_TRACKING_API_KEY
     ports:
-      - "127.0.0.1:8080:8000"
+      - "8000:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 10s

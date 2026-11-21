@@ -1,0 +1,42 @@
+variables:
+  - name: baseUrl
+    value: "https://api.cekrir.bakuretsumagic.my.id"
+  - name: email
+    value: ""
+  - name: password
+    value: ""
+    secret: true
+  - name: newEmail
+    value: ""
+  - name: newPassword
+    value: ""
+    secret: true
+  - name: accessToken
+    value: ""
+    secret: true
+  - name: refreshToken
+    value: ""
+    secret: true
+  - name: verificationToken
+    value: ""
+    secret: true
+  - name: ingestKey
+    value: ""
+    secret: true
+  - name: userId
+    value: ""
+  - name: locationId
+    value: ""
+  - name: cameraId
+    value: "test-camera"
+  - name: shipmentId
+    value: ""
+  - name: trackingNumber
+    value: "TEST123456"
+  - name: paymentId
+    value: ""
+  - name: emailIdempotencyKey
+    value: "test-email-001"
+  - name: paymentIdempotencyKey
+    value: "test-payment-001"
+

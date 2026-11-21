@@ -1,0 +1,20 @@
+info:
+  name: "Submit JPEG frame"
+  type: http
+  seq: 14
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/detections/frame?courier=jne&camera_id={{cameraId}}"
+  headers:
+    - name: X-Ingest-Key
+      value: "{{ingestKey}}"
+    - name: Content-Type
+      value: "image/jpeg"
+  body:
+    type: none
+
+docs:
+  content: Select a JPEG file as a binary request body in Bruno before sending. The maximum size is 512 KiB.
+  type: text/markdown
+
