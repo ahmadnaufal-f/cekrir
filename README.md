@@ -151,7 +151,7 @@ docs/
 apps/backend/migrations/
   versions/           # Versioned Alembic migrations
 apps/backend/alembic.ini
-compose.yaml          # VM backend, PostgreSQL, Redis, and migrations
+apps/backend/compose.yaml  # VM backend, PostgreSQL, and Redis
 ```
 
 See [architecture and next steps](docs/architecture.md) and [tracking/CCTV integration](docs/integrations.md).
