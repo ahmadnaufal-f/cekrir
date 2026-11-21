@@ -62,7 +62,7 @@ nano .env.vm
 
 In `nano`, edit the values and save with `Ctrl+O`, `Enter`, then `Ctrl+X`:
 
-- Set `POSTGRES_PASSWORD`, `CEKRIR_JWT_SECRET_KEY`, and `CEKRIR_INGEST_API_KEY` to **different** random values. Run `openssl rand -hex 32` separately for each value and paste the results into the file. A hexadecimal PostgreSQL password also avoids URL-encoding problems. The ingestion key must match the key configured on a camera using the main API.
+- Set `POSTGRES_PASSWORD` to the password for the PostgreSQL user `postgres`. This Compose configuration expects a password containing only letters and numbers, so it can be safely used in the backend's connection URL. For a fresh database, choose a strong password. Set `CEKRIR_JWT_SECRET_KEY` and `CEKRIR_INGEST_API_KEY` to **different** random values. Run `openssl rand -hex 32` separately for each key and paste the results into the file. The ingestion key must match the key configured on a camera using the main API.
 - Set `CEKRIR_SEED_ADMIN_EMAIL` and `CEKRIR_SEED_MEMBER_EMAIL` to the intended users' actual email addresses. Set different strong passwords for the two accounts, each at least 12 characters and at most 72 UTF-8 bytes. `openssl rand -hex 24` provides a suitable value. Set `CEKRIR_SEED_LOCATION` to the location name.
 - On a fresh database, migration `20261120_0007` creates both accounts as **already verified** and assigns the location to the admin. Choose those addresses carefully; this seed bypasses email verification. The member is not automatically assigned to the location.
 - To enable Resend, uncomment and fill `CEKRIR_EMAIL_PROVIDER=resend`, `CEKRIR_RESEND_API_KEY`, `CEKRIR_RESEND_FROM`, and the HTTPS `CEKRIR_VERIFICATION_URL`. A verified Resend sending domain is required. Otherwise the server starts, but registration cannot send verification emails until email delivery is configured.
@@ -78,6 +78,8 @@ sudo docker volume ls --filter name=vm_postgres_data
 ```
 
 The volume is normally named `<project-name>_vm_postgres_data`. The moved Compose file defaults to project name `cekrir`, preserving `cekrir_vm_postgres_data`. If your existing volume has another project prefix, add `COMPOSE_PROJECT_NAME=your-old-project-name` to `.env.vm` before running Compose. Verify the exact old volume and take a tested backup first; otherwise Compose could create a new empty volume. The project name can also be overridden by a shell environment variable or the `-p` option.
+
+Earlier Compose versions initialized PostgreSQL with user `cekrir`. An existing volume does not automatically switch to user `postgres` or adopt a new password. Before starting the updated configuration, confirm that its database has the `postgres` role with the intended password. If not, keep using the existing database credentials until the role is provisioned; do not delete the volume. When backing up an older database, use its existing PostgreSQL user in the `pg_dump -U` option.
 
 ## 5. Build and start the containers
 
@@ -106,17 +108,19 @@ Check the reported package, CVE, and fix availability before deployment. The `po
 You do **not** need to install PostgreSQL separately on Ubuntu. The shared image is based on PostgreSQL 17 Alpine. The `db` service starts PostgreSQL in Docker. The first time it starts with a new database volume, it creates:
 
 - Database: `cekrir`
-- Database user: `cekrir`
+- Database user: `postgres`
 - Password: the `POSTGRES_PASSWORD` value you put in `.env.vm`
 
-The Dockerfile supplies the `cekrir` user and database defaults; Compose supplies the password from `.env.vm`. The official PostgreSQL entrypoint creates them only when the database volume is empty. The one-off Alembic command then creates the tables and seed records. The backend connects to the database using the Docker service name `db`; neither PostgreSQL nor Redis is exposed on the VM's public network. The `vm_postgres_data` Docker volume keeps the database files when containers restart.
+The Dockerfile supplies the `postgres` user and `cekrir` database defaults; Compose supplies the password from `.env.vm`. The official PostgreSQL entrypoint creates them only when the database volume is empty. The one-off Alembic command then creates the tables and seed records. The backend connects to the database using the Docker service name `db`; neither PostgreSQL nor Redis is exposed on the VM's public network. The `vm_postgres_data` Docker volume keeps the database files when containers restart.
+
+If the existing volume was initialized with the earlier `cekrir` PostgreSQL user, changing `POSTGRES_USER` here does not create a `postgres` role or change its password. Confirm the existing roles and take a backup before switching credentials; the earlier `cekrir` user may still be needed to access that database.
 
 Check that PostgreSQL is ready and that Alembic created its tables:
 
 ```bash
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml exec db pg_isready -U cekrir -d cekrir
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml exec db psql -U cekrir -d cekrir -c '\dt'
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml exec db psql -U cekrir -d cekrir -c 'SELECT version_num FROM alembic_version;'
+sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml exec db pg_isready -U postgres -d cekrir
+sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml exec db psql -U postgres -d cekrir -c '\dt'
+sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml exec db psql -U postgres -d cekrir -c 'SELECT version_num FROM alembic_version;'
 ```
 
 You should see `accepting connections`, a table list, and the latest migration version. These commands use `psql` **inside the database container**, so the VM does not need a separate PostgreSQL client installation. The password and database are initialized only when the volume is first created; changing the value in `.env.vm` later does not automatically change the database password.
@@ -177,7 +181,7 @@ sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml logs --tail=
 
 # Back up the existing database before updating; keep this file outside the VM too
 umask 077
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml exec -T db pg_dump -U cekrir -d cekrir -Fc > cekrir-backup.dump
+sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml exec -T db pg_dump -U postgres -d cekrir -Fc > cekrir-backup.dump
 
 # After testing the new image and backup restoration, pull and update
 git pull
@@ -190,7 +194,7 @@ Before database migrations in an important environment, make and test a backup. 
 
 ```bash
 umask 077
-sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml exec -T db pg_dump -U cekrir -d cekrir -Fc > cekrir-backup.dump
+sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml exec -T db pg_dump -U postgres -d cekrir -Fc > cekrir-backup.dump
 ```
 
 Store backups somewhere separate from the VM and test restoration. `sudo docker compose --env-file .env.vm -f apps/backend/compose.yaml down` stops the stack but preserves the named database volume; **do not add `-v`** unless you intend to delete it. Changing `POSTGRES_PASSWORD` in `.env.vm` after the volume has already been initialized does not change the database user's password; update PostgreSQL and the configuration together using a planned credential rotation.

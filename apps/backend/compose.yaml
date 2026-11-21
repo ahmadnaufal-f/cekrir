@@ -7,13 +7,13 @@ services:
     image: cekrir-stack:vm
     restart: unless-stopped
     environment:
-      POSTGRES_USER: cekrir
+      POSTGRES_USER: postgres
       POSTGRES_DB: cekrir
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.vm}
     volumes:
       - vm_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cekrir -d cekrir"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cekrir"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -39,7 +39,7 @@ services:
     command: ["uvicorn", "cekrir.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
     restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql+psycopg://cekrir:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/cekrir
+      - DATABASE_URL=postgresql+psycopg://postgres:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/cekrir
       - CEKRIR_REDIS_URL=redis://redis:6379/0
       - CEKRIR_JWT_SECRET_KEY=${CEKRIR_JWT_SECRET_KEY:?Set CEKRIR_JWT_SECRET_KEY}
       - CEKRIR_INGEST_API_KEY=${CEKRIR_INGEST_API_KEY:?Set CEKRIR_INGEST_API_KEY}

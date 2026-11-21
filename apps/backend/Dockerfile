@@ -34,7 +34,7 @@ FROM base AS runtime
 COPY --from=builder /workspace/apps/backend /workspace/apps/backend
 # The official PostgreSQL entrypoint creates this user and database on the first
 # start of an empty volume. POSTGRES_PASSWORD must be supplied at runtime.
-ENV POSTGRES_USER=cekrir \
+ENV POSTGRES_USER=postgres \
     POSTGRES_DB=cekrir
 # Fail the build if any executable or required shared library is missing.
 RUN postgres --version \
