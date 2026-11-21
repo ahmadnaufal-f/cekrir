@@ -1,4 +1,5 @@
 import type { Shipment, PackageNotification, ResiInput } from '../../types/api'
+import type { AppServices } from '../../services/contracts'
 export type { Shipment, PackageNotification, ResiInput }
 export interface User {
   id: string
@@ -34,6 +35,7 @@ export interface ApiServices {
   mode: 'live' | 'mock'
   user(): User | null
   subscribe(listener: (user: User | null) => void): () => void
+  devices?: AppServices['devices']
   auth: {
     login(input: Credentials): Promise<User>
     register(input: Registration): Promise<VerificationPending>

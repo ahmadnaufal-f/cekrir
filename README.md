@@ -51,6 +51,8 @@ To enable admin-only tracking refresh and role management, set both `CEKRIR_BOOT
 
 The frontend defaults to live mode against `VITE_API_BASE_URL` (development default `/api/v1`). Register a member, confirm the emailed link, and sign in; configure the bootstrap administrator separately. Sessions are memory-only, so page reloads and app restarts require signing in again. To review without a backend, run `VITE_APP_MODE=mock pnpm run dev:frontend` and sign in with `admin@demo.test` or `member@demo.test`, password `demo12345678`. Mock registrations remain verification-pending and do not send email. Production builds exclude mock fixtures. On static hosting, set a reachable HTTPS API URL and configure backend CORS; there is no production `/api` proxy.
 
+To simulate a new camera detection in demo mode, open <http://127.0.0.1:5173/?simulateDetection=1> and sign in. After one second, the demo adds shipment `DEMO-NEW-001` and shows the **Paket terdeteksi** banner. Tap **Lihat paket** to open its details. Reload and sign in again to repeat the scenario.
+
 Backend demo tracking always reports `in_transit`; it is sample data. PostgreSQL persists in the Compose `postgres_data` volume. The root dev command starts both apps and stops them together with Ctrl+C; `pnpm run db:down` stops PostgreSQL and Redis while preserving the PostgreSQL volume.
 
 **SQLAlchemy owns the backend ORM models and Alembic owns versioned migrations.** The model package is in `apps/backend/src/cekrir/db/model`; run committed migrations with `pnpm run db:deploy`. Existing Prisma migration files are retained as a historical record and are no longer used. See [database setup](docs/database.md) for schema changes, testing, and deployment.

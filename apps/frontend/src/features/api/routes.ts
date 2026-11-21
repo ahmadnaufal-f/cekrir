@@ -1,8 +1,14 @@
+export const deviceGuideRoutes = {
+  esp32: '/devices/setup/esp32',
+  bardi: '/devices/setup/cameras',
+} as const
+
 export type Route =
   | '/login'
   | '/shipments'
   | `/shipments/${string}`
-  | '/notifications'
+  | '/devices'
+  | (typeof deviceGuideRoutes)[keyof typeof deviceGuideRoutes]
   | '/members'
   | '/settings'
 // oxlint-disable-next-line no-control-regex -- Reject control characters in identifiers.
@@ -15,9 +21,10 @@ export function parseApiRoute(hash: string): Route {
     [
       '/login',
       '/shipments',
-      '/notifications',
+      '/devices',
       '/members',
       '/settings',
+      ...Object.values(deviceGuideRoutes),
     ].includes(raw)
   )
     return raw as Route

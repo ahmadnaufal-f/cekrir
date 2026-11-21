@@ -1,52 +1,54 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { AppRoute, Role } from '../types/app'
+import type { Route } from '../features/api/routes'
 import { shellCopy as copy } from '../lib/shell-copy'
 import { ui } from '../lib/strings'
 import AppIcon, { type IconName } from './AppIcon.vue'
 
-const props = defineProps<{ role: Role; route: AppRoute }>()
-const emit = defineEmits<{ navigate: [path: AppRoute] }>()
+const props = defineProps<{ isAdmin: boolean; route: Route }>()
+const emit = defineEmits<{ navigate: [path: Route] }>()
 interface NavigationLink {
-  path: AppRoute
+  path: Route
   label: string
   icon: IconName
 }
 const links = computed<NavigationLink[]>(() => {
-  const deliveries: NavigationLink = {
-    path: '/deliveries',
+  const shipments: NavigationLink = {
+    path: '/shipments',
     label: ui.packages,
     icon: 'package',
   }
-  return props.role === 'admin'
+  return props.isAdmin
     ? [
-        deliveries,
+        shipments,
         { path: '/devices', label: ui.devices, icon: 'device' },
-        { path: '/members', label: ui.members, icon: 'users' },
+        { path: '/members', label: 'Pengguna', icon: 'users' },
       ]
-    : [deliveries]
+    : [shipments]
 })
-function isCurrent(path: AppRoute) {
-  return (
-    props.route === path ||
-    (path === '/deliveries' && props.route.startsWith('/deliveries/'))
-  )
-}
+const activeIndex = computed(() =>
+  links.value.findIndex((link) => link.path === props.route),
+)
 </script>
 
 <template>
   <nav
     id="main-navigation"
-    class="app-nav"
-    :class="{ 'app-nav--member': role === 'member' }"
+    class="api-nav"
+    :class="{ 'api-nav--member': !isAdmin }"
     :aria-label="copy.navigation"
   >
+    <span
+      v-if="activeIndex >= 0"
+      class="api-nav__indicator"
+      :style="{ '--active-index': activeIndex, '--tab-count': links.length }"
+      aria-hidden="true"
+    />
     <a
       v-for="link in links"
       :key="link.path"
-      class="app-nav__link"
       :href="`#${link.path}`"
-      :aria-current="isCurrent(link.path) ? 'page' : undefined"
+      :aria-current="route === link.path ? 'page' : undefined"
       @click.prevent="emit('navigate', link.path)"
     >
       <AppIcon :name="link.icon" /><span>{{ link.label }}</span>
@@ -55,84 +57,85 @@ function isCurrent(path: AppRoute) {
 </template>
 
 <style scoped>
-.app-nav {
-  container: bottom-navigation / inline-size;
-  font-size: 1rem;
+.api-nav {
+  --nav-padding: 8px;
+  --nav-gap: 4px;
+  --tab-radius: 24px;
   position: fixed;
-  z-index: 30;
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
   display: flex;
-  align-items: stretch;
-  gap: 4px;
-  width: min(calc(100% - 32px), 480px);
-  padding: 8px;
+  width: min(480px, calc(100% - 24px));
+  padding: var(--nav-padding);
   border: 1px solid #dce2d8;
-  border-radius: 48px;
+  border-radius: 32px;
   background: #fffefa;
   box-shadow: 0 8px 28px #233d3726;
-  transform: translateX(-50%);
+  gap: var(--nav-gap);
 }
-.app-nav--member {
-  container-name: member-navigation;
+
+.api-nav--member {
   max-width: 220px;
 }
-.app-nav__link {
-  display: flex;
-  min-width: 0;
-  min-height: 64px;
+
+.api-nav__indicator {
+  position: absolute;
+  inset-block: var(--nav-padding);
+  left: var(--nav-padding);
+  width: calc(
+    (100% - 2 * var(--nav-padding) - (var(--tab-count) - 1) * var(--nav-gap)) /
+      var(--tab-count)
+  );
+  transform: translateX(calc(var(--active-index) * (100% + var(--nav-gap))));
+  border-radius: var(--tab-radius);
+  background: #234e41;
+  pointer-events: none;
+}
+
+.api-nav a {
+  position: relative;
   flex: 1;
+  min-width: 0;
+  min-height: 60px;
+  display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 10px 8px;
-  border-radius: 36px;
-  color: #53675a;
-  font-size: 0.8125rem;
-  line-height: 1.25;
+  gap: 5px;
+  padding-inline: 0;
+  border-radius: var(--tab-radius);
   text-align: center;
   text-decoration: none;
+  font-size: 0.8125rem;
 }
-.app-nav__link .app-icon {
-  width: 22px;
-  height: 22px;
-}
-.app-nav__link span {
+
+.api-nav a span {
   max-width: 100%;
   overflow-wrap: anywhere;
 }
-.app-nav__link:hover {
-  background: #e9eedf;
-  color: #233d37;
-}
-.app-nav__link[aria-current='page'] {
-  background: #234e41;
+
+.api-nav a[aria-current='page'] {
   color: #fffefa;
 }
-.app-nav__link[aria-current='page']:hover {
-  background: #173e32;
+
+.api-nav a:hover {
+  outline: 1px solid #71866c;
 }
-.app-nav__link:focus-visible {
-  outline-offset: -3px;
+
+.api-nav svg {
+  width: 22px;
+  height: 22px;
 }
-@container bottom-navigation (max-width: 19em) {
-  .app-nav__link {
-    min-height: 56px;
-    gap: 0;
-  }
-  .app-nav__link span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    white-space: nowrap;
-    clip-path: inset(50%);
-  }
-}
+
 @media (prefers-reduced-motion: no-preference) {
-  .app-nav__link {
-    transition: background-color 160ms ease-out;
+  .api-nav__indicator {
+    transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .api-nav a {
+    transition: color 160ms ease-out;
   }
 }
 </style>

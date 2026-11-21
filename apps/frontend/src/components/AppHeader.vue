@@ -1,41 +1,88 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
-import type { AppRoute, AppUser } from '../types/app'
-import { shellCopy as copy } from '../lib/shell-copy'
+import {
+  computed,
+  onMounted,
+  onUnmounted,
+  shallowRef,
+  useTemplateRef,
+} from 'vue'
+import { accountInitials } from '../lib/account-initials'
+import { ui } from '../lib/strings'
 import AppIcon from './AppIcon.vue'
+import BackButton from './BackButton.vue'
 
 const props = defineProps<{
-  user: Pick<AppUser, 'role' | 'displayName'> | null
-  route: AppRoute
+  signedIn: boolean
+  displayName?: string | null
+  accountCurrent: boolean
+  modeLabel: string
 }>()
-const emit = defineEmits<{ navigate: [path: AppRoute] }>()
+const emit = defineEmits<{
+  navigate: [path: '/login' | '/shipments' | '/settings']
+  back: []
+  logout: []
+}>()
 const scrolled = shallowRef(false)
-const initials = computed(() =>
-  props.user?.displayName
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part.charAt(0))
-    .join('')
-    .toUpperCase(),
-)
+const menuOpen = shallowRef(false)
+const account = useTemplateRef('account')
+const avatar = useTemplateRef('avatar')
+const name = computed(() => props.displayName?.trim())
+const initials = computed(() => accountInitials(name.value))
 function updateScroll() {
   scrolled.value = window.scrollY > 0
+}
+function closeOutside(event: PointerEvent | FocusEvent) {
+  const target =
+    event instanceof FocusEvent ? event.relatedTarget : event.target
+  if (
+    menuOpen.value &&
+    !(target instanceof Node && account.value?.contains(target))
+  )
+    menuOpen.value = false
+}
+function closeOnEscape(event: KeyboardEvent) {
+  if (!menuOpen.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  menuOpen.value = false
+  avatar.value?.focus()
+}
+function openSettings() {
+  menuOpen.value = false
+  if (props.accountCurrent) avatar.value?.focus()
+  else emit('navigate', '/settings')
 }
 onMounted(() => {
   updateScroll()
   window.addEventListener('scroll', updateScroll, { passive: true })
+  document.addEventListener('pointerdown', closeOutside, true)
 })
-onUnmounted(() => window.removeEventListener('scroll', updateScroll))
+onUnmounted(() => {
+  window.removeEventListener('scroll', updateScroll)
+  document.removeEventListener('pointerdown', closeOutside, true)
+})
 </script>
 
 <template>
-  <header class="site-header" :class="{ 'site-header--floating': scrolled }">
+  <header
+    class="site-header"
+    :class="{
+      'sticky-header': signedIn,
+      'site-header--floating': signedIn && scrolled,
+      'site-header--settings': accountCurrent,
+    }"
+  >
+    <BackButton
+      v-if="accountCurrent"
+      class="site-header__back"
+      @click="emit('back')"
+    />
     <a
+      v-else
       class="brand"
-      href="#/deliveries"
+      :href="signedIn ? '#/shipments' : '#/login'"
       aria-label="Cekrir"
-      @click.prevent="emit('navigate', user ? '/deliveries' : '/login')"
+      @click.prevent="emit('navigate', signedIn ? '/shipments' : '/login')"
     >
       <svg viewBox="0 0 28 28" fill="none" aria-hidden="true">
         <path
@@ -48,34 +95,68 @@ onUnmounted(() => window.removeEventListener('scroll', updateScroll))
           d="m3 9 11 6 11-6M14 15v11M8 6l11 6"
           stroke="currentColor"
           stroke-width="1.6"
-        /></svg
-      >cekrir<span class="brand__dot">.</span>
+        />
+      </svg>
+      <span>cekrir<span class="brand__dot">.</span></span>
     </a>
-    <a
-      v-if="user"
-      class="account-avatar"
-      href="#/settings"
-      :aria-label="`${copy.openAccount}: ${user.displayName}`"
-      :aria-current="route === '/settings' ? 'page' : undefined"
-      @click.prevent="emit('navigate', '/settings')"
+    <div
+      v-if="signedIn"
+      ref="account"
+      class="account-dropdown"
+      @focusout="closeOutside"
+      @keydown.esc="closeOnEscape"
     >
-      <span v-if="initials" aria-hidden="true">{{ initials }}</span>
-      <AppIcon v-else name="user" />
-    </a>
+      <button
+        ref="avatar"
+        type="button"
+        class="account-avatar"
+        :class="{ 'account-avatar--current': accountCurrent }"
+        :aria-label="name ? `Menu akun: ${name}` : 'Menu akun'"
+        :aria-expanded="menuOpen"
+        aria-controls="account-dropdown-actions"
+        @click="menuOpen = !menuOpen"
+      >
+        <span v-if="initials" aria-hidden="true">{{ initials }}</span>
+        <AppIcon v-else name="user" />
+      </button>
+      <div
+        v-show="menuOpen"
+        id="account-dropdown-actions"
+        class="account-dropdown__actions"
+      >
+        <a
+          href="#/settings"
+          class="account-dropdown__action"
+          :aria-current="accountCurrent ? 'page' : undefined"
+          @click.prevent="openSettings"
+        >
+          <AppIcon name="user" /> Pengaturan
+        </a>
+        <button
+          type="button"
+          class="account-dropdown__action"
+          @click="emit('logout')"
+        >
+          <AppIcon name="logout" /> {{ ui.logout }}
+        </button>
+      </div>
+    </div>
+    <p v-else class="mode-label site-header__mode">{{ modeLabel }}</p>
   </header>
 </template>
 
 <style scoped>
 .site-header {
-  position: sticky;
-  top: env(safe-area-inset-top, 0px);
-  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  padding: 14px 0;
+  min-height: calc(48px + 2 * var(--app-header-padding));
+  gap: 12px;
+  padding-block: var(--app-header-padding);
   pointer-events: none;
+}
+.site-header--settings.site-header--floating {
+  background: #f6f7f2;
 }
 .brand,
 .account-avatar {
@@ -83,9 +164,19 @@ onUnmounted(() => window.removeEventListener('scroll', updateScroll))
   pointer-events: auto;
 }
 .brand {
-  padding: 10px 12px;
-  margin-left: -12px;
+  min-height: 48px;
+  padding-inline: 12px;
+  margin-inline-start: -12px;
   border-radius: 999px;
+  line-height: 1.15;
+}
+.site-header__mode {
+  max-width: 50%;
+  text-align: end;
+}
+.account-dropdown {
+  position: relative;
+  pointer-events: auto;
 }
 .account-avatar {
   display: grid;
@@ -93,6 +184,7 @@ onUnmounted(() => window.removeEventListener('scroll', updateScroll))
   height: 48px;
   flex: none;
   place-items: center;
+  padding: 0;
   border-color: #d5decf;
   border-radius: 50%;
   background: #e9eedf;
@@ -101,20 +193,65 @@ onUnmounted(() => window.removeEventListener('scroll', updateScroll))
   font-weight: 650;
   text-decoration: none;
 }
+.site-header__back {
+  align-self: start;
+  pointer-events: auto;
+}
 .site-header--floating .brand,
 .site-header--floating .account-avatar {
   border-color: #dce2d8;
   background: #fffefa;
   box-shadow: 0 6px 20px #233d371f;
 }
+.site-header--floating .site-header__back {
+  border-color: #dce2d8;
+  box-shadow: 0 6px 20px #233d371f;
+}
 .brand:hover,
 .account-avatar:hover {
   background: #e9eedf;
 }
-.account-avatar[aria-current='page'] {
+.account-avatar--current,
+.account-avatar[aria-expanded='true'] {
   border-color: #234e41;
   background: #234e41;
   color: #fffefa;
+}
+.account-dropdown__actions {
+  position: absolute;
+  inset-block-start: calc(100% + 8px);
+  inset-inline-end: 0;
+  display: grid;
+  gap: 2px;
+  inline-size: min(12rem, calc(100vw - 40px));
+  padding: 6px;
+  border: 1px solid #dce2d8;
+  border-radius: 14px;
+  background: #fffefa;
+  box-shadow: 0 10px 28px #233d3726;
+}
+.account-dropdown__action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-align: start;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.account-dropdown__action:hover,
+.account-dropdown__action[aria-current='page'] {
+  background: #eef2e8;
+}
+.account-dropdown__action:focus-visible {
+  outline-offset: -2px;
 }
 @media (prefers-reduced-motion: no-preference) {
   .brand,

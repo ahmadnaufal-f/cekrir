@@ -38,8 +38,8 @@ Run these only when the corresponding native directory is absent. Commit native 
 
 ## Notification behavior
 
-The “Enable device notifications” button requests permission and uses `@capacitor/local-notifications`. New events fetched while the app is open can produce local device alerts. Android 13+ notification permission is requested by the plugin.
+Cekrir shows in-app package reports while you are signed in and the app is open. Tap a report to open the corresponding shipment detail.
 
-Local notifications do not deliver server events while the application is suspended or closed. To support that flow, add Capacitor Push Notifications, register device tokens with an authenticated backend, and implement APNs/FCM delivery with platform credentials, user preferences, token lifecycle management, and retries.
+Background delivery requires Capacitor Push Notifications, device registration with an authenticated backend, and APNs/FCM delivery with platform credentials, user preferences, token lifecycle management, and retries.
 
 Native project generation and plugin sync can run on Linux. Native compilation, signing, and permission/device behavior must be tested with the platform toolchains and real devices.

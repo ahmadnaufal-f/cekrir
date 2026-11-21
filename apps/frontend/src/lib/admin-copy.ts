@@ -10,13 +10,21 @@ export const adminCopy = {
   devices: {
     title: 'Perangkat',
     intro: 'Kelola perangkat untuk mencatat paket di lokasi ini.',
+    tabLabel: 'Kategori perangkat',
+    esp32Tab: 'ESP32',
+    cameraTab: 'Kamera',
+    setupStatusNote:
+      'Tanda centang menunjukkan penyiapan tersimpan. Status koneksi ditampilkan pada perangkat.',
+    guideEsp32: 'Lihat panduan ESP32',
+    guideCamera: 'Lihat panduan kamera',
+    registerDevice: 'Daftarkan perangkat',
     loadFailed: 'Daftar perangkat belum dapat dimuat.',
     esp32Title: 'ESP32 pendeteksi paket',
     esp32Description:
       'Daftarkan satu perangkat ESP32 untuk mengirim peristiwa paket ke lokasi penerimaan ini.',
     noEsp32: 'Belum ada ESP32 yang terdaftar.',
     esp32Name: 'Nama perangkat',
-    esp32NamePlaceholder: 'Contoh: Kamera pintu depan',
+    esp32NamePlaceholder: 'Contoh: ESP32 pintu depan',
     addEsp32: 'Daftarkan ESP32',
     savingEsp32: 'Mendaftarkan…',
     esp32Limit:

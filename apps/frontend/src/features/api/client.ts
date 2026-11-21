@@ -292,7 +292,7 @@ export function createApiClient(options: ClientOptions = {}): ApiServices {
         ),
     },
     users: {
-      list: () => authorized('/auth/users'),
+      list: () => authorized('/auth/users', { cache: 'no-store' }),
       async role(id, role) {
         const user = await authorized<User>(
           `/auth/users/${encodeURIComponent(id)}/role`,
