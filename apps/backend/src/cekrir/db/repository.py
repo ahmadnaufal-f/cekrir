@@ -5,7 +5,15 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from cekrir.db.model import Notification, Role, Shipment, ShipmentSource, ShipmentStatus, User
+from cekrir.db.model import (
+    CameraDevice,
+    Notification,
+    Role,
+    Shipment,
+    ShipmentSource,
+    ShipmentStatus,
+    User,
+)
 from cekrir.schemas import (
     NotificationRead,
     ShipmentRead,
@@ -132,8 +140,14 @@ class ShipmentRepository:
         )
 
     def _notify(self, shipment: Shipment, title: str) -> Notification:
+        location_id = None
+        if shipment.camera_id:
+            location_id = self.session.scalar(
+                select(CameraDevice.location_id).where(CameraDevice.camera_id == shipment.camera_id)
+            )
         notification = Notification(
             shipment_id=shipment.id,
+            location_id=location_id,
             title=title,
             message=f"{shipment.courier.upper()} | {shipment.resi_number}: {shipment.summary}",
         )

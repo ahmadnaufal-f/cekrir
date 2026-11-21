@@ -1,6 +1,7 @@
 from cekrir.db.model.base import Base
 from cekrir.db.model.email_verification import EmailVerification
 from cekrir.db.model.location import Location
+from cekrir.db.model.location_device import CameraDevice, LocationMember
 from cekrir.db.model.notification import Notification
 from cekrir.db.model.payment import Payment
 from cekrir.db.model.role import Permission, Role, RolePermission
@@ -9,8 +10,10 @@ from cekrir.db.model.user import User
 
 __all__ = [
     "Base",
+    "CameraDevice",
     "EmailVerification",
     "Location",
+    "LocationMember",
     "Notification",
     "Payment",
     "Permission",

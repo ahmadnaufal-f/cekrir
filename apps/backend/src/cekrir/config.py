@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     bootstrap_admin_email: str | None = None
     bootstrap_admin_full_name: str = Field(default="Administrator", min_length=1, max_length=200)
     bootstrap_admin_password: SecretStr | None = None
+    email_provider: Literal["smtp", "resend"] = "smtp"
+    resend_api_key: SecretStr | None = None
+    resend_from: str | None = None
     smtp_host: str | None = None
     smtp_port: int = Field(default=587, ge=1, le=65535)
     smtp_security: Literal["starttls", "ssl", "plain"] = "starttls"

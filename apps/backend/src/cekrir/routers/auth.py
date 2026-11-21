@@ -48,9 +48,11 @@ def refresh(payload: RefreshInput, request: Request, session: Session = Depends(
 
 
 @router.post("/verify-email")
-def confirm_email(payload: VerificationInput, session: Session = Depends(get_session)):
+def confirm_email(
+    payload: VerificationInput, request: Request, session: Session = Depends(get_session)
+):
     try:
-        accounts.confirm_account_email(session, payload.token)
+        accounts.confirm_account_email(session, payload.token, request.app.state.settings)
     except accounts.InvalidVerificationToken as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"detail": "Email verified. You can now sign in."}

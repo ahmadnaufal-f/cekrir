@@ -1,0 +1,82 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cekrir
+      POSTGRES_DB: cekrir
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.vm}
+    volumes:
+      - vm_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cekrir -d cekrir"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    image: cekrir-backend:vm
+    build:
+      context: ./apps/backend
+    restart: "no"
+    command: ["alembic", "-c", "/workspace/apps/backend/alembic.ini", "upgrade", "head"]
+    environment:
+      - DATABASE_URL=postgresql+psycopg://cekrir:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/cekrir
+      - CEKRIR_SEED_ADMIN_EMAIL=${CEKRIR_SEED_ADMIN_EMAIL:?Set CEKRIR_SEED_ADMIN_EMAIL}
+      - CEKRIR_SEED_ADMIN_PASSWORD=${CEKRIR_SEED_ADMIN_PASSWORD:?Set CEKRIR_SEED_ADMIN_PASSWORD}
+      - CEKRIR_SEED_MEMBER_EMAIL=${CEKRIR_SEED_MEMBER_EMAIL:?Set CEKRIR_SEED_MEMBER_EMAIL}
+      - CEKRIR_SEED_MEMBER_PASSWORD=${CEKRIR_SEED_MEMBER_PASSWORD:?Set CEKRIR_SEED_MEMBER_PASSWORD}
+      - CEKRIR_SEED_LOCATION=${CEKRIR_SEED_LOCATION:-Main Location}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    image: cekrir-backend:vm
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+psycopg://cekrir:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/cekrir
+      - CEKRIR_REDIS_URL=redis://redis:6379/0
+      - CEKRIR_JWT_SECRET_KEY=${CEKRIR_JWT_SECRET_KEY:?Set CEKRIR_JWT_SECRET_KEY}
+      - CEKRIR_INGEST_API_KEY=${CEKRIR_INGEST_API_KEY:?Set CEKRIR_INGEST_API_KEY}
+      - CEKRIR_EMAIL_PROVIDER=${CEKRIR_EMAIL_PROVIDER:-smtp}
+      - CEKRIR_RESEND_API_KEY
+      - CEKRIR_RESEND_FROM
+      - CEKRIR_VERIFICATION_URL
+      - CEKRIR_SMTP_HOST
+      - CEKRIR_SMTP_PORT
+      - CEKRIR_SMTP_SECURITY
+      - CEKRIR_SMTP_USERNAME
+      - CEKRIR_SMTP_PASSWORD
+      - CEKRIR_SMTP_FROM
+      - CEKRIR_CORS_ORIGINS
+      - CEKRIR_TRACKING_PROVIDER
+      - CEKRIR_TRACKING_API_URL
+      - CEKRIR_TRACKING_API_KEY
+    ports:
+      - "127.0.0.1:8080:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  vm_postgres_data:

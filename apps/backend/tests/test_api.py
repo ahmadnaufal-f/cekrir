@@ -4,7 +4,9 @@ from uuid import uuid4
 
 import psycopg
 import pytest
+from conftest import authorize_admin
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import DBAPIError
 
 from cekrir.config import Settings
 from cekrir.main import create_app
@@ -12,7 +14,10 @@ from cekrir.schemas import TrackingEvent
 
 
 def test_health(client):
-    assert client.get("/health").json() == {"status": "ok", "tracking_provider": "demo"}
+    health = client.get("/health").json()
+    assert health["status"] == "ok"
+    assert health["tracking_provider"] == "demo"
+    assert health["redis"] in {"ok", "unavailable"}
 
 
 def test_manual_entry_normalizes_and_persists(client, provider):
@@ -100,17 +105,24 @@ def test_invalid_barcode_and_unknown_shipment(client):
 
 
 def test_database_survives_restart_and_concurrent_detections(database_url, provider):
-    settings = Settings(_env_file=None, DATABASE_URL=database_url)
+    settings = Settings(_env_file=None, DATABASE_URL=database_url, ingest_api_key="test-key")
     payload = {"resi_number": "AB12345", "courier": "jne", "camera_id": "front-door"}
     with TestClient(create_app(settings=settings, provider=provider)) as client:
+        authorize_admin(client)
         with ThreadPoolExecutor(max_workers=4) as pool:
             results = list(
-                pool.map(lambda _: client.post("/api/v1/detections", json=payload), range(4))
+                pool.map(
+                    lambda _: client.post(
+                        "/api/v1/detections", json=payload, headers={"X-Ingest-Key": "test-key"}
+                    ),
+                    range(4),
+                )
             )
         assert all(result.status_code == 200 for result in results)
         assert sum(result.json()["created"] for result in results) == 1
         assert len(client.get("/api/v1/notifications").json()) == 1
     with TestClient(create_app(settings=settings, provider=provider)) as client:
+        authorize_admin(client)
         assert len(client.get("/api/v1/shipments").json()) == 1
         assert len(client.get("/api/v1/notifications").json()) == 1
 
@@ -166,8 +178,9 @@ def test_notification_insert_failure_rolls_back_shipment(client, database_url):
                FOR EACH ROW EXECUTE FUNCTION reject_notification()"""
         )
         try:
-            with pytest.raises(psycopg.errors.RaiseException, match="Test notification failure"):
+            with pytest.raises(DBAPIError, match="Test notification failure") as failure:
                 client.post("/api/v1/shipments", json={"resi_number": "AB12345", "courier": "jne"})
+            assert isinstance(failure.value.orig, psycopg.errors.RaiseException)
             assert client.get("/api/v1/shipments").json() == []
             assert client.get("/api/v1/notifications").json() == []
         finally:

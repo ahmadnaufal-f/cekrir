@@ -20,6 +20,7 @@ The default tracking provider is an explicitly labeled **offline demo**. It neve
 
 - [Product requirements (PRD)](docs/prd.md): scope, decisions, research, and open questions.
 - [Backend deployment discussion](docs/backend-deployment.md): laptop, tunnel, and cloud options for team review.
+- [Ubuntu VM setup](docs/ubuntu-vm-setup.md): Docker, PostgreSQL, Redis, Nginx, and HTTPS for the backend.
 - [Payment preparation](docs/payments.md): idempotent drafts and QRIS integration requirements.
 - [Roles, permissions, and locations](docs/roles-locations.md): access checks and location ownership.
 

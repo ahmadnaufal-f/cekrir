@@ -31,12 +31,26 @@ Except for health and the public authentication endpoints, send `Authorization: 
 | POST | `/api/v1/detections` | `detections:create` or ingestion key as described below | JSON `resi_number`, `courier`, `camera_id`; returns `created` and `shipment`. |
 | POST | `/api/v1/detections/frame?courier=jne&camera_id=door` | `detections:create` or ingestion key as described below | Raw JPEG body with `Content-Type: image/jpeg`; returns `detected_count`, `ambiguous`, and `detections`. |
 | GET | `/api/v1/notifications` | `notifications:read` | Returns notifications. Supports the same `limit` and `offset` rules as shipments. |
+| POST | `/api/v1/notifications/email` | `notifications:send` | JSON `user_id`, `subject`, `message`; requires `Idempotency-Key`. Sends to the authenticated admin or an active, verified member of a location the admin owns. Returns 404 for an unavailable recipient and 503 for delivery errors. |
+| GET | `/api/v1/locations` | `locations:manage` | Lists locations owned by the authenticated admin. |
+| PUT | `/api/v1/locations/{location_id}/members/{user_id}` | `locations:manage` | Assigns a user to an admin-owned location; repeats are safe. |
+| PUT | `/api/v1/locations/{location_id}/cameras/{camera_id}` | `locations:manage` | Assigns a camera ID to an admin-owned location; repeats are safe. Returns 409 if assigned elsewhere. |
+| DELETE | `/api/v1/locations/{location_id}/members/{user_id}` | `locations:manage` | Removes a member from an admin-owned location; repeats are safe. |
+| DELETE | `/api/v1/locations/{location_id}/cameras/{camera_id}` | `locations:manage` | Removes a camera assignment from an admin-owned location; repeats are safe. |
 | POST | `/api/v1/payments` | `payments:create` | JSON `reference`, integer `amount`, optional `currency` (`IDR`); `Idempotency-Key` header required. Returns a draft: 201 when created or 200 for an identical replay; 409 if the key is reused with different data. |
 | GET | `/api/v1/payments/{payment_id}` | `payments:read` | Returns the authenticated user's payment draft by UUID; 404 if unavailable. |
 
 For detection endpoints, if `CEKRIR_INGEST_API_KEY` is configured, the matching `X-Ingest-Key` header is required instead of bearer authentication. If it is not configured, a bearer token with `detections:create` is required. JPEG requests are limited to 512 KiB, 2 megapixels and 2048 pixels per side. Wrong content type returns 415, oversized body 413, and invalid image or metadata 422. The detector reports ambiguous multiple codes instead of creating a shipment. It does not save frames as images.
 
-Payments are draft records only: no QRIS transaction or payment processing endpoint is implemented yet. Roles, permissions and locations exist in the data model, but there are currently no standalone CRUD endpoints for them.
+Payments are draft records only: no QRIS transaction or payment processing endpoint is implemented yet. Roles and permissions have no standalone CRUD endpoints; the location endpoints above cover listing owned locations and managing members and cameras.
+
+### Email notifications
+
+Select Resend by setting `CEKRIR_EMAIL_PROVIDER=resend`, `CEKRIR_RESEND_API_KEY`, and `CEKRIR_RESEND_FROM` in `apps/backend/.env`. Set `CEKRIR_VERIFICATION_URL` to the public verification-page URL. Use a verified sending domain; never commit the API key. The existing SMTP provider remains available. The verification email is sent during registration; a welcome email is attempted after successful email verification.
+
+For package notifications, the main API snapshots the mapped camera's location when a detection notification is created through `/api/v1/detections` or `/api/v1/detections/frame`. It sends to the location admin and members whose database accounts are active and email-verified, with one email per user. A camera must be assigned to a location before its detections can generate location emails. Notifications for unassigned cameras do not send email. The separate camera-preview server's `/camera/frame` only displays JPEGs and does not perform package detection or trigger these emails. The existing shared ingestion key does not authenticate an individual camera: someone with that key can claim a different camera ID, so per-device credentials are needed before relying on this mapping across untrusted devices.
+
+The individual email endpoint allows an admin to send to themselves or to an active, verified member of an owned location. Use a unique `Idempotency-Key` for each new message; Resend uses the derived per-user key to deduplicate retries for 24 hours. Email is sent synchronously and a successful response means the provider accepted the request, not that it reached the recipient. Package and welcome emails are best-effort: failures are logged and are not queued for retry. The existing in-app notification list and Redis WebSocket are not yet scoped by location; the location restriction described here applies to email.
 
 ### Live notifications WebSocket
 

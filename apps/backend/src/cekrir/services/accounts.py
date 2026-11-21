@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from jwt import InvalidTokenError
@@ -16,19 +17,23 @@ from cekrir.services.auth import (
     issue_token,
     verify_password,
 )
+from cekrir.services.email import send_email
 from cekrir.services.email_verification import (
     EmailUnavailable,
     new_verification_token,
     prepare_verification,
     require_email_configuration,
     send_verification_email,
-    verify_email,
+    verify_email_user_id,
 )
 from cekrir.validation.auth import CredentialsInput, RegisterInput
 
 
 class AccountConflict(Exception):
     pass
+
+
+logger = logging.getLogger(__name__)
 
 
 class InvalidCredentials(Exception):
@@ -115,11 +120,24 @@ def refresh_account(session: Session, settings: Settings, token: str) -> TokenRe
     return token_response(user, settings)
 
 
-def confirm_account_email(session: Session, token: str) -> None:
-    if not verify_email(session, token):
+def confirm_account_email(session: Session, token: str, settings: Settings) -> None:
+    user_id = verify_email_user_id(session, token)
+    if user_id is None:
         session.rollback()
         raise InvalidVerificationToken("Invalid or expired verification token")
+    user = session.get(User, user_id)
+    recipient, name = user.email, user.full_name
     session.commit()
+    try:
+        send_email(
+            settings,
+            recipient,
+            "Welcome to Cekrir",
+            f"Hello {name},\n\nWelcome to Cekrir!",
+            idempotency_key=f"welcome/{user_id}",
+        )
+    except EmailUnavailable:
+        logger.warning("Welcome email could not be sent")
 
 
 def resend_account_verification(

@@ -6,10 +6,13 @@ import psycopg
 import pytest
 from dotenv import load_dotenv
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from cekrir.config import Settings
+from cekrir.db.model import Role, User
 from cekrir.main import create_app
 from cekrir.schemas import TrackingSnapshot
+from cekrir.services.auth import issue_token
 
 
 class FakeProvider:
@@ -71,4 +74,19 @@ def client(provider, database_url):
     settings = Settings(_env_file=None, DATABASE_URL=database_url, ingest_api_key="test-key")
     assert settings.database_url == database_url
     with TestClient(create_app(settings=settings, provider=provider)) as test_client:
+        authorize_admin(test_client)
         yield test_client
+
+
+def authorize_admin(client):
+    with client.app.state.session_factory() as session:
+        admin = session.scalar(
+            select(User)
+            .join(Role)
+            .where(
+                Role.code == "admin", User.is_active.is_(True), User.email_verified_at.is_not(None)
+            )
+        )
+        assert admin is not None, "The test database needs an active, verified admin"
+        token = issue_token(admin, client.app.state.settings, "access")
+    client.headers["Authorization"] = f"Bearer {token}"

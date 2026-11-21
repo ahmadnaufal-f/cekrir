@@ -32,7 +32,7 @@ def test_email_sends_single_use_token_over_starttls():
         verification_url="https://api.example.test/api/v1/auth/verify-email",
     )
     token = new_verification_token()
-    with patch("cekrir.services.email_verification.smtplib.SMTP") as smtp:
+    with patch("cekrir.services.email.smtplib.SMTP") as smtp:
         send_verification_email(settings, "person@example.test", token)
         client = smtp.return_value.__enter__.return_value
         client.starttls.assert_called_once()

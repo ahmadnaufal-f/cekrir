@@ -17,6 +17,7 @@ from cekrir.routers import (
     notification_router,
     shipment_router,
 )
+from cekrir.routers.locations import router as location_router
 from cekrir.routers.payments import router as payment_router
 from cekrir.services.auth import ensure_bootstrap_admin
 from cekrir.services.notifications import NotificationPublisher
@@ -52,14 +53,16 @@ def create_app(
     app.state.engine = engine
     app.state.session_factory = session_factory
     app.state.redis = redis
-    app.state.notification_publisher = NotificationPublisher(redis.client)
+    app.state.notification_publisher = NotificationPublisher(
+        redis.client, settings, session_factory
+    )
     app.state.tracking_provider = provider or build_tracking_provider(settings)
 
     app.add_middleware(RolePermissionMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_methods=["GET", "POST", "PATCH"],
+        allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
         allow_headers=["Content-Type", "Authorization", "X-Ingest-Key", "Idempotency-Key"],
     )
 
@@ -81,6 +84,7 @@ def create_app(
     app.include_router(camera_router)
     app.include_router(notification_router)
     app.include_router(payment_router)
+    app.include_router(location_router)
     return app
 
 
