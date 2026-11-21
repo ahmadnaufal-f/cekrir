@@ -27,3 +27,15 @@ class CameraDevice(Base):
     location_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("locations.id", ondelete="CASCADE"), nullable=False
     )
+
+
+class EspDevice(Base):
+    __tablename__ = "esp_devices"
+
+    device_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    location_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("locations.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )

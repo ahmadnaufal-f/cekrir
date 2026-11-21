@@ -4,7 +4,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from cekrir.db.model import CameraDevice, Location, LocationMember, User
+from cekrir.db.model import CameraDevice, EspDevice, Location, LocationMember, Role, User
+from cekrir.validation.locations import LocationCreate
 
 
 class LocationResourceNotFound(Exception):
@@ -15,11 +16,54 @@ class CameraAlreadyAssigned(Exception):
     pass
 
 
+class EspAlreadyAssigned(Exception):
+    pass
+
+
 def list_owned_locations(session: Session, admin_id: UUID) -> list[dict]:
-    locations = session.scalars(
-        select(Location).where(Location.admin_user_id == admin_id).order_by(Location.name)
-    )
-    return [{"id": location.id, "name": location.name} for location in locations]
+    rows = session.execute(
+        select(Location, EspDevice.device_id)
+        .outerjoin(EspDevice, EspDevice.location_id == Location.id)
+        .where(Location.admin_user_id == admin_id)
+        .order_by(Location.name)
+    ).all()
+    cameras: dict[UUID, list[str]] = {}
+    for location_id, camera_id in session.execute(
+        select(CameraDevice.location_id, CameraDevice.camera_id)
+        .join(Location, Location.id == CameraDevice.location_id)
+        .where(Location.admin_user_id == admin_id)
+        .order_by(CameraDevice.camera_id)
+    ):
+        cameras.setdefault(location_id, []).append(camera_id)
+    locations = []
+    for location, esp_id in rows:
+        locations.append(
+            {
+                "id": location.id,
+                "name": location.name,
+                "esp_device_id": esp_id,
+                "onboarding_complete": esp_id is not None,
+                "camera_ids": cameras.get(location.id, []),
+            }
+        )
+    return locations
+
+
+def create_location(session: Session, admin_id: UUID, payload: LocationCreate) -> dict:
+    admin = session.scalar(select(User).join(Role).where(User.id == admin_id, Role.code == "admin"))
+    if admin is None:
+        raise LocationResourceNotFound("Admin not found")
+    location = Location(name=payload.name, admin=admin)
+    session.add(location)
+    session.commit()
+    session.refresh(location)
+    return {
+        "id": location.id,
+        "name": location.name,
+        "esp_device_id": None,
+        "onboarding_complete": False,
+        "camera_ids": [],
+    }
 
 
 def _owned_location(session: Session, location_id: UUID, admin_id: UUID) -> Location:
@@ -54,6 +98,26 @@ def add_camera(session: Session, location_id: UUID, admin_id: UUID, camera_id: s
     if assigned is None or assigned.location_id != location_id:
         session.rollback()
         raise CameraAlreadyAssigned("Camera is already assigned to another location")
+    session.commit()
+
+
+def assign_esp(session: Session, location_id: UUID, admin_id: UUID, device_id: str) -> None:
+    _owned_location(session, location_id, admin_id)
+    session.execute(
+        insert(EspDevice)
+        .values(location_id=location_id, device_id=device_id)
+        .on_conflict_do_nothing()
+    )
+    assigned = session.get(EspDevice, device_id)
+    if assigned is None or assigned.location_id != location_id:
+        session.rollback()
+        raise EspAlreadyAssigned("ESP or location is already assigned")
+    session.commit()
+
+
+def remove_esp(session: Session, location_id: UUID, admin_id: UUID) -> None:
+    _owned_location(session, location_id, admin_id)
+    session.execute(delete(EspDevice).where(EspDevice.location_id == location_id))
     session.commit()
 
 

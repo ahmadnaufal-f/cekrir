@@ -11,17 +11,17 @@ from cekrir.db.model import CameraDevice, Location, LocationMember, Role, Shipme
 from cekrir.db.repository import ShipmentRepository
 from cekrir.db.session import build_engine
 from cekrir.schemas import NotificationRead
+from cekrir.services.email_notifications import (
+    EmailRecipientNotFound,
+    send_individual_email,
+)
 from cekrir.services.location_management import (
     CameraAlreadyAssigned,
     LocationResourceNotFound,
     add_camera,
     remove_member,
 )
-from cekrir.services.notifications import (
-    EmailRecipientNotFound,
-    NotificationPublisher,
-    send_individual_email,
-)
+from cekrir.services.notifications import NotificationPublisher
 
 
 def test_location_email_recipients_and_single_user_authorization(database_url):
@@ -86,7 +86,7 @@ def test_location_email_recipients_and_single_user_authorization(database_url):
                         settings,
                         lambda: Session(bind=connection, join_transaction_mode="create_savepoint"),
                     )
-                    with patch("cekrir.services.notifications.send_email") as send:
+                    with patch("cekrir.services.email_notifications.send_email") as send:
                         publisher.publish(payload)
                         recipients = {call.args[1] for call in send.call_args_list}
                         assert recipients == {admin.email, member.email}
@@ -96,11 +96,11 @@ def test_location_email_recipients_and_single_user_authorization(database_url):
                     shipment.camera_id = f"unassigned-{suffix}"
                     unassigned = ShipmentRepository(session)._notify(shipment, "Package detected")
                     assert unassigned.location_id is None
-                    with patch("cekrir.services.notifications.send_email") as send:
+                    with patch("cekrir.services.email_notifications.send_email") as send:
                         publisher.publish(NotificationRead.model_validate(unassigned))
                         send.assert_not_called()
 
-                    with patch("cekrir.services.notifications.send_email") as send:
+                    with patch("cekrir.services.email_notifications.send_email") as send:
                         with Session(
                             bind=connection, join_transaction_mode="create_savepoint"
                         ) as other_session:
@@ -144,7 +144,7 @@ def test_location_email_recipients_and_single_user_authorization(database_url):
                         bind=connection, join_transaction_mode="create_savepoint"
                     ) as other_session:
                         remove_member(other_session, location.id, admin.id, member.id)
-                    with patch("cekrir.services.notifications.send_email") as send:
+                    with patch("cekrir.services.email_notifications.send_email") as send:
                         publisher.publish(payload)
                         assert [call.args[1] for call in send.call_args_list] == [admin.email]
             finally:

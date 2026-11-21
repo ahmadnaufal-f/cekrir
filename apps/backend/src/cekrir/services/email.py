@@ -3,14 +3,20 @@
 import smtplib
 import ssl
 from email.message import EmailMessage
+from threading import Lock
 
-import httpx
+import resend
 
 from cekrir.config import Settings
 
 
 class EmailUnavailable(Exception):
     pass
+
+
+# The SDK stores its API key and HTTP client globally. Keep each call's
+# configuration together when multiple request threads are sending email.
+_resend_lock = Lock()
 
 
 def require_delivery_configuration(settings: Settings) -> None:
@@ -33,23 +39,23 @@ def send_email(
 ) -> None:
     require_delivery_configuration(settings)
     if settings.email_provider == "resend":
-        headers = {"Authorization": f"Bearer {settings.resend_api_key.get_secret_value()}"}
-        if idempotency_key:
-            headers["Idempotency-Key"] = idempotency_key
         try:
-            response = httpx.post(
-                "https://api.resend.com/emails",
-                headers=headers,
-                json={
-                    "from": settings.resend_from,
-                    "to": [recipient],
-                    "subject": subject,
-                    "text": text,
-                },
-                timeout=10,
-            )
-            response.raise_for_status()
-        except httpx.HTTPError as exc:
+            with _resend_lock:
+                old_key, old_client = resend.api_key, resend.default_http_client
+                try:
+                    resend.api_key = settings.resend_api_key.get_secret_value()
+                    resend.default_http_client = resend.RequestsClient(timeout=10)
+                    params = {
+                        "from": settings.resend_from,
+                        "to": [recipient],
+                        "subject": subject,
+                        "text": text,
+                    }
+                    options = {"idempotency_key": idempotency_key} if idempotency_key else None
+                    resend.Emails.send(params, options)
+                finally:
+                    resend.api_key, resend.default_http_client = old_key, old_client
+        except resend.exceptions.ResendError as exc:
             raise EmailUnavailable("Email could not be sent") from exc
         return
 

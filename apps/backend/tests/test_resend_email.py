@@ -1,7 +1,6 @@
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
-import httpx
 import pytest
 
 from cekrir.config import Settings
@@ -22,25 +21,27 @@ def resend_settings():
 
 def test_verification_is_sent_via_resend():
     token = new_verification_token()
-    with patch("cekrir.services.email.httpx.post") as post:
+    client = Mock()
+    client.request.return_value = (b'{"id":"email-1"}', 200, {"content-type": "application/json"})
+    with patch("cekrir.services.email.resend.RequestsClient", return_value=client):
         send_verification_email(resend_settings(), "user@example.test", token)
-    kwargs = post.call_args.kwargs
+    kwargs = client.request.call_args.kwargs
     assert kwargs["json"]["to"] == ["user@example.test"]
     assert token in kwargs["json"]["text"]
     assert kwargs["headers"]["Authorization"] == "Bearer re_test_key"
     assert kwargs["headers"]["Idempotency-Key"].startswith("verification/")
     assert token not in kwargs["headers"]["Idempotency-Key"]
-    post.return_value.raise_for_status.assert_called_once()
+    assert kwargs["url"] == "https://api.resend.com/emails"
 
 
 def test_resend_failure_is_reported_without_exposing_provider_response():
-    response = Mock()
-    response.raise_for_status.side_effect = httpx.HTTPStatusError(
-        "failure",
-        request=httpx.Request("POST", "https://api.resend.com/emails"),
-        response=httpx.Response(403),
+    client = Mock()
+    client.request.return_value = (
+        b'{"name":"validation_error","message":"private provider detail"}',
+        403,
+        {"content-type": "application/json"},
     )
-    with patch("cekrir.services.email.httpx.post", return_value=response):
+    with patch("cekrir.services.email.resend.RequestsClient", return_value=client):
         with pytest.raises(EmailUnavailable, match="Email could not be sent"):
             send_email(resend_settings(), "user@example.test", "Subject", "Message")
 

@@ -17,6 +17,7 @@ Run requests individually. Registration, role changes, shipments, detections, lo
 
 - Set `newEmail` and `newPassword` before testing registration and resend verification. Copy the token from the verification email to `verificationToken` for the verification requests. Email delivery must be configured.
 - Set `ingestKey` to `CEKRIR_INGEST_API_KEY` for detection requests. If the server has no ingestion key configured, replace the `X-Ingest-Key` header with `Authorization: Bearer <access token>` instead.
+- Create a location, copy its ID to `locationId`, and set `espDeviceId` to the device identifier before assigning its ESP. Assigning an identifier does not provision or authenticate the physical device. Locations without an ESP have incomplete onboarding; cameras are optional.
 - For **Submit JPEG frame**, choose a JPEG file as a binary request body in Bruno before sending. The file must be no larger than 512 KiB. This request has an empty body until you select a file.
 - Set a different `paymentIdempotencyKey` or `emailIdempotencyKey` for each new operation. Reuse the same key only for a retry of the same request. Payment requests create drafts; they do not process QRIS payments.
 - **Send email** needs a configured mail provider and an eligible recipient. Use a user ID returned by **List users**.

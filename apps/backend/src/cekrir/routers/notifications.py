@@ -16,7 +16,7 @@ from cekrir.db.session import get_session
 from cekrir.dependencies import get_user_id
 from cekrir.middleware import RequirePermission
 from cekrir.schemas import NotificationRead
-from cekrir.services import notifications
+from cekrir.services import email_notifications, notifications
 from cekrir.services.email import EmailUnavailable
 from cekrir.validation.notifications import EmailNotificationInput
 from cekrir.validation.payments import IdempotencyKey
@@ -35,7 +35,7 @@ def email_notification(
     session: Session = Depends(get_session),
 ):
     try:
-        notifications.send_individual_email(
+        email_notifications.send_individual_email(
             session,
             request.app.state.settings,
             sender_id,
@@ -44,7 +44,7 @@ def email_notification(
             payload.message,
             idempotency_key,
         )
-    except notifications.EmailRecipientNotFound as exc:
+    except email_notifications.EmailRecipientNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except EmailUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

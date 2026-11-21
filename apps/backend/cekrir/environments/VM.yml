@@ -29,6 +29,8 @@ variables:
     value: ""
   - name: cameraId
     value: "test-camera"
+  - name: espDeviceId
+    value: "test-esp-01"
   - name: shipmentId
     value: ""
   - name: trackingNumber

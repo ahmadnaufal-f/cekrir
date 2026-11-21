@@ -17,6 +17,7 @@ dependencies = [
   "httpx>=0.28,<1",
   "pillow>=12,<14",
   "zxing-cpp>=3,<4",
+  "resend>=2.55,<3",
 ]
 
 [project.optional-dependencies]

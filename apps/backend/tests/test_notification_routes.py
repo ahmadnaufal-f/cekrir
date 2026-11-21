@@ -17,7 +17,7 @@ def test_location_and_individual_email_routes_check_permissions_and_validation()
     with (
         patch("cekrir.middleware.role_permissions.authenticate_token") as authenticate,
         patch("cekrir.services.location_management.add_member") as assign,
-        patch("cekrir.services.notifications.send_individual_email") as send,
+        patch("cekrir.services.email_notifications.send_individual_email") as send,
     ):
         client = TestClient(app)
         headers = {"Authorization": "Bearer test-token"}

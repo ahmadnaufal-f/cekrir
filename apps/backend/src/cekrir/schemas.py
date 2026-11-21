@@ -7,6 +7,14 @@ from pydantic import BaseModel, ConfigDict, Field
 ShipmentStatus = Literal["pending", "in_transit", "delivered", "exception"]
 
 
+class LocationRead(BaseModel):
+    id: UUID
+    name: str
+    esp_device_id: str | None
+    onboarding_complete: bool
+    camera_ids: list[str]
+
+
 class FrameDetection(BaseModel):
     resi_number: str
     shipment_id: UUID
