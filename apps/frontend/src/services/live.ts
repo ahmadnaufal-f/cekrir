@@ -5,7 +5,12 @@ import {
   type CredentialStore,
 } from './contracts'
 import { serviceCopy as copy } from '../lib/service-copy'
-import type { AppUser, CameraInput, DeviceInventory, PushRegistration } from '../types/app'
+import type {
+  AppUser,
+  CameraInput,
+  DeviceInventory,
+  PushRegistration,
+} from '../types/app'
 
 export function createMemoryCredentialStore(): CredentialStore {
   let value: string | null = null
@@ -102,7 +107,9 @@ export function createLiveServices(): AppServices {
   const request = createAuthorizedTransport(
     import.meta.env.VITE_API_BASE_URL || '/api/v1',
     credentials,
-    () => { currentUser = null },
+    () => {
+      currentUser = null
+    },
   )
   let currentUser: AppUser | null = null
   const installations = new Map<string, string>()
@@ -110,55 +117,105 @@ export function createLiveServices(): AppServices {
     throw new ServiceError('integration_unavailable', copy.unavailable, 501)
   }
   function locationId(): string {
-    if (!currentUser?.householdId) throw new ServiceError('location_unavailable', copy.unavailable, 404)
+    if (!currentUser?.householdId)
+      throw new ServiceError('location_unavailable', copy.unavailable, 404)
     return currentUser.householdId
   }
   async function inventory(): Promise<DeviceInventory> {
     const id = locationId()
-    const locations = await request<Array<{id: string; esp_device_id: string | null}>>('/locations')
+    const locations =
+      await request<Array<{ id: string; esp_device_id: string | null }>>(
+        '/locations',
+      )
     const location = locations.find((entry) => entry.id === id)
-    if (!location) throw new ServiceError('location_unavailable', copy.unavailable, 404)
-    const cameras = await request<Array<{id: string; name: string}>>(`/locations/${encodeURIComponent(id)}/cctv`)
+    if (!location)
+      throw new ServiceError('location_unavailable', copy.unavailable, 404)
+    const cameras = await request<Array<{ id: string; name: string }>>(
+      `/locations/${encodeURIComponent(id)}/cctv`,
+    )
     return {
-      esp32: location.esp_device_id ? {id: location.esp_device_id, name: 'ESP32'} : null,
-      cameras: cameras.map((camera) => ({...camera, configurationState: 'configured', verificationState: 'not_tested'})),
+      esp32: location.esp_device_id
+        ? { id: location.esp_device_id, name: 'ESP32' }
+        : null,
+      cameras: cameras.map((camera) => ({
+        ...camera,
+        configurationState: 'configured',
+        verificationState: 'not_tested',
+      })),
       selectedDeliveryCameraId: null,
     }
   }
-  async function login(input: {loginId: string; password: string}): Promise<AppUser> {
+  async function login(input: {
+    loginId: string
+    password: string
+  }): Promise<AppUser> {
     const result = await request<{
-      access_token: string; location_id: string | null
-      user: {id: string; email: string; full_name: string; role: 'admin' | 'member'}
-    }>('/auth/login', {method: 'POST', body: JSON.stringify({email: input.loginId, password: input.password})})
+      access_token: string
+      location_id: string | null
+      user: {
+        id: string
+        email: string
+        full_name: string
+        role: 'admin' | 'member'
+      }
+    }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: input.loginId, password: input.password }),
+    })
     credentials.write(result.access_token)
-    currentUser = {id: result.user.id, householdId: result.location_id ?? '', role: result.user.role,
-                   displayName: result.user.full_name, loginId: result.user.email}
+    currentUser = {
+      id: result.user.id,
+      householdId: result.location_id ?? '',
+      role: result.user.role,
+      displayName: result.user.full_name,
+      loginId: result.user.email,
+    }
     return currentUser
   }
   async function registerCamera(input: CameraInput): Promise<DeviceInventory> {
     const connection = input.connection
     if (!connection?.url || !connection.username || !connection.password)
-      throw new ServiceError('validation', 'RTMP URL, username, and password are required.', 422)
+      throw new ServiceError(
+        'validation',
+        'RTMP URL, username, and password are required.',
+        422,
+      )
     await request(`/locations/${encodeURIComponent(locationId())}/cctv`, {
-      method: 'POST', body: JSON.stringify({name: input.name, stream_url: connection.url,
-                                            username: connection.username, password: connection.password}),
+      method: 'POST',
+      body: JSON.stringify({
+        name: input.name,
+        stream_url: connection.url,
+        username: connection.username,
+        password: connection.password,
+      }),
     })
     return inventory()
   }
   async function registerPush(registration: PushRegistration): Promise<void> {
     const previous = installations.get(registration.installationId)
     if (previous && previous !== registration.token) {
-      await request('/notifications/fcm/unregister', {method: 'POST', body: JSON.stringify({token: previous})})
+      await request('/notifications/fcm/unregister', {
+        method: 'POST',
+        body: JSON.stringify({ token: previous }),
+      })
     }
     installations.set(registration.installationId, registration.token)
-    await request('/notifications/fcm', {method: 'POST', body: JSON.stringify({
-      location_id: locationId(), token: registration.token,
-    })})
+    await request('/notifications/fcm', {
+      method: 'POST',
+      body: JSON.stringify({
+        location_id: locationId(),
+        token: registration.token,
+      }),
+    })
   }
   async function detachPush(installationId: string): Promise<void> {
     const token = installations.get(installationId)
-    if (!token) throw new ServiceError('push_token_missing', copy.unavailable, 409)
-    await request('/notifications/fcm/unregister', {method: 'POST', body: JSON.stringify({token})})
+    if (!token)
+      throw new ServiceError('push_token_missing', copy.unavailable, 409)
+    await request('/notifications/fcm/unregister', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    })
     installations.delete(installationId)
   }
   return {
@@ -167,19 +224,38 @@ export function createLiveServices(): AppServices {
       restore: async () => currentUser,
       login,
       signup: unavailable,
-      logout: async () => { credentials.clear(); currentUser = null },
+      logout: async () => {
+        credentials.clear()
+        currentUser = null
+      },
     },
-    deliveries: { list: unavailable, detail: unavailable, photo: unavailable },
+    deliveries: {
+      totals: unavailable,
+      list: unavailable,
+      detail: unavailable,
+      photo: unavailable,
+    },
     devices: {
       inventory,
       registerEsp32: async () => {
         const existing = await inventory()
-        const data = await request<{device_id: string; device_key: string}>(
-          `/locations/${encodeURIComponent(locationId())}/esp/credentials`, {method: 'POST'},
+        const data = await request<{ device_id: string; device_key: string }>(
+          `/locations/${encodeURIComponent(locationId())}/esp/credentials`,
+          { method: 'POST' },
         )
-        return {inventory: {...existing, esp32: {id: data.device_id, name: 'ESP32'}}, credential: data.device_key}
+        return {
+          inventory: {
+            ...existing,
+            esp32: { id: data.device_id, name: 'ESP32' },
+          },
+          credential: data.device_key,
+        }
       },
       registerCamera,
+      renameEsp32: unavailable,
+      removeEsp32: unavailable,
+      updateCamera: unavailable,
+      removeCamera: unavailable,
       selectCamera: unavailable,
     },
     members: { list: unavailable, create: unavailable },

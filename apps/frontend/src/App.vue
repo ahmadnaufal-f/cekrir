@@ -1,251 +1,392 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, shallowRef, watch } from 'vue'
-import type { AppServices } from './services/contracts'
-import type { AppUser } from './types/app'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { RouterView, useRoute, useRouter } from 'vue-router'
+import type {
+  ApiServices,
+  PackageNotification,
+  User,
+} from './features/api/contracts'
 import AppHeader from './components/AppHeader.vue'
 import AppNavigation from './components/AppNavigation.vue'
-import AppIcon from './components/AppIcon.vue'
-import AuthScreen from './screens/AuthScreen.vue'
-import DeliveriesScreen from './screens/DeliveriesScreen.vue'
-import DeliveryDetailScreen from './screens/DeliveryDetailScreen.vue'
-import DevicesScreen from './screens/DevicesScreen.vue'
-import MembersScreen from './screens/MembersScreen.vue'
-import SettingsScreen from './screens/SettingsScreen.vue'
-import NotificationSettings from './screens/NotificationSettings.vue'
+import ShipmentAlert from './components/ShipmentAlert.vue'
 import { createPushController } from './composables/usePush'
+import { createDevicePushBridge } from './lib/push'
 import {
-  createSimulatedPushBridge,
-  createDevicePushBridge,
-} from './lib/push'
-import { deliveryRoute, guardRoute, useNavigation } from './lib/navigation'
-import { ui, errorMessage } from './lib/strings'
-import { shellCopy as copy } from './lib/shell-copy'
-
-const { services } = defineProps<{ services: AppServices }>()
-const user = shallowRef<AppUser | null>(null)
-const ready = shallowRef(false)
-const refreshKey = shallowRef(0)
-const signingOut = shallowRef(false)
-const notice = shallowRef('')
-const { requested, navigate } = useNavigation()
-let pendingDirectLink = requested.value.startsWith('/deliveries/')
-  ? requested.value
-  : null
-const route = computed(() => guardRoute(requested.value, user.value))
-const deliveryId = computed(() =>
-  route.value.startsWith('/deliveries/')
-    ? decodeURIComponent(route.value.slice(12))
+  canSendDeviceNotification,
+  listenForShipmentNotificationTaps,
+  requestNotificationPermission,
+  showPackageNotification,
+  type NotificationShipmentTarget,
+} from './lib/notifications'
+import { deviceGuideServices } from './lib/setup-reference'
+import { loginRoute, signedInRoute } from './router'
+import type { DeviceCategory } from './types/device-ui'
+const { services } = defineProps<{ services: ApiServices }>()
+const router = useRouter()
+const route = useRoute()
+const user = shallowRef<User | null>(services.user())
+const accountName = computed(() => user.value?.full_name?.trim())
+const isAdmin = computed(() => user.value?.role === 'admin')
+const modeLabel = computed(() =>
+  services.mode === 'mock' ? 'Demo · data simulasi' : 'Mode live',
+)
+const onShipmentList = computed(() => route.name === 'shipments')
+const inSettings = computed(() => route.name === 'settings')
+const pushUser = computed(() =>
+  user.value
+    ? {
+        id: user.value.id,
+        householdId: services.locationId?.() ?? '',
+        role: user.value.role,
+        displayName: user.value.full_name,
+        loginId: user.value.email,
+      }
     : null,
 )
-const bridge =
-  services.mode === 'mock' && import.meta.env.DEV
-    ? createSimulatedPushBridge()
-    : createDevicePushBridge()
-const push = createPushController({
-  bridge,
-  service: services.push,
-  user,
-  navigationReady: ready,
-  onNavigate(id) {
-    if (!ready.value || !user.value) return false
-    navigate(deliveryRoute(id))
-    return true
-  },
-  onRefresh() {
-    refreshKey.value++
-  },
-})
-const pushState = push.state
-let disposed = false
-watch([user, requested, ready], () => {
-  if (!ready.value) return
-  if (!user.value && requested.value.startsWith('/deliveries/'))
-    pendingDirectLink = requested.value
-  const target = guardRoute(requested.value, user.value)
-  if (target !== requested.value) navigate(target, true)
-})
-function authenticated(next: AppUser) {
-  user.value = next
-  notice.value = ''
-  // The detail service reauthorizes this ID against the newly signed-in household.
-  const target = pendingDirectLink
-  pendingDirectLink = null
-  if (!pushState.value.pendingNavigation)
-    navigate(target || '/deliveries', true)
+const push = services.push
+  ? createPushController({
+      bridge: createDevicePushBridge(),
+      service: services.push,
+      user: pushUser,
+      onNavigate(id) {
+        if (!user.value) return false
+        void router.push({ name: 'shipment-detail', params: { id } })
+        return true
+      },
+      onRefresh() {
+        revision.value++
+      },
+    })
+  : null
+const pushState = push?.state
+const revision = ref(0)
+const liveStatus = ref('unavailable')
+const alert = shallowRef<PackageNotification | null>(null)
+const shipmentNotificationsEnabled = ref(true)
+const notificationPermissionRequest = shallowRef<symbol | null>(null)
+const notificationSettingMessage = ref('')
+const notice = ref('')
+const deviceCategory = shallowRef<DeviceCategory>('esp32')
+const registrationRequest = shallowRef<DeviceCategory | null>(null)
+const guideKind = computed(() => route.meta.guide)
+const inFocusedPage = computed(
+  () =>
+    !!user.value &&
+    (route.name === 'shipment-detail' || (isAdmin.value && !!guideKind.value)),
+)
+const showNavigation = computed(
+  () => isAdmin.value && !inSettings.value && !inFocusedPage.value,
+)
+const deviceServices = computed(
+  () =>
+    services.devices && {
+      mode: services.mode,
+      devices: services.devices,
+    },
+)
+let disconnect: (() => void) | null = null
+let stopNotificationTaps: (() => void) | undefined
+let pendingNotificationShipment: NotificationShipmentTarget | null = null
+let signingOut = false
+function leaveDeviceGuide(register = false) {
+  registrationRequest.value = register ? (guideKind.value ?? null) : null
+  void router.push({ name: 'devices' })
 }
-function expired() {
-  pendingDirectLink = deliveryId.value ? deliveryRoute(deliveryId.value) : null
-  // A 401 invalidates UI state; the push controller rejects stale account work.
-  user.value = null
-  notice.value = copy.sessionExpired
-  navigate('/login', true)
-}
-async function logout() {
-  if (signingOut.value) return
-  signingOut.value = true
-  notice.value = ''
-  try {
-    if (!(await push.beforeLogout())) {
-      notice.value = copy.logoutFailed
-      return
-    }
-    await services.auth.logout()
-    pendingDirectLink = null
-    user.value = null
-    refreshKey.value++
-    navigate('/login', true)
-    notice.value = copy.signedOut
-  } catch (cause) {
-    notice.value = errorMessage(cause)
-  } finally {
-    signingOut.value = false
-  }
-}
-function simulate(tap: boolean) {
-  if (!import.meta.env.DEV || services.mode !== 'mock' || !user.value) return
-  const payload = {
-    type: 'delivery.created',
-    eventId: `demo-event-${user.value.id}`,
-    deliveryId: 'delivery-demo-complete',
-    householdId: user.value.householdId,
-  }
-  if (tap) push.simulateTap(payload)
-  else push.simulateReceived(payload)
-}
-function resume() {
-  if (document.visibilityState === 'visible') refreshKey.value++
+function backFromSettings() {
+  if (router.options.history.state.settingsOpenedInApp) router.back()
+  else void router.replace({ name: 'shipments' })
 }
 function focusMain() {
-  document.getElementById('main-content')?.focus({ preventScroll: true })
+  document.getElementById('main-content')?.focus()
 }
-watch(route, () => {
-  queueMicrotask(() => {
-    window.scrollTo(0, 0)
-    focusMain()
-  })
-})
-onMounted(async () => {
-  document.addEventListener('visibilitychange', resume)
+function shipmentLocation(shipmentId: string) {
+  return { name: 'shipment-detail', params: { id: shipmentId } }
+}
+function openShipment(shipmentId: string) {
+  void router.push(shipmentLocation(shipmentId))
+}
+function openShipmentAlert(shipmentId: string) {
+  openShipment(shipmentId)
+  alert.value = null
+}
+function openDeviceNotificationShipment(target: NotificationShipmentTarget) {
+  if (!user.value) {
+    pendingNotificationShipment = target
+    return
+  }
+  if (user.value.id !== target.accountId) return
+  if (
+    target.kind === 'report' &&
+    alert.value?.shipment_id === target.shipmentId
+  )
+    alert.value = null
+  openShipment(target.shipmentId)
+}
+function shipmentNotificationKey(userId: string) {
+  return `cekrir:${services.mode}:shipment-notifications:${userId}`
+}
+function readShipmentNotificationSetting(userId: string) {
   try {
-    const restored = await services.auth.restore()
-    if (!disposed) user.value = restored
-  } catch (cause) {
-    if (!disposed) notice.value = errorMessage(cause)
-  } finally {
-    if (!disposed) {
-      ready.value = true
-      push.setNavigationReady(true)
+    return localStorage.getItem(shipmentNotificationKey(userId)) !== 'off'
+  } catch {
+    return true
+  }
+}
+async function setShipmentNotifications(enabled: boolean) {
+  const accountId = user.value?.id
+  if (!accountId || notificationPermissionRequest.value) return
+  notificationSettingMessage.value = ''
+  if (enabled && push) await push.enable()
+  if (enabled && canSendDeviceNotification()) {
+    const request = Symbol()
+    notificationPermissionRequest.value = request
+    try {
+      const permitted = await requestNotificationPermission()
+      if (notificationPermissionRequest.value !== request) return
+      if (!permitted) {
+        notificationSettingMessage.value =
+          'Izinkan notifikasi Cekrir di pengaturan perangkat untuk mengaktifkan notifikasi paket.'
+        return
+      }
+    } catch {
+      if (notificationPermissionRequest.value === request)
+        notificationSettingMessage.value =
+          'Izin notifikasi perangkat belum dapat diperiksa. Coba lagi.'
+      return
+    } finally {
+      if (notificationPermissionRequest.value === request)
+        notificationPermissionRequest.value = null
     }
   }
+  if (user.value?.id !== accountId) return
+  shipmentNotificationsEnabled.value = enabled
+  if (!enabled) alert.value = null
+  try {
+    localStorage.setItem(
+      shipmentNotificationKey(accountId),
+      enabled ? 'on' : 'off',
+    )
+  } catch {
+    // Keep the preference for the current session if storage is unavailable.
+  }
+}
+async function logout() {
+  if (push && !(await push.beforeLogout())) {
+    notice.value = 'Tidak dapat menonaktifkan notifikasi. Coba lagi.'
+    return
+  }
+  signingOut = true
+  services.auth.logout()
+  signingOut = false
+}
+const unsubscribe = services.subscribe((next) => {
+  const previous = user.value
+  user.value = next
+  if (!next && previous) {
+    notice.value = signingOut
+      ? 'Anda telah keluar.'
+      : 'Sesi berakhir. Silakan masuk lagi.'
+    alert.value = null
+    void router.replace(signingOut ? { name: 'login' } : loginRoute(route))
+  }
+  if (next && !previous) {
+    notice.value = ''
+    deviceCategory.value = 'esp32'
+    registrationRequest.value = null
+    const target = pendingNotificationShipment
+    pendingNotificationShipment = null
+    void router.replace(
+      target?.accountId === next.id
+        ? shipmentLocation(target.shipmentId)
+        : signedInRoute(router, route.query.redirect),
+    )
+  }
+  if (next && previous && route.meta.requiresAdmin && next.role !== 'admin')
+    void router.replace({ name: 'shipments' })
+})
+watch(
+  () => user.value?.id,
+  (value) => {
+    disconnect?.()
+    disconnect = null
+    alert.value = null
+    notificationPermissionRequest.value = null
+    notificationSettingMessage.value = ''
+    shipmentNotificationsEnabled.value = value
+      ? readShipmentNotificationSetting(value)
+      : true
+    if (value)
+      disconnect = services.notifications.connect({
+        event(notification) {
+          if (shipmentNotificationsEnabled.value) {
+            alert.value = notification
+            void showPackageNotification(
+              value,
+              notification,
+              () =>
+                user.value?.id === value && shipmentNotificationsEnabled.value,
+            ).catch(() => undefined)
+          }
+          revision.value++
+        },
+        ready() {
+          revision.value++
+        },
+        status(status) {
+          liveStatus.value = status
+        },
+      })
+  },
+  { immediate: true },
+)
+watch(
+  guideKind,
+  (kind) => {
+    if (kind) deviceCategory.value = kind
+  },
+  { immediate: true },
+)
+watch(
+  () => route.fullPath,
+  () => {
+    if (route.name !== 'devices') registrationRequest.value = null
+    document.getElementById('main-content')?.focus({ preventScroll: true })
+  },
+  { flush: 'post' },
+)
+
+const screenKey = computed(() => {
+  const account = user.value
+  return onShipmentList.value || route.name === 'shipment-detail'
+    ? `shipments:${account?.id}:${account?.role}`
+    : `${String(route.name)}:${account?.id}`
+})
+
+const screenBindings = computed(() => {
+  const account = user.value
+  if (route.name === 'login') return { services }
+  if (!account || (route.meta.requiresAdmin && account.role !== 'admin'))
+    return null
+
+  switch (route.name) {
+    case 'shipments':
+    case 'shipment-detail':
+      return {
+        services,
+        user: account,
+        id: typeof route.params.id === 'string' ? route.params.id : null,
+        revision: revision.value,
+        notifiedShipmentId: alert.value?.shipment_id,
+        onOpen: openShipment,
+        onBack: () => router.push({ name: 'shipments' }),
+      }
+    case 'devices':
+      return {
+        category: deviceCategory.value,
+        'onUpdate:category': (kind: DeviceCategory) =>
+          (deviceCategory.value = kind),
+        services: deviceServices.value,
+        user: account,
+        registrationRequest: registrationRequest.value,
+        onRegistrationHandled: () => (registrationRequest.value = null),
+        onSessionExpired: () => services.auth.logout(),
+      }
+    case 'esp32-setup':
+    case 'bardi-setup':
+      return {
+        services: deviceGuideServices,
+        user: account,
+        kind: guideKind.value,
+        devices: deviceServices.value?.devices,
+        onBack: () => leaveDeviceGuide(),
+        onRegister: () => leaveDeviceGuide(true),
+        onSessionExpired: () => services.auth.logout(),
+      }
+    case 'members':
+      return { services, currentUserId: account.id }
+    case 'settings':
+      return {
+        services,
+        user: account,
+        liveStatus: liveStatus.value,
+        notifications: shipmentNotificationsEnabled.value,
+        checkingNotificationPermission:
+          notificationPermissionRequest.value !== null,
+        notificationSettingMessage: notificationSettingMessage.value,
+        'onUpdate:notifications': setShipmentNotifications,
+        onLogout: logout,
+      }
+    default:
+      return null
+  }
+})
+function resume() {
+  if (document.visibilityState === 'visible') revision.value++
+}
+onMounted(() => {
+  document.addEventListener('visibilitychange', resume)
+  stopNotificationTaps = listenForShipmentNotificationTaps(
+    openDeviceNotificationShipment,
+  )
 })
 onUnmounted(() => {
-  disposed = true
+  push?.dispose()
+  unsubscribe()
+  disconnect?.()
+  notificationPermissionRequest.value = null
+  stopNotificationTaps?.()
   document.removeEventListener('visibilitychange', resume)
-  push.dispose()
 })
 </script>
-
 <template>
-  <div class="app-shell" :class="{ 'app-shell--authenticated': user }">
-    <a href="#main-content" class="skip-link" @click.prevent="focusMain">{{
-      copy.skip
-    }}</a>
-    <AppHeader :user="user" :route="route" @navigate="navigate" />
-    <p class="app-status">
-      <span class="mode-label">{{
-        services.mode === 'mock' ? ui.mock : ui.live
-      }}</span>
-    </p>
-    <p v-if="services.mode === 'mock'" class="mode-note">{{ ui.mockNote }}</p>
-    <div v-if="notice" class="banner session-banner" role="status">
-      {{ notice }}
-    </div>
-    <main id="main-content" class="main-content" tabindex="-1">
-      <p v-if="!ready" role="status">{{ copy.restore }}</p>
-      <template v-else>
-        <aside
-          v-if="pushState.banner && user"
-          class="banner push-banner"
-          role="status"
-        >
-          <p>{{ ui.deliveries }}</p>
-          <button class="button button--primary" @click="push.tapBanner()">
-            <AppIcon name="package" />
-            {{ copy.navigateDelivery }}</button
-          ><button class="text-button" @click="push.dismissBanner()">
-            <AppIcon name="close" />
-            {{ copy.dismiss }}
-          </button>
-        </aside>
-        <div v-if="services.mode === 'live'" class="banner live-note">
-          <strong>{{ copy.unavailable }}</strong>
-          <p>{{ copy.liveHelp }}</p>
-        </div>
-        <AuthScreen
-          v-if="!user"
-          :key="route"
-          :services="services"
-          :signup="route === '/signup'"
-          @authenticated="authenticated"
-          @switch="navigate(route === '/signup' ? '/login' : '/signup')"
-        />
-        <template v-else>
-          <DeliveryDetailScreen
-            v-if="deliveryId"
-            :key="`${user.id}:${deliveryId}`"
-            :services="services"
-            :user="user"
-            :delivery-id="deliveryId"
-            :refresh-key="refreshKey"
-            @back="navigate('/deliveries')"
-            @session-expired="expired"
-          />
-          <DeliveriesScreen
-            v-else-if="route === '/deliveries'"
-            :key="user.id"
-            :services="services"
-            :user="user"
-            :refresh-key="refreshKey"
-            @open="navigate(deliveryRoute($event))"
-            @session-expired="expired"
-          />
-          <DevicesScreen
-            v-else-if="route === '/devices' && user.role === 'admin'"
-            :key="user.id"
-            :services="services"
-            :user="user"
-            @session-expired="expired"
-          />
-          <MembersScreen
-            v-else-if="route === '/members' && user.role === 'admin'"
-            :key="user.id"
-            :services="services"
-            :user="user"
-            @session-expired="expired"
-          />
-          <SettingsScreen
-            v-else
-            :user="user"
-            :signing-out="signingOut"
-            @logout="logout"
-            ><NotificationSettings
-              :state="pushState"
-              @enable="push.enable()"
-              @retry="push.retry()"
-              @simulate-received="simulate(false)"
-              @simulate-tap="simulate(true)"
-              @tap-banner="push.tapBanner()"
-              @dismiss-banner="push.dismissBanner()"
-          /></SettingsScreen>
-        </template>
-      </template>
-    </main>
-    <footer>{{ copy.privacy }}</footer>
-    <AppNavigation
-      v-if="user"
-      :role="user.role"
-      :route="route"
-      @navigate="navigate"
+  <div
+    class="app-shell api-shell"
+    :class="{ 'api-shell--auth': !user, 'api-shell--with-nav': showNavigation }"
+  >
+    <a class="skip-link" href="#main-content" @click.prevent="focusMain"
+      >Lewati ke konten</a
+    >
+    <AppHeader
+      v-if="!inFocusedPage"
+      :key="user?.id ?? 'signed-out'"
+      :signed-in="!!user"
+      :display-name="accountName"
+      :account-current="inSettings"
+      :mode-label="modeLabel"
+      @back="backFromSettings"
+      @logout="logout"
     />
+    <p v-if="notice" class="banner" role="status">{{ notice }}</p>
+    <aside v-if="pushState?.banner && user" class="banner" role="status">
+      Package notification
+      <button type="button" @click="push?.tapBanner()">Open</button>
+      <button type="button" @click="push?.dismissBanner()">Dismiss</button>
+    </aside>
+    <ShipmentAlert
+      v-if="alert && user && !onShipmentList"
+      :notification="alert"
+      @open="openShipmentAlert"
+      @dismiss="alert = null"
+    />
+    <main id="main-content" tabindex="-1">
+      <RouterView v-slot="{ Component }">
+        <component
+          :is="Component"
+          v-if="Component && screenBindings"
+          :key="screenKey"
+          v-bind="screenBindings"
+        >
+          <template v-if="onShipmentList" #after-summary>
+            <ShipmentAlert
+              v-if="alert"
+              :notification="alert"
+              @open="openShipmentAlert"
+              @dismiss="alert = null"
+            />
+          </template>
+        </component>
+      </RouterView>
+    </main>
+    <AppNavigation v-if="showNavigation" />
   </div>
 </template>

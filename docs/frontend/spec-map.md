@@ -1,5 +1,7 @@
 # Frontend requirement map
 
+> Update (2026-11-19): the active frontend now targets the merged shipment API. See [API integration and verification](api-integration.md) for current behavior and tests. The household prototype details below are historical; they are not claims about the active application.
+
 This maps the FE01–FE16 acceptance scenarios in the [Frontend Verification and Demo Checklist](https://app.notion.com/p/4193556fda9281eab368e0076914082c) to frontend implementation surfaces and available check surfaces. A file mapping is not a pass claim. Actual commands, results, screenshots, and remaining gaps belong in [integration-status.md](./integration-status.md).
 
 The related source specifications are the [Frontend Codex Handoff](https://app.notion.com/p/4193556fda92818e9719e95fbac4b667), [Screens and User Flows](https://app.notion.com/p/4193556fda928198a935cb459a0f639d), [API and Mock Contract](https://app.notion.com/p/4193556fda92812ba7bef45b4699ec2f), [Android Push Notifications and Delivery Navigation](https://app.notion.com/p/4193556fda9281af98bfc3a7b7a32c1f), and [Device and Member Setup](https://app.notion.com/p/4193556fda92812f958dfde3f3644d61). API endpoints and DTOs remain draft until backend alignment.

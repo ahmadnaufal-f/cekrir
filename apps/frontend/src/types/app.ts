@@ -1,5 +1,17 @@
 export type Role = 'admin' | 'member'
 export type ResourceState = 'pending' | 'ready' | 'unavailable'
+export interface DeliveryTotalsQuery {
+  /** Calendar date (YYYY-MM-DD) in the supplied IANA time zone. */
+  date: string
+  timeZone: string
+}
+export interface DeliveryTotals extends DeliveryTotalsQuery {
+  receivedToday: number
+  receivedAllTime: number
+}
+export interface DeliveryListQuery {
+  search?: string
+}
 export interface AppUser {
   id: string
   householdId: string
@@ -91,6 +103,8 @@ export type AppRoute =
   | '/deliveries'
   | `/deliveries/${string}`
   | '/devices'
+  | '/devices/setup/esp32'
+  | '/devices/setup/cameras'
   | '/members'
   | '/setup'
   | '/settings'

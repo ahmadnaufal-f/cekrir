@@ -66,12 +66,200 @@ describe('mock services', () => {
     expect(ids[8]).toBe('delivery-demo-photo-unavailable-tracking-pending')
   })
 
+  it('searches the full household repository before applying pagination', async () => {
+    const harness = createMockHarness({ pageSize: 3 })
+    await signInAdmin(harness)
+
+    expect(
+      await harness.services.deliveries.list(undefined, { search: '  \t ' }),
+    ).toEqual(await harness.services.deliveries.list())
+
+    const page = await harness.services.deliveries.list(undefined, {
+      search: 'DEMO-SPX-1009',
+    })
+
+    expect(page.items.map((delivery) => delivery.trackingNumber)).toEqual([
+      'DEMO-SPX-1009',
+    ])
+    expect(page.nextCursor).toBeNull()
+  })
+
+  it('matches trimmed case-insensitive multiword courier and resi searches literally', async () => {
+    const harness = createMockHarness()
+    await signInAdmin(harness)
+
+    const multiword = await harness.services.deliveries.list(undefined, {
+      search: '  1009   EXPRESS  ',
+    })
+    expect(multiword.items.map((delivery) => delivery.trackingNumber)).toEqual([
+      'DEMO-SPX-1009',
+    ])
+
+    const courierCode = await harness.services.deliveries.list(undefined, {
+      search: ' SPX-DEMO ',
+    })
+    expect(courierCode.items).toHaveLength(9)
+
+    const courierName = await harness.services.deliveries.list(undefined, {
+      search: 'SPX Express (demo)',
+    })
+    expect(courierName.items).toHaveLength(9)
+
+    const regexMetacharacters = await harness.services.deliveries.list(
+      undefined,
+      { search: 'SPX.*demo' },
+    )
+    expect(regexMetacharacters.items).toEqual([])
+
+    const normalizedUnicode = await harness.services.deliveries.list(
+      undefined,
+      { search: 'ＤＥＭＯ-ＳＰＸ-１００９' },
+    )
+    expect(
+      normalizedUnicode.items.map((delivery) => delivery.trackingNumber),
+    ).toEqual(['DEMO-SPX-1009'])
+  })
+
+  it('keeps search cursors stable within their filtered result set', async () => {
+    const harness = createMockHarness({ pageSize: 3 })
+    await signInAdmin(harness)
+    const ids: string[] = []
+    let cursor: string | undefined
+    do {
+      const page = await harness.services.deliveries.list(cursor, {
+        search: '100',
+      })
+      ids.push(...page.items.map((item) => item.id))
+      cursor = page.nextCursor ?? undefined
+    } while (cursor)
+
+    expect(ids).toHaveLength(9)
+    expect(new Set(ids).size).toBe(9)
+    expect(ids[0]).toBe(MOCK_DELIVERY_IDS.complete)
+    expect(ids[8]).toBe('delivery-demo-photo-unavailable-tracking-pending')
+  })
+
+  it('validates search input and rejects a cursor outside the current filtered set', async () => {
+    const harness = createMockHarness({ pageSize: 3 })
+    await signInAdmin(harness)
+
+    await expect(
+      harness.services.deliveries.list(undefined, { search: 42 } as never),
+    ).rejects.toMatchObject({
+      status: 422,
+      fieldErrors: { search: expect.any(String) },
+    })
+    await expect(
+      harness.services.deliveries.list(undefined, 'invalid query' as never),
+    ).rejects.toMatchObject({
+      status: 422,
+      fieldErrors: { search: expect.any(String) },
+    })
+    await expect(
+      harness.services.deliveries.list(undefined, { search: 'x'.repeat(201) }),
+    ).rejects.toMatchObject({
+      status: 422,
+      fieldErrors: { search: expect.any(String) },
+    })
+
+    const broad = await harness.services.deliveries.list(undefined, {
+      search: '100',
+    })
+    await expect(
+      harness.services.deliveries.list(broad.nextCursor ?? undefined, {
+        search: '1009',
+      }),
+    ).rejects.toMatchObject({ status: 400 })
+  })
+
+  it('counts all household deliveries independently of page size and requested household IDs', async () => {
+    const harness = createMockHarness({ pageSize: 3 })
+    const query = {
+      date: '2026-11-16',
+      timeZone: 'Asia/Jakarta',
+      householdId: 'household-tetangga',
+    }
+
+    await expect(
+      harness.services.deliveries.totals(query),
+    ).rejects.toMatchObject({ status: 401 })
+    await signInAdmin(harness)
+
+    expect(await harness.services.deliveries.totals(query)).toEqual({
+      date: '2026-11-16',
+      timeZone: 'Asia/Jakarta',
+      receivedToday: 0,
+      receivedAllTime: 9,
+    })
+    expect((await harness.services.deliveries.list()).items).toHaveLength(3)
+    expect(
+      (
+        await harness.services.deliveries.list(undefined, {
+          search: 'DEMO-SPX-1009',
+        })
+      ).items,
+    ).toHaveLength(1)
+    expect(await harness.services.deliveries.totals(query)).toMatchObject({
+      receivedAllTime: 9,
+    })
+
+    await harness.services.auth.logout()
+    await harness.services.auth.login(MOCK_DEMO_ACCOUNTS.otherHousehold)
+    expect(await harness.services.deliveries.totals(query)).toMatchObject({
+      receivedToday: 0,
+      receivedAllTime: 1,
+    })
+  })
+
+  it('counts scanned timestamps on the requested calendar day in the given time zone', async () => {
+    const harness = createMockHarness()
+    await signInAdmin(harness)
+
+    expect(
+      await harness.services.deliveries.totals({
+        date: '2026-11-14',
+        timeZone: 'Pacific/Honolulu',
+      }),
+    ).toMatchObject({ receivedToday: 9, receivedAllTime: 9 })
+  })
+
+  it('rejects impossible calendar dates and unknown time zones', async () => {
+    const harness = createMockHarness()
+    await signInAdmin(harness)
+
+    await expect(
+      harness.services.deliveries.totals({
+        date: '2026-02-30',
+        timeZone: 'UTC',
+      }),
+    ).rejects.toMatchObject({
+      status: 422,
+      fieldErrors: { date: expect.any(String) },
+    })
+    await expect(
+      harness.services.deliveries.totals({
+        date: '2026-11-16',
+        timeZone: 'Mars/Olympus',
+      }),
+    ).rejects.toMatchObject({
+      status: 422,
+      fieldErrors: { timeZone: expect.any(String) },
+    })
+  })
+
   it('requires a session and scopes delivery data to the authenticated household', async () => {
     const harness = createMockHarness()
     await expect(harness.services.deliveries.list()).rejects.toMatchObject({
       status: 401,
     })
     await signInAdmin(harness)
+    expect(
+      (
+        await harness.services.deliveries.list(undefined, {
+          search: 'DEMO-SPX-2001',
+        })
+      ).items,
+    ).toEqual([])
     await expect(
       harness.services.deliveries.detail('delivery-tetangga-complete'),
     ).rejects.toMatchObject({ status: 403 })
@@ -84,11 +272,31 @@ describe('mock services', () => {
     await harness.services.auth.logout()
     await harness.services.auth.login(MOCK_DEMO_ACCOUNTS.otherHousehold)
     expect(
+      (
+        await harness.services.deliveries.list(undefined, {
+          search: 'DEMO-SPX-1009',
+        })
+      ).items,
+    ).toEqual([])
+    expect(
+      (
+        await harness.services.deliveries.list(undefined, {
+          search: 'DEMO-SPX-2001',
+        })
+      ).items,
+    ).toHaveLength(1)
+    expect(
       (await harness.services.deliveries.detail('delivery-tetangga-complete'))
         .householdId,
     ).toBe('household-tetangga')
 
     harness.controls.expireSession()
+    await expect(
+      harness.services.deliveries.totals({
+        date: '2026-11-16',
+        timeZone: 'UTC',
+      }),
+    ).rejects.toMatchObject({ status: 401 })
     await expect(harness.services.devices.inventory()).rejects.toMatchObject({
       status: 401,
     })
@@ -113,6 +321,17 @@ describe('mock services', () => {
     expect(await harness.services.deliveries.list()).toEqual({
       items: [],
       nextCursor: null,
+    })
+    expect(
+      await harness.services.deliveries.totals({
+        date: '2026-11-16',
+        timeZone: 'UTC',
+      }),
+    ).toEqual({
+      date: '2026-11-16',
+      timeZone: 'UTC',
+      receivedToday: 0,
+      receivedAllTime: 0,
     })
     expect(await harness.services.members.list()).toEqual([])
     expect((await harness.services.devices.inventory()).esp32).toBeNull()
@@ -201,6 +420,117 @@ describe('mock services', () => {
       readiness: 'pending',
       sourceUrl: null,
       guideUrl: null,
+    })
+  })
+
+  it('renames and removes only the current ESP32 and leaves camera settings intact', async () => {
+    const harness = createMockHarness()
+    await signInAdmin(harness)
+    const { devices } = harness.services
+    const created = await devices.registerEsp32('Papan Demo')
+    const device = created.inventory.esp32!
+    const selected = await devices.selectCamera(
+      created.inventory.cameras[0]!.id,
+    )
+
+    await expect(devices.renameEsp32(device.id, '   ')).rejects.toMatchObject({
+      status: 422,
+    })
+    harness.controls.failNext('esp32-rename')
+    await expect(devices.renameEsp32(device.id, 'Pintu')).rejects.toMatchObject(
+      {
+        status: 503,
+      },
+    )
+    expect((await devices.inventory()).esp32).toEqual(device)
+    await expect(devices.renameEsp32(device.id, ' Pintu ')).resolves.toEqual({
+      ...selected,
+      esp32: { ...device, name: 'Pintu' },
+    })
+
+    harness.controls.failNext('esp32-removal')
+    await expect(devices.removeEsp32(device.id)).rejects.toMatchObject({
+      status: 503,
+    })
+    expect((await devices.inventory()).esp32?.id).toBe(device.id)
+    await expect(devices.removeEsp32(device.id)).resolves.toEqual({
+      ...selected,
+      esp32: null,
+    })
+    const replacement = await devices.registerEsp32('Papan Baru')
+    expect(replacement.inventory.esp32?.id).not.toBe(device.id)
+    await expect(devices.removeEsp32(device.id)).rejects.toMatchObject({
+      status: 404,
+    })
+    expect((await devices.inventory()).esp32).toEqual(
+      replacement.inventory.esp32,
+    )
+  })
+
+  it('updates camera details without exposing credentials or changing the selected camera', async () => {
+    const harness = createMockHarness()
+    await signInAdmin(harness)
+    const { devices } = harness.services
+    const { cameras } = await devices.inventory()
+    const camera = cameras.find(
+      ({ configurationState }) => configurationState === 'incomplete',
+    )!
+    const selected = await devices.selectCamera(camera.id)
+
+    harness.controls.failNext('camera-update')
+    await expect(
+      devices.updateCamera(camera.id, { name: 'Garasi' }),
+    ).rejects.toMatchObject({
+      status: 503,
+    })
+    expect(await devices.inventory()).toEqual(selected)
+    const renamed = await devices.updateCamera(camera.id, { name: ' Garasi ' })
+    expect(renamed.selectedDeliveryCameraId).toBe(camera.id)
+    expect(renamed.cameras.find(({ id }) => id === camera.id)).toEqual({
+      ...camera,
+      name: 'Garasi',
+    })
+    const updated = await devices.updateCamera(camera.id, {
+      name: 'Garasi',
+      connection: {
+        url: 'rtsp://demo.invalid/stream',
+        password: 'cctv-demo-password',
+      },
+    })
+    expect(updated.selectedDeliveryCameraId).toBe(camera.id)
+    expect(updated.cameras.find(({ id }) => id === camera.id)).toMatchObject({
+      name: 'Garasi',
+      configurationState: 'configured',
+      verificationState: 'not_tested',
+    })
+    expect(JSON.stringify(updated)).not.toContain('cctv-demo-password')
+    expect(await devices.inventory()).toEqual(updated)
+  })
+
+  it('clears the delivery selection only when the selected camera is removed', async () => {
+    const harness = createMockHarness()
+    await signInAdmin(harness)
+    const { devices } = harness.services
+    const [porch, garage] = (await devices.inventory()).cameras
+    const selected = await devices.selectCamera(porch!.id)
+
+    harness.controls.failNext('camera-removal')
+    await expect(devices.removeCamera(porch!.id)).rejects.toMatchObject({
+      status: 503,
+    })
+    expect(await devices.inventory()).toEqual(selected)
+    expect(await devices.removeCamera(garage!.id)).toMatchObject({
+      cameras: [porch],
+      selectedDeliveryCameraId: porch!.id,
+    })
+    expect(await devices.removeCamera(porch!.id)).toMatchObject({
+      cameras: [],
+      selectedDeliveryCameraId: null,
+    })
+    await expect(
+      devices.updateCamera(garage!.id, { name: 'Garasi' }),
+    ).rejects.toMatchObject({
+      status: 404,
     })
   })
 

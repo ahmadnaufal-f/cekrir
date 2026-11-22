@@ -4,6 +4,9 @@ import type {
   SignupInput,
   DeliverySummary,
   DeliveryDetail,
+  DeliveryTotals,
+  DeliveryTotalsQuery,
+  DeliveryListQuery,
   DeviceInventory,
   DeviceRegistration,
   CameraInput,
@@ -36,8 +39,10 @@ export interface AuthService {
   logout(): Promise<void>
 }
 export interface DeliveryService {
+  totals(query: DeliveryTotalsQuery): Promise<DeliveryTotals>
   list(
     cursor?: string,
+    query?: DeliveryListQuery,
   ): Promise<{ items: DeliverySummary[]; nextCursor: string | null }>
   detail(id: string): Promise<DeliveryDetail>
   photo(id: string): Promise<Blob>
@@ -45,7 +50,11 @@ export interface DeliveryService {
 export interface DeviceService {
   inventory(): Promise<DeviceInventory>
   registerEsp32(name: string): Promise<DeviceRegistration>
+  renameEsp32(id: string, name: string): Promise<DeviceInventory>
+  removeEsp32(id: string): Promise<DeviceInventory>
   registerCamera(input: CameraInput): Promise<DeviceInventory>
+  updateCamera(id: string, input: CameraInput): Promise<DeviceInventory>
+  removeCamera(id: string): Promise<DeviceInventory>
   selectCamera(id: string): Promise<DeviceInventory>
 }
 export interface MemberService {

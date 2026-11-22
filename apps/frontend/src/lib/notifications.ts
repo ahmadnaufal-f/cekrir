@@ -1,43 +1,147 @@
-// Legacy development alerts after shipment polling. These are not server push.
-// The household app uses lib/push.ts and does not call this local alert helper.
 import { Capacitor } from '@capacitor/core'
-import { LocalNotifications } from '@capacitor/local-notifications'
+import {
+  LocalNotifications,
+  type LocalNotificationSchema,
+} from '@capacitor/local-notifications'
 import type { PackageNotification } from '../types/api'
 
+const shipmentTestNotificationId = 53001
+const tapPayloadType = 'cekrir-shipment'
+
+export interface NotificationShipmentTarget {
+  accountId: string
+  shipmentId: string
+  kind: 'test' | 'report'
+}
+
+export function canSendDeviceNotification(): boolean {
+  return (
+    Capacitor.isNativePlatform() &&
+    Capacitor.isPluginAvailable('LocalNotifications')
+  )
+}
+
 export async function requestNotificationPermission(): Promise<boolean> {
-  if (Capacitor.isNativePlatform()) {
-    const result = await LocalNotifications.requestPermissions()
-    return result.display === 'granted'
+  const { display } = await LocalNotifications.checkPermissions()
+  if (display === 'granted') return true
+  if (display === 'denied') return false
+  return (await LocalNotifications.requestPermissions()).display === 'granted'
+}
+
+async function sendDeviceNotification(
+  notification: LocalNotificationSchema,
+  channel: { id: string; name: string },
+  canDeliver: () => boolean,
+) {
+  if (!canDeliver()) return
+  const android = Capacitor.getPlatform() === 'android'
+  if (android) {
+    await LocalNotifications.createChannel({ ...channel, importance: 4 })
   }
-  if (!('Notification' in window)) return false
-  return (await Notification.requestPermission()) === 'granted'
+  if (!canDeliver()) return
+  await LocalNotifications.schedule({
+    notifications: [
+      {
+        ...notification,
+        foreground: true,
+        isExactNotification: false,
+        autoCancel: true,
+        ...(android ? { channelId: channel.id } : {}),
+      },
+    ],
+  })
+}
+
+export function scheduleTestNotification(
+  accountId: string,
+  shipmentId: string | undefined,
+  canDeliver: () => boolean = () => true,
+) {
+  return sendDeviceNotification(
+    {
+      id: shipmentTestNotificationId,
+      title: 'Tes notifikasi paket',
+      body: shipmentId
+        ? 'Ketuk untuk membuka detail paket di Cekrir.'
+        : 'Ini adalah contoh notifikasi paket dari Cekrir.',
+      extra: {
+        type: tapPayloadType,
+        kind: 'test',
+        accountId,
+        ...(shipmentId ? { shipmentId } : {}),
+      },
+    },
+    { id: 'shipment-notification-tests', name: 'Tes notifikasi paket' },
+    canDeliver,
+  )
 }
 
 export async function showPackageNotification(
+  accountId: string,
   notification: PackageNotification,
-): Promise<void> {
-  if (Capacitor.isNativePlatform()) {
-    // Stable positive 31-bit ID, within Capacitor's Android notification ID range.
-    const hash = [...notification.id].reduce(
-      (value, char) => (value * 31 + char.charCodeAt(0)) | 0,
-      0,
-    )
-    await LocalNotifications.schedule({
-      notifications: [
-        {
-          id: hash & 0x7fffffff || 1,
-          title: notification.title,
-          body: notification.message,
-        },
-      ],
-    })
-  } else if (
-    'Notification' in window &&
-    Notification.permission === 'granted'
-  ) {
-    new Notification(notification.title, {
-      body: notification.message,
-      tag: notification.id,
-    })
+  canDeliver: () => boolean,
+) {
+  if (!canSendDeviceNotification() || !canDeliver()) return
+  if ((await LocalNotifications.checkPermissions()).display !== 'granted')
+    return
+
+  const hash = [...`${accountId}:${notification.id}`].reduce(
+    (value, char) => (value * 31 + char.charCodeAt(0)) | 0,
+    0,
+  )
+  const id = hash & 0x7fffffff || 1
+  await sendDeviceNotification(
+    {
+      id: id === shipmentTestNotificationId ? id + 1 : id,
+      title: notification.title,
+      body: 'Ketuk untuk membuka detail paket di Cekrir.',
+      extra: {
+        type: tapPayloadType,
+        kind: 'report',
+        accountId,
+        shipmentId: notification.shipment_id,
+      },
+    },
+    { id: 'shipment-reports', name: 'Notifikasi paket' },
+    canDeliver,
+  )
+}
+
+export function listenForShipmentNotificationTaps(
+  open: (target: NotificationShipmentTarget) => void,
+): () => void {
+  if (!canSendDeviceNotification()) return () => {}
+
+  let active = true
+  const listener = LocalNotifications.addListener(
+    'localNotificationActionPerformed',
+    ({ actionId, notification }) => {
+      if (!active || actionId !== 'tap') return
+      const extra: unknown = notification.extra
+      if (
+        extra &&
+        typeof extra === 'object' &&
+        'type' in extra &&
+        extra.type === tapPayloadType &&
+        'kind' in extra &&
+        (extra.kind === 'test' || extra.kind === 'report') &&
+        'accountId' in extra &&
+        typeof extra.accountId === 'string' &&
+        extra.accountId &&
+        'shipmentId' in extra &&
+        typeof extra.shipmentId === 'string' &&
+        extra.shipmentId
+      )
+        open({
+          accountId: extra.accountId,
+          shipmentId: extra.shipmentId,
+          kind: extra.kind,
+        })
+    },
+  ).catch(() => undefined)
+
+  return () => {
+    active = false
+    void listener.then((handle) => handle?.remove()).catch(() => undefined)
   }
 }
