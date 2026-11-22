@@ -9,6 +9,13 @@ import type {
 import AppHeader from './components/AppHeader.vue'
 import AppNavigation from './components/AppNavigation.vue'
 import ShipmentAlert from './components/ShipmentAlert.vue'
+import {
+  canSendDeviceNotification,
+  listenForShipmentNotificationTaps,
+  requestNotificationPermission,
+  showPackageNotification,
+  type NotificationShipmentTarget,
+} from './lib/notifications'
 import { deviceGuideServices } from './lib/setup-reference'
 import { loginRoute, signedInRoute } from './router'
 import type { DeviceCategory } from './types/device-ui'
@@ -27,6 +34,8 @@ const revision = ref(0)
 const liveStatus = ref('unavailable')
 const alert = shallowRef<PackageNotification | null>(null)
 const shipmentNotificationsEnabled = ref(true)
+const notificationPermissionRequest = shallowRef<symbol | null>(null)
+const notificationSettingMessage = ref('')
 const notice = ref('')
 const deviceCategory = shallowRef<DeviceCategory>('esp32')
 const registrationRequest = shallowRef<DeviceCategory | null>(null)
@@ -37,7 +46,7 @@ const inFocusedPage = computed(
     (route.name === 'shipment-detail' || (isAdmin.value && !!guideKind.value)),
 )
 const showNavigation = computed(
-  () => !!user.value && !inSettings.value && !inFocusedPage.value,
+  () => isAdmin.value && !inSettings.value && !inFocusedPage.value,
 )
 const deviceServices = computed(
   () =>
@@ -47,10 +56,9 @@ const deviceServices = computed(
     },
 )
 let disconnect: (() => void) | null = null
+let stopNotificationTaps: (() => void) | undefined
+let pendingNotificationShipment: NotificationShipmentTarget | null = null
 let signingOut = false
-function openDeviceGuide(kind: DeviceCategory) {
-  void router.push({ name: kind === 'esp32' ? 'esp32-setup' : 'bardi-setup' })
-}
 function leaveDeviceGuide(register = false) {
   registrationRequest.value = register ? (guideKind.value ?? null) : null
   void router.push({ name: 'devices' })
@@ -62,12 +70,28 @@ function backFromSettings() {
 function focusMain() {
   document.getElementById('main-content')?.focus()
 }
-function openShipment(value: string) {
-  void router.push({ name: 'shipment-detail', params: { id: value } })
+function shipmentLocation(shipmentId: string) {
+  return { name: 'shipment-detail', params: { id: shipmentId } }
+}
+function openShipment(shipmentId: string) {
+  void router.push(shipmentLocation(shipmentId))
 }
 function openShipmentAlert(shipmentId: string) {
   openShipment(shipmentId)
   alert.value = null
+}
+function openDeviceNotificationShipment(target: NotificationShipmentTarget) {
+  if (!user.value) {
+    pendingNotificationShipment = target
+    return
+  }
+  if (user.value.id !== target.accountId) return
+  if (
+    target.kind === 'report' &&
+    alert.value?.shipment_id === target.shipmentId
+  )
+    alert.value = null
+  openShipment(target.shipmentId)
 }
 function shipmentNotificationKey(userId: string) {
   return `cekrir:${services.mode}:shipment-notifications:${userId}`
@@ -79,13 +103,37 @@ function readShipmentNotificationSetting(userId: string) {
     return true
   }
 }
-function setShipmentNotifications(enabled: boolean) {
-  if (!user.value) return
+async function setShipmentNotifications(enabled: boolean) {
+  const accountId = user.value?.id
+  if (!accountId || notificationPermissionRequest.value) return
+  notificationSettingMessage.value = ''
+  if (enabled && canSendDeviceNotification()) {
+    const request = Symbol()
+    notificationPermissionRequest.value = request
+    try {
+      const permitted = await requestNotificationPermission()
+      if (notificationPermissionRequest.value !== request) return
+      if (!permitted) {
+        notificationSettingMessage.value =
+          'Izinkan notifikasi Cekrir di pengaturan perangkat untuk mengaktifkan notifikasi paket.'
+        return
+      }
+    } catch {
+      if (notificationPermissionRequest.value === request)
+        notificationSettingMessage.value =
+          'Izin notifikasi perangkat belum dapat diperiksa. Coba lagi.'
+      return
+    } finally {
+      if (notificationPermissionRequest.value === request)
+        notificationPermissionRequest.value = null
+    }
+  }
+  if (user.value?.id !== accountId) return
   shipmentNotificationsEnabled.value = enabled
   if (!enabled) alert.value = null
   try {
     localStorage.setItem(
-      shipmentNotificationKey(user.value.id),
+      shipmentNotificationKey(accountId),
       enabled ? 'on' : 'off',
     )
   } catch {
@@ -111,7 +159,13 @@ const unsubscribe = services.subscribe((next) => {
     notice.value = ''
     deviceCategory.value = 'esp32'
     registrationRequest.value = null
-    void router.replace(signedInRoute(router, route.query.redirect))
+    const target = pendingNotificationShipment
+    pendingNotificationShipment = null
+    void router.replace(
+      target?.accountId === next.id
+        ? shipmentLocation(target.shipmentId)
+        : signedInRoute(router, route.query.redirect),
+    )
   }
   if (next && previous && route.meta.requiresAdmin && next.role !== 'admin')
     void router.replace({ name: 'shipments' })
@@ -122,13 +176,23 @@ watch(
     disconnect?.()
     disconnect = null
     alert.value = null
+    notificationPermissionRequest.value = null
+    notificationSettingMessage.value = ''
     shipmentNotificationsEnabled.value = value
       ? readShipmentNotificationSetting(value)
       : true
     if (value)
       disconnect = services.notifications.connect({
         event(notification) {
-          if (shipmentNotificationsEnabled.value) alert.value = notification
+          if (shipmentNotificationsEnabled.value) {
+            alert.value = notification
+            void showPackageNotification(
+              value,
+              notification,
+              () =>
+                user.value?.id === value && shipmentNotificationsEnabled.value,
+            ).catch(() => undefined)
+          }
           revision.value++
         },
         ready() {
@@ -190,7 +254,6 @@ const screenBindings = computed(() => {
         services: deviceServices.value,
         user: account,
         registrationRequest: registrationRequest.value,
-        onGuide: openDeviceGuide,
         onRegistrationHandled: () => (registrationRequest.value = null),
         onSessionExpired: () => services.auth.logout(),
       }
@@ -200,7 +263,7 @@ const screenBindings = computed(() => {
         services: deviceGuideServices,
         user: account,
         kind: guideKind.value,
-        canRegister: !!deviceServices.value,
+        devices: deviceServices.value?.devices,
         onBack: () => leaveDeviceGuide(),
         onRegister: () => leaveDeviceGuide(true),
         onSessionExpired: () => services.auth.logout(),
@@ -213,8 +276,10 @@ const screenBindings = computed(() => {
         user: account,
         liveStatus: liveStatus.value,
         notifications: shipmentNotificationsEnabled.value,
+        checkingNotificationPermission:
+          notificationPermissionRequest.value !== null,
+        notificationSettingMessage: notificationSettingMessage.value,
         'onUpdate:notifications': setShipmentNotifications,
-        onOpen: openShipment,
         onLogout: logout,
       }
     default:
@@ -226,10 +291,15 @@ function resume() {
 }
 onMounted(() => {
   document.addEventListener('visibilitychange', resume)
+  stopNotificationTaps = listenForShipmentNotificationTaps(
+    openDeviceNotificationShipment,
+  )
 })
 onUnmounted(() => {
   unsubscribe()
   disconnect?.()
+  notificationPermissionRequest.value = null
+  stopNotificationTaps?.()
   document.removeEventListener('visibilitychange', resume)
 })
 </script>
@@ -277,6 +347,6 @@ onUnmounted(() => {
         </component>
       </RouterView>
     </main>
-    <AppNavigation v-if="showNavigation" :is-admin="isAdmin" />
+    <AppNavigation v-if="showNavigation" />
   </div>
 </template>

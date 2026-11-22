@@ -10,11 +10,12 @@ const props = defineProps<{
   services: ApiServices
   liveStatus: string
   notifications: boolean
+  checkingNotificationPermission: boolean
+  notificationSettingMessage: string
 }>()
 const emit = defineEmits<{
   logout: []
   'update:notifications': [enabled: boolean]
-  open: [shipmentId: string]
 }>()
 const accountName = computed(() => props.user.full_name?.trim())
 </script>
@@ -40,9 +41,11 @@ const accountName = computed(() => props.user.full_name?.trim())
     </article>
     <ShipmentNotificationSettings
       :enabled="notifications"
+      :checking-permission="checkingNotificationPermission"
+      :preference-message="notificationSettingMessage"
+      :account-id="user.id"
       :shipments="services.shipments"
       @update:enabled="emit('update:notifications', $event)"
-      @open="emit('open', $event)"
     />
     <article class="panel">
       <h2>Ketersediaan layanan</h2>

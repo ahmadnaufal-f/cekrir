@@ -77,6 +77,7 @@ const bardiSteps: readonly DeviceGuideStep[] = [
 interface DeviceSetupCopy {
   title: string
   subtitle: string
+  registeredSubtitle?: string
   statusNote: string
   steps: readonly DeviceGuideStep[]
   registerAction: string
@@ -113,6 +114,8 @@ export const deviceGuideCopy = {
     title: 'Panduan penyiapan ESP32',
     subtitle:
       'Daftarkan di aplikasi, lalu lanjutkan konfigurasi firmware di luar aplikasi.',
+    registeredSubtitle:
+      'ESP32 sudah terdaftar. Buka kembali langkah penyiapan dan referensi firmware di bawah.',
     statusNote:
       'Firmware masih berupa scaffold. Konfigurasi dan koneksi perangkat belum diverifikasi; aplikasi tidak mengonfigurasi atau mem-flash firmware. Penggunaan kredensial pada firmware masih menunggu kesepakatan integrasi.',
     steps: esp32Steps,

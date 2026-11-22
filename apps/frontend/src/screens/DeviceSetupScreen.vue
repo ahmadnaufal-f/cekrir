@@ -1,19 +1,24 @@
 <script setup lang="ts">
-import { computed, shallowRef } from 'vue'
+import { computed, shallowRef, watch } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 import BackButton from '../components/BackButton.vue'
 import DeviceSetupGuide from '../components/DeviceSetupGuide.vue'
 import PageHeader from '../components/PageHeader.vue'
 import SetupStepCarousel from '../components/SetupStepCarousel.vue'
+import { adminCopy } from '../lib/admin-copy'
 import { deviceGuideCopy } from '../lib/device-guide-copy'
-import type { AppServices } from '../services/contracts'
+import {
+  ServiceError,
+  type AppServices,
+  type DeviceService,
+} from '../services/contracts'
 import type { DeviceCategory, DeviceUser } from '../types/device-ui'
 
 const props = defineProps<{
   services: Pick<AppServices, 'setup'>
   user: DeviceUser
   kind: DeviceCategory
-  canRegister: boolean
+  devices?: Pick<DeviceService, 'inventory'>
 }>()
 
 const emit = defineEmits<{
@@ -24,6 +29,52 @@ const emit = defineEmits<{
 
 const copy = computed(() => deviceGuideCopy[props.kind])
 const activeStep = shallowRef(0)
+const registrationState = shallowRef<
+  'loading' | 'empty' | 'registered' | 'error'
+>('loading')
+const retryInventory = shallowRef(0)
+const canRegister = computed(
+  () =>
+    !!props.devices &&
+    (props.kind === 'bardi' || registrationState.value === 'empty'),
+)
+const subtitle = computed(() => {
+  if (!props.devices) return deviceGuideCopy.common.registrationUnavailable
+  if (props.kind === 'esp32' && registrationState.value === 'registered')
+    return deviceGuideCopy.esp32.registeredSubtitle
+  return copy.value.subtitle
+})
+
+watch(
+  () =>
+    [
+      props.kind,
+      props.devices,
+      props.user.id,
+      props.user.householdId,
+      retryInventory.value,
+    ] as const,
+  async ([kind, devices], _, onCleanup) => {
+    if (kind !== 'esp32' || !devices) return
+    let current = true
+    onCleanup(() => (current = false))
+    registrationState.value = 'loading'
+    try {
+      const inventory = await devices.inventory()
+      if (current)
+        registrationState.value = inventory.esp32 ? 'registered' : 'empty'
+    } catch (cause) {
+      if (!current) return
+      registrationState.value = 'error'
+      if (
+        cause instanceof ServiceError &&
+        (cause.status === 401 || cause.code === 'UNAUTHENTICATED')
+      )
+        emit('sessionExpired')
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -40,13 +91,7 @@ const activeStep = shallowRef(0)
         :title="copy.title"
         :title-id="`${kind}-setup-title`"
       >
-        <p>
-          {{
-            canRegister
-              ? copy.subtitle
-              : deviceGuideCopy.common.registrationUnavailable
-          }}
-        </p>
+        <p>{{ subtitle }}</p>
         <p class="device-setup-screen__disclaimer">
           {{ deviceGuideCopy.common.illustrationDisclaimer }}
         </p>
@@ -57,6 +102,17 @@ const activeStep = shallowRef(0)
         :label="copy.title"
         :steps="copy.steps"
       />
+
+      <div
+        v-if="devices && kind === 'esp32' && registrationState === 'error'"
+        class="content-inset device-setup-screen__inventory-error"
+        role="alert"
+      >
+        <p>{{ adminCopy.devices.loadFailed }}</p>
+        <button class="text-button" type="button" @click="retryInventory++">
+          {{ adminCopy.common.retry }}
+        </button>
+      </div>
 
       <div
         v-if="canRegister && activeStep === copy.steps.length - 1"
@@ -96,6 +152,17 @@ const activeStep = shallowRef(0)
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.device-setup-screen__inventory-error {
+  display: grid;
+  justify-items: start;
+  margin-top: 16px;
+  color: #8c4226;
+}
+
+.device-setup-screen__inventory-error .text-button {
+  padding-inline: 0;
 }
 
 .device-setup-screen__register {

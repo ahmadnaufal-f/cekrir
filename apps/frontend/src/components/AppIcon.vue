@@ -16,6 +16,8 @@ const paths = {
   tracking:
     'M3 4h11v13H3V4Zm11 5h4l3 4v4h-7M7 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0Zm13 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z',
   plus: 'M12 5v14M5 12h14',
+  edit: 'm14 6 4 4M3 21l1-5L16 4a2.8 2.8 0 0 1 4 4L8 20l-5 1Z',
+  trash: 'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6m4-6v6',
   copy: 'M9 9h12v12H9V9Zm-4 6H3V3h12v2',
   check: 'm5 12 4 4L19 6',
   warning: 'M12 3 2 21h20L12 3Zm0 6v5m0 3v.01',

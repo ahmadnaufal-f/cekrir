@@ -423,6 +423,117 @@ describe('mock services', () => {
     })
   })
 
+  it('renames and removes only the current ESP32 and leaves camera settings intact', async () => {
+    const harness = createMockHarness()
+    await signInAdmin(harness)
+    const { devices } = harness.services
+    const created = await devices.registerEsp32('Papan Demo')
+    const device = created.inventory.esp32!
+    const selected = await devices.selectCamera(
+      created.inventory.cameras[0]!.id,
+    )
+
+    await expect(devices.renameEsp32(device.id, '   ')).rejects.toMatchObject({
+      status: 422,
+    })
+    harness.controls.failNext('esp32-rename')
+    await expect(devices.renameEsp32(device.id, 'Pintu')).rejects.toMatchObject(
+      {
+        status: 503,
+      },
+    )
+    expect((await devices.inventory()).esp32).toEqual(device)
+    await expect(devices.renameEsp32(device.id, ' Pintu ')).resolves.toEqual({
+      ...selected,
+      esp32: { ...device, name: 'Pintu' },
+    })
+
+    harness.controls.failNext('esp32-removal')
+    await expect(devices.removeEsp32(device.id)).rejects.toMatchObject({
+      status: 503,
+    })
+    expect((await devices.inventory()).esp32?.id).toBe(device.id)
+    await expect(devices.removeEsp32(device.id)).resolves.toEqual({
+      ...selected,
+      esp32: null,
+    })
+    const replacement = await devices.registerEsp32('Papan Baru')
+    expect(replacement.inventory.esp32?.id).not.toBe(device.id)
+    await expect(devices.removeEsp32(device.id)).rejects.toMatchObject({
+      status: 404,
+    })
+    expect((await devices.inventory()).esp32).toEqual(
+      replacement.inventory.esp32,
+    )
+  })
+
+  it('updates camera details without exposing credentials or changing the selected camera', async () => {
+    const harness = createMockHarness()
+    await signInAdmin(harness)
+    const { devices } = harness.services
+    const { cameras } = await devices.inventory()
+    const camera = cameras.find(
+      ({ configurationState }) => configurationState === 'incomplete',
+    )!
+    const selected = await devices.selectCamera(camera.id)
+
+    harness.controls.failNext('camera-update')
+    await expect(
+      devices.updateCamera(camera.id, { name: 'Garasi' }),
+    ).rejects.toMatchObject({
+      status: 503,
+    })
+    expect(await devices.inventory()).toEqual(selected)
+    const renamed = await devices.updateCamera(camera.id, { name: ' Garasi ' })
+    expect(renamed.selectedDeliveryCameraId).toBe(camera.id)
+    expect(renamed.cameras.find(({ id }) => id === camera.id)).toEqual({
+      ...camera,
+      name: 'Garasi',
+    })
+    const updated = await devices.updateCamera(camera.id, {
+      name: 'Garasi',
+      connection: {
+        url: 'rtsp://demo.invalid/stream',
+        password: 'cctv-demo-password',
+      },
+    })
+    expect(updated.selectedDeliveryCameraId).toBe(camera.id)
+    expect(updated.cameras.find(({ id }) => id === camera.id)).toMatchObject({
+      name: 'Garasi',
+      configurationState: 'configured',
+      verificationState: 'not_tested',
+    })
+    expect(JSON.stringify(updated)).not.toContain('cctv-demo-password')
+    expect(await devices.inventory()).toEqual(updated)
+  })
+
+  it('clears the delivery selection only when the selected camera is removed', async () => {
+    const harness = createMockHarness()
+    await signInAdmin(harness)
+    const { devices } = harness.services
+    const [porch, garage] = (await devices.inventory()).cameras
+    const selected = await devices.selectCamera(porch!.id)
+
+    harness.controls.failNext('camera-removal')
+    await expect(devices.removeCamera(porch!.id)).rejects.toMatchObject({
+      status: 503,
+    })
+    expect(await devices.inventory()).toEqual(selected)
+    expect(await devices.removeCamera(garage!.id)).toMatchObject({
+      cameras: [porch],
+      selectedDeliveryCameraId: porch!.id,
+    })
+    expect(await devices.removeCamera(porch!.id)).toMatchObject({
+      cameras: [],
+      selectedDeliveryCameraId: null,
+    })
+    await expect(
+      devices.updateCamera(garage!.id, { name: 'Garasi' }),
+    ).rejects.toMatchObject({
+      status: 404,
+    })
+  })
+
   it('injects one-shot push failures and separates unavailable resources from delivery events', async () => {
     const harness = createMockHarness()
     await signInAdmin(harness)

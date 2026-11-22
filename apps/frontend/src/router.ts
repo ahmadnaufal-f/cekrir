@@ -63,7 +63,7 @@ const routes: RouteRecordRaw[] = [
       hash: to.hash,
     }),
   },
-  { path: '/:pathMatch(.*)*', redirect: { name: 'shipments' } },
+  { path: '/:pathMatch(.*)*', redirect: '/shipments' },
 ]
 
 // oxlint-disable-next-line no-control-regex -- Reject control characters in shipment identifiers.

@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, shallowRef, watch } from 'vue'
+import { RouterLink } from 'vue-router'
 import AppIcon from '../components/AppIcon.vue'
 import TabSelector from '../components/TabSelector.vue'
+import DeviceCard from '../components/DeviceCard.vue'
 import DeviceRegistrationDialog from '../components/DeviceRegistrationDialog.vue'
+import DeviceManagementDialog from '../components/DeviceManagementDialog.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { adminCopy } from '../lib/admin-copy'
 import { deviceGuideCopy } from '../lib/device-guide-copy'
 import { isDeviceSetupComplete } from '../lib/device-setup-state'
+import { configuredReference, esp32SetupContent } from '../lib/setup-reference'
 import { ServiceError } from '../services/contracts'
 import type { AppServices } from '../services/contracts'
 import type { CameraSummary, DeviceInventory } from '../types/app'
@@ -26,21 +30,30 @@ const props = defineProps<{
 const emit = defineEmits<{
   sessionExpired: []
   'update:category': [category: DeviceCategory]
-  guide: [category: DeviceCategory]
   registrationHandled: []
 }>()
 
+type Esp32Action = 'rename-esp32' | 'remove-esp32'
+type DeviceDialog =
+  | { action: 'register'; category: DeviceCategory }
+  | { action: Esp32Action; device: NonNullable<DeviceInventory['esp32']> }
+  | { action: 'edit-camera' | 'remove-camera'; device: CameraSummary }
+
 const categories: readonly DeviceCategory[] = ['esp32', 'bardi']
 const copy = adminCopy.devices
+const esp32SourceHref = configuredReference(esp32SetupContent, 'source')
 const inventory = shallowRef<DeviceInventory | null>(null)
 const inventoryState = shallowRef<'loading' | 'ready' | 'error'>('loading')
 const selecting = shallowRef(false)
 const errorMessage = shallowRef('')
 const noticeMessage = shallowRef('')
-const dialogKind = shallowRef<DeviceCategory | null>(null)
+const dialog = shallowRef<DeviceDialog | null>(null)
 const isAdmin = computed(() => props.user.role === 'admin')
 const selectedCameraId = computed(
   () => inventory.value?.selectedDeliveryCameraId ?? null,
+)
+const esp32Description = computed(() =>
+  inventory.value?.esp32 ? copy.esp32ManageDescription : copy.esp32Description,
 )
 function status(category: DeviceCategory): SetupStatus | undefined {
   if (!props.services) return undefined
@@ -80,7 +93,7 @@ function reportUnauthorized(cause: unknown, request: number): boolean {
         cause.status === 401
   if (isCurrent(request) && unauthorized) {
     inventory.value = null
-    dialogKind.value = null
+    dialog.value = null
     emit('sessionExpired')
     return true
   }
@@ -117,6 +130,7 @@ function openRegistration(category = props.category) {
     !isAdmin.value ||
     !inventory.value ||
     selecting.value ||
+    dialog.value ||
     inventoryState.value !== 'ready'
   )
     return
@@ -124,18 +138,63 @@ function openRegistration(category = props.category) {
     noticeMessage.value = copy.esp32Limit
     return
   }
-  dialogKind.value = category
+  dialog.value = { action: 'register', category }
 }
-function registered(result: DeviceInventory) {
+function openEsp32Management(action: Esp32Action) {
+  const device = inventory.value?.esp32
+  if (!isAdmin.value || !device || selecting.value || dialog.value) return
+  dialog.value = { action, device }
+}
+function openCameraManagement(
+  action: 'edit-camera' | 'remove-camera',
+  device: CameraSummary,
+) {
+  if (!isAdmin.value || selecting.value || dialog.value) return
+  dialog.value = { action, device }
+}
+function applyInventory(result: DeviceInventory) {
   inventory.value = result
   inventoryState.value = 'ready'
   errorMessage.value = ''
   noticeMessage.value = ''
 }
-async function closeRegistration() {
-  dialogKind.value = null
+function saved(result: DeviceInventory) {
+  applyInventory(result)
+  if (dialog.value?.action === 'edit-camera')
+    noticeMessage.value = copy.cameraUpdated
+}
+function managed(result: DeviceInventory) {
+  const operation = dialog.value
+  if (
+    !operation ||
+    operation.action === 'register' ||
+    operation.action === 'edit-camera'
+  )
+    return
+  const removedDeliveryCamera =
+    operation.action === 'remove-camera' &&
+    operation.device.id === selectedCameraId.value
+  applyInventory(result)
+  switch (operation.action) {
+    case 'rename-esp32':
+      noticeMessage.value = copy.esp32Renamed
+      break
+    case 'remove-esp32':
+      noticeMessage.value = copy.esp32Removed
+      break
+    case 'remove-camera':
+      noticeMessage.value =
+        removedDeliveryCamera && result.cameras.length
+          ? copy.deliveryCameraRemoved
+          : copy.cameraRemoved
+      break
+  }
+  void closeDeviceDialog()
+}
+async function closeDeviceDialog() {
+  dialog.value = null
   await nextTick()
-  // Registering the only ESP32 removes its opener. Keep keyboard focus on its tab.
+  // A removed control cannot receive focus after the dialog closes.
   if (document.activeElement === document.body)
     document
       .getElementById(`device-tabs-${props.category}`)
@@ -147,7 +206,7 @@ async function selectCamera(cameraId: string) {
     !services ||
     !isAdmin.value ||
     selecting.value ||
-    dialogKind.value ||
+    dialog.value ||
     !inventory.value?.cameras.some((camera) => camera.id === cameraId)
   )
     return
@@ -183,7 +242,7 @@ watch(
     generation++
     inventory.value = null
     selecting.value = false
-    dialogKind.value = null
+    dialog.value = null
     noticeMessage.value = ''
     errorMessage.value = ''
     inventoryState.value = 'loading'
@@ -263,7 +322,7 @@ onUnmounted(() => {
         <p v-if="services" class="device-panel__description content-inset">
           {{
             panelCategory === 'esp32'
-              ? copy.esp32Description
+              ? esp32Description
               : copy.camerasDescription
           }}
         </p>
@@ -290,11 +349,19 @@ onUnmounted(() => {
         </div>
         <template v-else-if="inventory">
           <template v-if="panelCategory === 'esp32'">
-            <div v-if="inventory.esp32" class="device-summary">
-              <strong>{{ inventory.esp32.name }}</strong>
-              <span>{{ copy.esp32Registered }}</span>
-              <small>{{ copy.identity }} · {{ inventory.esp32.id }}</small>
-            </div>
+            <ul v-if="inventory.esp32" class="device-list">
+              <li>
+                <DeviceCard
+                  :id="inventory.esp32.id"
+                  :name="inventory.esp32.name"
+                  :description="copy.esp32Registered"
+                  :edit-label="copy.editEsp32"
+                  :busy="selecting"
+                  @edit="openEsp32Management('rename-esp32')"
+                  @remove="openEsp32Management('remove-esp32')"
+                />
+              </li>
+            </ul>
             <p v-else class="device-panel__empty content-inset">
               {{ copy.noEsp32 }}
             </p>
@@ -306,75 +373,85 @@ onUnmounted(() => {
             >
               {{ copy.camerasEmpty }}
             </p>
-            <ul v-else class="camera-list">
-              <li
-                v-for="camera in inventory.cameras"
-                :key="camera.id"
-                class="camera-card"
-              >
-                <div class="camera-card__heading">
-                  <div>
-                    <h3>{{ camera.name }}</h3>
-                    <p>
-                      {{
-                        camera.configurationState === 'configured'
-                          ? copy.cameraConfigured
-                          : copy.cameraIncomplete
+            <ul v-else class="device-list">
+              <li v-for="camera in inventory.cameras" :key="camera.id">
+                <DeviceCard
+                  :id="camera.id"
+                  :name="camera.name"
+                  :description="
+                    camera.configurationState === 'configured'
+                      ? copy.cameraConfigured
+                      : copy.cameraIncomplete
+                  "
+                  :edit-label="copy.editCamera"
+                  :busy="selecting"
+                  @edit="openCameraManagement('edit-camera', camera)"
+                  @remove="openCameraManagement('remove-camera', camera)"
+                >
+                  <template #badge>
+                    <span
+                      class="camera-verification"
+                      :class="`camera-verification--${camera.verificationState}`"
+                      >{{ cameraVerificationLabel(camera) }}</span
+                    >
+                  </template>
+                  <template #actions>
+                    <span
+                      v-if="selectedCameraId === camera.id"
+                      class="selected-label"
+                      aria-current="true"
+                      ><AppIcon name="check" />{{ copy.selectedCamera }}</span
+                    >
+                    <button
+                      v-else
+                      class="button button--quiet camera-select"
+                      type="button"
+                      :disabled="selecting"
+                      @click="selectCamera(camera.id)"
+                    >
+                      <AppIcon name="camera" />{{
+                        selecting ? copy.selectingCamera : copy.selectCamera
                       }}
-                    </p>
-                  </div>
-                  <span
-                    class="camera-card__state"
-                    :class="`camera-card__state--${camera.verificationState}`"
-                    >{{ cameraVerificationLabel(camera) }}</span
-                  >
-                </div>
-                <div class="camera-card__footer">
-                  <span
-                    v-if="selectedCameraId === camera.id"
-                    class="selected-label"
-                    aria-current="true"
-                    ><AppIcon name="check" />{{ copy.selectedCamera }}</span
-                  >
-                  <span v-else class="camera-card__not-selected">{{
-                    copy.notSelected
-                  }}</span>
-                  <button
-                    v-if="selectedCameraId !== camera.id"
-                    class="button button--quiet"
-                    type="button"
-                    :disabled="selecting"
-                    @click="selectCamera(camera.id)"
-                  >
-                    <AppIcon name="camera" />{{
-                      selecting ? copy.selectingCamera : copy.selectCamera
-                    }}
-                  </button>
-                </div>
+                    </button>
+                  </template>
+                </DeviceCard>
               </li>
             </ul>
           </template>
         </template>
         <div
-          v-if="!services || inventory"
+          v-if="panelCategory === 'esp32' || !services || inventory"
           class="device-panel__actions content-inset"
+          :class="{
+            'device-panel__actions--registered':
+              panelCategory === 'esp32' && inventory?.esp32,
+          }"
         >
-          <a
+          <RouterLink
             v-if="
+              panelCategory === 'esp32' ||
               !services ||
               (inventory && !isDeviceSetupComplete(inventory, panelCategory))
             "
             class="button button--quiet device-panel__guide"
-            :href="
-              panelCategory === 'esp32'
-                ? '#/devices/setup/esp32'
-                : '#/devices/setup/cameras'
-            "
-            @click.prevent="emit('guide', panelCategory)"
+            :to="{
+              name: panelCategory === 'esp32' ? 'esp32-setup' : 'bardi-setup',
+            }"
           >
             <AppIcon name="book" />{{
               panelCategory === 'esp32' ? copy.guideEsp32 : copy.guideCamera
             }}
+          </RouterLink>
+          <a
+            v-if="
+              panelCategory === 'esp32' && inventory?.esp32 && esp32SourceHref
+            "
+            class="button button--quiet device-panel__source"
+            :href="esp32SourceHref"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <AppIcon name="external" />{{ deviceGuideCopy.esp32.sourceLink }}
           </a>
           <button
             v-if="inventory && (panelCategory === 'bardi' || !inventory.esp32)"
@@ -388,13 +465,38 @@ onUnmounted(() => {
         </div>
       </section>
       <DeviceRegistrationDialog
-        v-if="services && dialogKind && inventory"
+        v-if="
+          services &&
+          inventory &&
+          (dialog?.action === 'register' || dialog?.action === 'edit-camera')
+        "
         :services="services"
         :user="user"
-        :kind="dialogKind"
+        :kind="dialog.action === 'register' ? dialog.category : 'bardi'"
         :inventory="inventory"
-        @registered="registered"
-        @close="closeRegistration"
+        :camera-to-edit="
+          dialog.action === 'edit-camera' ? dialog.device : undefined
+        "
+        @saved="saved"
+        @close="closeDeviceDialog"
+        @session-expired="emit('sessionExpired')"
+      />
+      <DeviceManagementDialog
+        v-else-if="
+          services &&
+          dialog &&
+          dialog.action !== 'register' &&
+          dialog.action !== 'edit-camera'
+        "
+        :devices="services.devices"
+        :device="dialog.device"
+        :action="dialog.action"
+        :clears-delivery-camera="
+          dialog.action === 'remove-camera' &&
+          selectedCameraId === dialog.device.id
+        "
+        @updated="managed"
+        @close="closeDeviceDialog"
         @session-expired="emit('sessionExpired')"
       />
     </template>
@@ -463,6 +565,10 @@ onUnmounted(() => {
   gap: 12px;
   margin-top: 24px;
 }
+.device-panel__actions--registered {
+  display: flex;
+  flex-wrap: wrap;
+}
 .device-panel__actions .button {
   min-height: 44px;
   max-width: 100%;
@@ -472,61 +578,28 @@ onUnmounted(() => {
   text-decoration: none;
   overflow-wrap: anywhere;
 }
-.device-summary {
-  display: grid;
-  gap: 7px;
-  margin-top: 24px;
-  padding: 24px var(--card-inset);
-  border: 1px solid #dfe4d9;
-  border-radius: 12px;
-  background: #fffefa;
-  overflow-wrap: anywhere;
-}
-.device-summary span,
-.device-summary small {
-  color: #53675a;
+.device-panel__actions--registered .button {
+  gap: 6px;
+  padding: 0;
+  background: transparent;
+  color: #234e41;
   font-size: 0.8125rem;
-  line-height: 1.6;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
-.camera-list {
+.device-panel__actions--registered .app-icon {
+  width: 1em;
+  height: 1em;
+}
+.device-list {
   display: grid;
   gap: 12px;
   margin: 24px 0 0;
   padding: 0;
   list-style: none;
 }
-.camera-card {
-  min-width: 0;
-  padding: 20px var(--card-inset);
-  border: 1px solid #dfe4d9;
-  border-radius: 12px;
-  background: #fffefa;
-}
-.camera-card__heading,
-.camera-card__footer {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-}
-.camera-card__heading > div {
-  min-width: 0;
-}
-.camera-card__heading h3 {
-  margin: 0 0 5px;
-  font-size: 0.9375rem;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-.camera-card__heading p,
-.camera-card__not-selected {
-  color: #53675a;
-  font-size: 0.8125rem;
-  line-height: 1.6;
-}
-.camera-card__state {
-  flex-shrink: 0;
-  max-width: 40%;
+.camera-verification {
+  max-width: 100%;
   padding: 6px 8px;
   border-radius: 6px;
   background: #f0efe6;
@@ -536,25 +609,17 @@ onUnmounted(() => {
   text-align: center;
   overflow-wrap: anywhere;
 }
-.camera-card__state--passed {
+.camera-verification--passed {
   background: #e4efe6;
   color: #326143;
 }
-.camera-card__state--failed {
+.camera-verification--failed {
   background: #fae9df;
   color: #925b3a;
 }
-.camera-card__footer {
-  align-items: center;
-  flex-wrap: wrap;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid #e9ece3;
-}
-.camera-card__footer .button {
+.camera-select {
   gap: 8px;
-  min-height: 44px;
-  font-size: 0.8125rem;
+  text-align: start;
 }
 .selected-label {
   display: inline-flex;
@@ -568,14 +633,6 @@ onUnmounted(() => {
 @media (max-width: 640px) {
   .devices-screen {
     padding-bottom: 46px;
-  }
-}
-@media (max-width: 360px) {
-  .camera-card__heading {
-    flex-direction: column;
-  }
-  .camera-card__state {
-    max-width: 100%;
   }
 }
 </style>

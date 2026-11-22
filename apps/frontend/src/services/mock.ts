@@ -40,7 +40,11 @@ export interface MockServiceOptions {
 
 export type MockFailurePoint =
   | 'esp32-registration'
+  | 'esp32-rename'
+  | 'esp32-removal'
   | 'camera-registration'
+  | 'camera-update'
+  | 'camera-removal'
   | 'camera-selection'
   | 'push-upsert'
   | 'push-detach'
@@ -89,6 +93,7 @@ const ERROR_COPY = {
   accountEmailExists: 'Akun dengan email ini sudah terdaftar.',
   accountLoginExists: 'ID masuk ini sudah digunakan.',
   esp32Limit: 'Setiap lokasi penerimaan hanya dapat mendaftarkan satu ESP32.',
+  esp32Missing: 'ESP32 tidak ditemukan.',
   photoPending: 'Ilustrasi demo masih disiapkan.',
   photoUnavailable: 'Foto tidak tersedia.',
   installationForbidden: 'Instalasi notifikasi ini terhubung ke akun lain.',
@@ -99,6 +104,7 @@ const ERROR_COPY = {
     householdName: 'Nama lokasi penerimaan wajib diisi.',
     password: 'Kata sandi wajib diisi.',
     name: 'Nama perangkat wajib diisi.',
+    url: 'Isi alamat RTSP untuk mengganti detail koneksi.',
     loginId: 'ID masuk wajib diisi.',
     initialPassword: 'Kata sandi awal wajib diisi.',
     installationId: 'ID instalasi wajib diisi.',
@@ -328,6 +334,21 @@ export function createMockHarness(
     return getHousehold(requireAdmin(user))
   }
 
+  function requireEsp32(inventory: MutableInventory, id: string) {
+    const device = inventory.esp32
+    if (!device || device.id !== id)
+      throw new ServiceError('ESP32_NOT_FOUND', ERROR_COPY.esp32Missing, 404)
+    return device
+  }
+
+  function requireCameraIndex(inventory: MutableInventory, id: string) {
+    const index = inventory.cameras.findIndex((camera) => camera.id === id)
+    if (index >= 0) return index
+    if (findCameraOwner(id))
+      throw new ServiceError('FORBIDDEN', ERROR_COPY.cameraForbidden, 403)
+    throw new ServiceError('CAMERA_NOT_FOUND', ERROR_COPY.cameraMissing, 404)
+  }
+
   const services: AppServices = {
     mode: 'mock',
     auth: {
@@ -546,6 +567,22 @@ export function createMockHarness(
           credential: `DEMO-ONLY-NOT-VALID-DEVICE-CREDENTIAL-${number}`,
         }
       },
+      async renameEsp32(id: string, name: string): Promise<DeviceInventory> {
+        const { inventory } = deviceHousehold()
+        const device = requireEsp32(inventory, id)
+        const label = name.trim()
+        if (!label) throw fieldError('name')
+        injectFailure('esp32-rename')
+        inventory.esp32 = { ...device, name: label }
+        return cloneInventory(inventory)
+      },
+      async removeEsp32(id: string): Promise<DeviceInventory> {
+        const { inventory } = deviceHousehold()
+        requireEsp32(inventory, id)
+        injectFailure('esp32-removal')
+        inventory.esp32 = null
+        return cloneInventory(inventory)
+      },
       async registerCamera(input: CameraInput): Promise<DeviceInventory> {
         const household = deviceHousehold()
         const name = input.name.trim()
@@ -564,24 +601,44 @@ export function createMockHarness(
         household.inventory.cameras.push(camera)
         return cloneInventory(household.inventory)
       },
+      async updateCamera(
+        id: string,
+        input: CameraInput,
+      ): Promise<DeviceInventory> {
+        const { inventory } = deviceHousehold()
+        const index = requireCameraIndex(inventory, id)
+        const camera = inventory.cameras[index]!
+        const name = input.name.trim()
+        if (!name) throw fieldError('name')
+        if (input.connection && !input.connection.url.trim())
+          throw fieldError('url')
+        injectFailure('camera-update')
+        // Keep the saved state for a rename. Replacing connection details requires verification again.
+        inventory.cameras[index] = input.connection
+          ? {
+              ...camera,
+              name,
+              configurationState: 'configured',
+              verificationState: 'not_tested',
+            }
+          : { ...camera, name }
+        return cloneInventory(inventory)
+      },
+      async removeCamera(id: string): Promise<DeviceInventory> {
+        const { inventory } = deviceHousehold()
+        const index = requireCameraIndex(inventory, id)
+        injectFailure('camera-removal')
+        inventory.cameras.splice(index, 1)
+        if (inventory.selectedDeliveryCameraId === id)
+          inventory.selectedDeliveryCameraId = null
+        return cloneInventory(inventory)
+      },
       async selectCamera(id: string): Promise<DeviceInventory> {
-        const household = deviceHousehold()
-        const owned = household.inventory.cameras.some(
-          (camera) => camera.id === id,
-        )
-        if (!owned) {
-          if (findCameraOwner(id)) {
-            throw new ServiceError('FORBIDDEN', ERROR_COPY.cameraForbidden, 403)
-          }
-          throw new ServiceError(
-            'CAMERA_NOT_FOUND',
-            ERROR_COPY.cameraMissing,
-            404,
-          )
-        }
+        const { inventory } = deviceHousehold()
+        requireCameraIndex(inventory, id)
         injectFailure('camera-selection')
-        household.inventory.selectedDeliveryCameraId = id
-        return cloneInventory(household.inventory)
+        inventory.selectedDeliveryCameraId = id
+        return cloneInventory(inventory)
       },
     },
     members: {

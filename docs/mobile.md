@@ -40,6 +40,8 @@ Run these only when the corresponding native directory is absent. Commit native 
 
 Cekrir shows in-app package reports while you are signed in and the app is open. Tap a report to open the corresponding shipment detail.
 
+On Android and iOS, turn on **Notifikasi paket** in **Akun** and allow device notifications if prompted. Reports received while the app is open appear in the app and the device's notification panel. **Tes notifikasi** sends a local notification on demand. When a shipment is linked, tapping its notification opens the detail after signing in to the same account.
+
 Background delivery requires Capacitor Push Notifications, device registration with an authenticated backend, and APNs/FCM delivery with platform credentials, user preferences, token lifecycle management, and retries.
 
 Native project generation and plugin sync can run on Linux. Native compilation, signing, and permission/device behavior must be tested with the platform toolchains and real devices.

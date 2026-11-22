@@ -13,7 +13,7 @@ import AppDialog from './AppDialog.vue'
 import AppIcon from './AppIcon.vue'
 import { adminCopy } from '../lib/admin-copy'
 import { ServiceError, type AppServices } from '../services/contracts'
-import type { CameraInput, DeviceInventory } from '../types/app'
+import type { CameraInput, CameraSummary, DeviceInventory } from '../types/app'
 import type { DeviceCategory, DeviceUser } from '../types/device-ui'
 
 const props = defineProps<{
@@ -21,17 +21,17 @@ const props = defineProps<{
   user: DeviceUser
   kind: DeviceCategory
   inventory: DeviceInventory
+  cameraToEdit?: CameraSummary
 }>()
 
 const emit = defineEmits<{
-  registered: [inventory: DeviceInventory]
+  saved: [inventory: DeviceInventory]
   sessionExpired: []
   close: []
 }>()
 
 const copy = adminCopy.devices
 const validationCopy = {
-  esp32NameRequired: 'Nama perangkat wajib diisi.',
   cameraNameRequired: 'Nama kamera wajib diisi.',
 } as const
 const pending = shallowRef(false)
@@ -47,13 +47,15 @@ const credential = shallowRef<string | null>(null)
 const credentialVisible = shallowRef(false)
 const credentialNotice = shallowRef('')
 
-const dialogTitle = computed(() =>
-  props.kind === 'esp32' ? copy.esp32Title : copy.registerCameraTitle,
-)
+const dialogTitle = computed(() => {
+  if (props.kind === 'esp32') return copy.esp32Title
+  return props.cameraToEdit ? copy.editCamera : copy.registerCameraTitle
+})
 const dialogDescription = computed(() => {
   if (completion.value) return undefined
-  return props.kind === 'esp32'
-    ? copy.esp32Description
+  if (props.kind === 'esp32') return copy.esp32Description
+  return props.cameraToEdit
+    ? copy.cameraEditDescription
     : copy.camerasDescription
 })
 const nameField = useTemplateRef<HTMLInputElement>('nameField')
@@ -105,7 +107,7 @@ function resetDialogState(): void {
   esp32FieldError.value = ''
   cameraFieldErrors.value = {}
   esp32Name.value = ''
-  cameraForm.name = ''
+  cameraForm.name = props.cameraToEdit?.name ?? ''
   cameraForm.url = ''
   cameraForm.username = ''
   clearSensitiveState()
@@ -144,7 +146,7 @@ async function registerEsp32(): Promise<void> {
   errorMessage.value = ''
   noticeMessage.value = ''
   if (!name) {
-    esp32FieldError.value = validationCopy.esp32NameRequired
+    esp32FieldError.value = copy.esp32NameRequired
     return
   }
 
@@ -155,7 +157,7 @@ async function registerEsp32(): Promise<void> {
     const result = await props.services.devices.registerEsp32(name)
     if (!isCurrent(generation)) return
 
-    emit('registered', result.inventory)
+    emit('saved', result.inventory)
     esp32Name.value = ''
     credential.value = result.credential || null
     credentialVisible.value = false
@@ -175,7 +177,7 @@ async function registerEsp32(): Promise<void> {
       noticeMessage.value = copy.esp32Limit
       try {
         const latest = await props.services.devices.inventory()
-        if (isCurrent(generation)) emit('registered', latest)
+        if (isCurrent(generation)) emit('saved', latest)
       } catch (refreshCause) {
         if (!isCurrent(generation)) return
         errorMessage.value = copy.loadFailed
@@ -202,7 +204,7 @@ function cameraFieldError(
   )
 }
 
-async function registerCamera(): Promise<void> {
+async function saveCamera(): Promise<void> {
   if (props.user.role !== 'admin' || pending.value) return
 
   const name = cameraForm.name.trim()
@@ -217,6 +219,11 @@ async function registerCamera(): Promise<void> {
   const input: CameraInput = { name }
   const url = cameraForm.url.trim()
   const username = cameraForm.username.trim()
+  const camera = props.cameraToEdit
+  if (camera && !url && (username || cameraForm.password)) {
+    cameraFieldErrors.value = { url: copy.cameraEditUrlRequired }
+    return
+  }
   if (url) {
     input.connection = {
       url,
@@ -230,10 +237,12 @@ async function registerCamera(): Promise<void> {
   activeMutationGeneration = generation
   pending.value = true
   try {
-    const result = await props.services.devices.registerCamera(input)
+    const result = camera
+      ? await props.services.devices.updateCamera(camera.id, input)
+      : await props.services.devices.registerCamera(input)
     if (!isCurrent(generation)) return
 
-    emit('registered', result)
+    emit('saved', result)
     finishMutation(generation)
     closeDialog()
   } catch (cause) {
@@ -254,7 +263,7 @@ async function registerCamera(): Promise<void> {
         if (connectionDetails.value) connectionDetails.value.open = true
       }
     }
-    errorMessage.value = copy.cameraFailed
+    errorMessage.value = camera ? copy.cameraEditFailed : copy.cameraFailed
     reportUnauthorized(cause, generation)
   } finally {
     finishMutation(generation)
@@ -290,6 +299,7 @@ watch(
     () => props.user.householdId,
     () => props.user.role,
     () => props.kind,
+    () => props.cameraToEdit?.id,
     () => props.services,
   ],
   () => {
@@ -459,7 +469,7 @@ onUnmounted(() => {
       v-else
       class="registration-form"
       :aria-busy="pending || undefined"
-      @submit.prevent="registerCamera"
+      @submit.prevent="saveCamera"
     >
       <p
         v-if="errorMessage"
@@ -560,7 +570,13 @@ onUnmounted(() => {
               {{ cameraFieldError('password') }}
             </span>
           </label>
-          <p class="registration-help">{{ copy.connectionHelp }}</p>
+          <p class="registration-help">
+            {{
+              props.cameraToEdit
+                ? copy.cameraEditConnectionHelp
+                : copy.connectionHelp
+            }}
+          </p>
         </div>
       </details>
       <button
@@ -568,8 +584,14 @@ onUnmounted(() => {
         type="submit"
         :disabled="pending || props.user.role !== 'admin'"
       >
-        <AppIcon name="plus" />
-        {{ pending ? copy.savingCamera : copy.addCamera }}
+        <AppIcon :name="props.cameraToEdit ? 'check' : 'plus'" />
+        {{
+          pending
+            ? copy.savingCamera
+            : props.cameraToEdit
+              ? copy.saveChanges
+              : copy.addCamera
+        }}
       </button>
     </form>
   </AppDialog>

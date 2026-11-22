@@ -5,39 +5,24 @@ import { shellCopy as copy } from '../lib/shell-copy'
 import { ui } from '../lib/strings'
 import AppIcon, { type IconName } from './AppIcon.vue'
 
-const props = defineProps<{ isAdmin: boolean }>()
 const route = useRoute()
 interface NavigationLink {
   name: 'shipments' | 'devices' | 'members'
   label: string
   icon: IconName
 }
-const links = computed<NavigationLink[]>(() => {
-  const shipments: NavigationLink = {
-    name: 'shipments',
-    label: ui.packages,
-    icon: 'package',
-  }
-  return props.isAdmin
-    ? [
-        shipments,
-        { name: 'devices', label: ui.devices, icon: 'device' },
-        { name: 'members', label: 'Pengguna', icon: 'users' },
-      ]
-    : [shipments]
-})
+const links: NavigationLink[] = [
+  { name: 'shipments', label: ui.packages, icon: 'package' },
+  { name: 'devices', label: ui.devices, icon: 'device' },
+  { name: 'members', label: 'Pengguna', icon: 'users' },
+]
 const activeIndex = computed(() =>
-  links.value.findIndex((link) => link.name === route.name),
+  links.findIndex((link) => link.name === route.name),
 )
 </script>
 
 <template>
-  <nav
-    id="main-navigation"
-    class="api-nav"
-    :class="{ 'api-nav--member': !isAdmin }"
-    :aria-label="copy.navigation"
-  >
+  <nav id="main-navigation" class="api-nav" :aria-label="copy.navigation">
     <span
       v-if="activeIndex >= 0"
       class="api-nav__indicator"
@@ -72,10 +57,6 @@ const activeIndex = computed(() =>
   background: #fffefa;
   box-shadow: 0 8px 28px #233d3726;
   gap: var(--nav-gap);
-}
-
-.api-nav--member {
-  max-width: 220px;
 }
 
 .api-nav__indicator {

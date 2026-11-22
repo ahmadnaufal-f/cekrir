@@ -117,7 +117,11 @@ export function createLiveServices(): AppServices {
     devices: {
       inventory: unavailable,
       registerEsp32: unavailable,
+      renameEsp32: unavailable,
+      removeEsp32: unavailable,
       registerCamera: unavailable,
+      updateCamera: unavailable,
+      removeCamera: unavailable,
       selectCamera: unavailable,
     },
     members: { list: unavailable, create: unavailable },

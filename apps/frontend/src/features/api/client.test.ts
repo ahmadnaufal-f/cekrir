@@ -267,12 +267,29 @@ describe('shipments, errors and UI boundary', () => {
       password: 'demo12345678',
     })
     await devices.registerEsp32('ESP32 demo')
-    expect((await devices.inventory()).esp32?.name).toBe('ESP32 demo')
+    const device = (await devices.inventory()).esp32!
+    expect(device.name).toBe('ESP32 demo')
+    await expect(
+      devices.renameEsp32(device.id, 'ESP32 teras'),
+    ).resolves.toMatchObject({
+      esp32: { id: device.id, name: 'ESP32 teras' },
+    })
     await client.auth.login({
       email: 'member@demo.test',
       password: 'demo12345678',
     })
     await expect(devices.inventory()).rejects.toMatchObject({ status: 403 })
+    await expect(devices.removeEsp32(device.id)).rejects.toMatchObject({
+      status: 403,
+    })
+    await expect(
+      devices.updateCamera('camera-demo-porch', { name: 'Kamera teras' }),
+    ).rejects.toMatchObject({ status: 403 })
+    await expect(
+      devices.removeCamera('camera-demo-porch'),
+    ).rejects.toMatchObject({
+      status: 403,
+    })
   })
   it('mock registration stays pending; admin role changes apply without replacing identity', async () => {
     const client = createApiMock()

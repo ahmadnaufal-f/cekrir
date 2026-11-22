@@ -50,7 +50,11 @@ export interface DeliveryService {
 export interface DeviceService {
   inventory(): Promise<DeviceInventory>
   registerEsp32(name: string): Promise<DeviceRegistration>
+  renameEsp32(id: string, name: string): Promise<DeviceInventory>
+  removeEsp32(id: string): Promise<DeviceInventory>
   registerCamera(input: CameraInput): Promise<DeviceInventory>
+  updateCamera(id: string, input: CameraInput): Promise<DeviceInventory>
+  removeCamera(id: string): Promise<DeviceInventory>
   selectCamera(id: string): Promise<DeviceInventory>
 }
 export interface MemberService {

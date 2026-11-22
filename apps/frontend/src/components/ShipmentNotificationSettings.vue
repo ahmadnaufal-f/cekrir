@@ -1,50 +1,80 @@
 <script setup lang="ts">
 import { onUnmounted, shallowRef, watch } from 'vue'
 import type { ApiServices } from '../features/api/contracts'
-import ShipmentAlert, { type ShipmentAlertContent } from './ShipmentAlert.vue'
+import {
+  canSendDeviceNotification,
+  requestNotificationPermission,
+  scheduleTestNotification,
+} from '../lib/notifications'
 
 const props = defineProps<{
   enabled: boolean
+  accountId: string
+  checkingPermission: boolean
+  preferenceMessage: string
   shipments: ApiServices['shipments']
 }>()
 const emit = defineEmits<{
   'update:enabled': [value: boolean]
-  open: [id: string]
 }>()
 
-const testAlert = shallowRef<ShipmentAlertContent | null>(null)
-let testRequest: AbortController | undefined
+const canTest = canSendDeviceNotification()
+const testRequest = shallowRef<AbortController | null>(null)
+const testMessage = shallowRef('')
 
-function dismissTest() {
-  testRequest?.abort()
-  testAlert.value = null
+function resetTest() {
+  testRequest.value?.abort()
+  testRequest.value = null
+  testMessage.value = ''
 }
 
 async function testNotification() {
-  testRequest?.abort()
+  if (
+    !props.enabled ||
+    !canTest ||
+    props.checkingPermission ||
+    testRequest.value
+  )
+    return
   const request = new AbortController()
-  testRequest = request
-  const title = 'Tes notifikasi paket'
-  testAlert.value = { title, message: 'Ini adalah contoh notifikasi paket.' }
-
-  const page = await props.shipments.list(0, request.signal).catch(() => null)
-  const shipment = page?.items[0]
-  if (shipment && !request.signal.aborted) {
-    testAlert.value = {
-      title,
-      message: `Ini adalah contoh notifikasi untuk paket ${shipment.resi_number}.`,
-      shipment_id: shipment.id,
+  testRequest.value = request
+  testMessage.value = ''
+  const accountId = props.accountId
+  try {
+    const permitted = await requestNotificationPermission()
+    if (request.signal.aborted) return
+    if (!permitted) {
+      testMessage.value =
+        'Izinkan notifikasi Cekrir di pengaturan perangkat untuk menjalankan tes.'
+      return
     }
+
+    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(2500)])
+    const page = await props.shipments.list(0, signal).catch(() => null)
+    if (request.signal.aborted) return
+    await scheduleTestNotification(
+      accountId,
+      page?.items[0]?.id,
+      () => !request.signal.aborted,
+    )
+    if (!request.signal.aborted)
+      testMessage.value =
+        'Notifikasi tes dikirim. Periksa panel notifikasi perangkat.'
+  } catch {
+    if (!request.signal.aborted)
+      testMessage.value = 'Notifikasi tes belum dapat dikirim. Coba lagi.'
+  } finally {
+    if (testRequest.value === request) testRequest.value = null
   }
 }
 
 watch(
   () => props.enabled,
   (enabled) => {
-    if (!enabled) dismissTest()
+    if (!enabled) resetTest()
   },
 )
-onUnmounted(dismissTest)
+onUnmounted(resetTest)
 </script>
 
 <template>
@@ -56,7 +86,11 @@ onUnmounted(dismissTest)
       <div>
         <h2 id="shipment-notifications-title">Notifikasi paket</h2>
         <p id="shipment-notifications-description" class="supporting">
-          Tampilkan notifikasi paket saat aplikasi terbuka.
+          {{
+            canTest
+              ? 'Tampilkan notifikasi paket di aplikasi dan di panel notifikasi perangkat.'
+              : 'Tampilkan notifikasi paket saat aplikasi terbuka.'
+          }}
         </p>
       </div>
       <button
@@ -64,6 +98,7 @@ onUnmounted(dismissTest)
         class="shipment-notification-settings__switch"
         role="switch"
         :aria-checked="enabled"
+        :disabled="checkingPermission"
         aria-labelledby="shipment-notifications-title"
         aria-describedby="shipment-notifications-description"
         @click="emit('update:enabled', !enabled)"
@@ -72,27 +107,28 @@ onUnmounted(dismissTest)
       </button>
     </div>
 
+    <p v-if="preferenceMessage" class="supporting" role="status">
+      {{ preferenceMessage }}
+    </p>
+
     <div class="shipment-notification-settings__test">
       <button
         type="button"
         class="button button--quiet"
-        :disabled="!enabled"
+        :disabled="!enabled || !canTest || checkingPermission || !!testRequest"
         @click="testNotification"
       >
-        Tes notifikasi
+        {{ testRequest ? 'Mengirim…' : 'Tes notifikasi' }}
       </button>
-      <p v-if="!enabled" class="supporting">
+      <p v-if="!canTest" class="supporting">
+        Tes notifikasi perangkat tersedia di aplikasi Android dan iOS.
+      </p>
+      <p v-else-if="!enabled" class="supporting">
         Aktifkan notifikasi paket untuk menjalankan tes.
       </p>
+      <p v-else class="supporting" role="status">{{ testMessage }}</p>
     </div>
   </section>
-  <ShipmentAlert
-    v-if="testAlert"
-    class="shipment-notification-settings__preview"
-    :notification="testAlert"
-    @open="emit('open', $event)"
-    @dismiss="dismissTest"
-  />
 </template>
 
 <style scoped>
@@ -149,10 +185,6 @@ onUnmounted(dismissTest)
   display: grid;
   justify-items: start;
   gap: 6px;
-}
-
-.shipment-notification-settings__preview {
-  margin-block: 0;
 }
 
 @media (prefers-reduced-motion: no-preference) {
