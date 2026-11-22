@@ -1,1028 +1,638 @@
 <script setup lang="ts">
-import DeviceSetupGuide from '../components/DeviceSetupGuide.vue'
+import { computed, nextTick, onUnmounted, shallowRef, watch } from 'vue'
+import { RouterLink } from 'vue-router'
 import AppIcon from '../components/AppIcon.vue'
-import { computed, onUnmounted, reactive, shallowRef, watch } from 'vue'
+import TabSelector from '../components/TabSelector.vue'
+import DeviceCard from '../components/DeviceCard.vue'
+import DeviceRegistrationDialog from '../components/DeviceRegistrationDialog.vue'
+import DeviceManagementDialog from '../components/DeviceManagementDialog.vue'
+import PageHeader from '../components/PageHeader.vue'
 import { adminCopy } from '../lib/admin-copy'
 import { deviceGuideCopy } from '../lib/device-guide-copy'
+import { isDeviceSetupComplete } from '../lib/device-setup-state'
+import { configuredReference, esp32SetupContent } from '../lib/setup-reference'
 import { ServiceError } from '../services/contracts'
-import type {
-  AppUser,
-  CameraInput,
-  CameraSummary,
-  DeviceInventory,
-} from '../types/app'
 import type { AppServices } from '../services/contracts'
+import type { CameraSummary, DeviceInventory } from '../types/app'
+import type {
+  DeviceCategory,
+  DeviceUser,
+  SetupStatus,
+  TabOption,
+} from '../types/device-ui'
 
-const props = defineProps<{ services: AppServices; user: AppUser }>()
-const emit = defineEmits<{ sessionExpired: [] }>()
+const props = defineProps<{
+  services?: Pick<AppServices, 'mode' | 'devices'>
+  user: DeviceUser
+  category: DeviceCategory
+  registrationRequest?: DeviceCategory | null
+}>()
+const emit = defineEmits<{
+  sessionExpired: []
+  'update:category': [category: DeviceCategory]
+  registrationHandled: []
+}>()
 
-type InventoryState = 'loading' | 'ready' | 'error'
-type DeviceOperation = 'esp32' | 'camera' | 'select' | null
+type Esp32Action = 'rename-esp32' | 'remove-esp32'
+type DeviceDialog =
+  | { action: 'register'; category: DeviceCategory }
+  | { action: Esp32Action; device: NonNullable<DeviceInventory['esp32']> }
+  | { action: 'edit-camera' | 'remove-camera'; device: CameraSummary }
 
+const categories: readonly DeviceCategory[] = ['esp32', 'bardi']
 const copy = adminCopy.devices
+const esp32SourceHref = configuredReference(esp32SetupContent, 'source')
 const inventory = shallowRef<DeviceInventory | null>(null)
-const inventoryState = shallowRef<InventoryState>('loading')
-const operation = shallowRef<DeviceOperation>(null)
+const inventoryState = shallowRef<'loading' | 'ready' | 'error'>('loading')
+const selecting = shallowRef(false)
 const errorMessage = shallowRef('')
-const esp32FieldError = shallowRef('')
-const cameraFieldErrors = shallowRef<Record<string, string>>({})
 const noticeMessage = shallowRef('')
-const credential = shallowRef<string | null>(null)
-const credentialVisible = shallowRef(false)
-const credentialNotice = shallowRef('')
-const esp32HelpOpen = shallowRef(false)
-const esp32Name = shallowRef('')
-const cameraForm = reactive({ name: '', url: '', username: '', password: '' })
+const dialog = shallowRef<DeviceDialog | null>(null)
 const isAdmin = computed(() => props.user.role === 'admin')
-const isBusy = computed(() => operation.value !== null)
 const selectedCameraId = computed(
   () => inventory.value?.selectedDeliveryCameraId ?? null,
 )
-const needsCameraGuide = computed(() => {
-  const cameras = inventory.value?.cameras
-  if (!cameras) return false
-  return (
-    cameras.length === 0 ||
-    !cameras.some((camera) => camera.id === selectedCameraId.value) ||
-    cameras.some((camera) => camera.configurationState === 'incomplete')
-  )
-})
-
-let requestGeneration = 0
-let disposed = false
-
-function isCurrent(generation: number): boolean {
-  return !disposed && generation === requestGeneration && isAdmin.value
+const esp32Description = computed(() =>
+  inventory.value?.esp32 ? copy.esp32ManageDescription : copy.esp32Description,
+)
+function status(category: DeviceCategory): SetupStatus | undefined {
+  if (!props.services) return undefined
+  if (inventoryState.value === 'loading') return 'loading'
+  if (inventoryState.value === 'error' || !inventory.value) return 'error'
+  return isDeviceSetupComplete(inventory.value, category)
+    ? 'complete'
+    : 'incomplete'
 }
+const tabs = computed<TabOption[]>(() => [
+  {
+    value: 'esp32',
+    label: copy.esp32Tab,
+    panelId: 'device-panel-esp32',
+    status: status('esp32'),
+  },
+  {
+    value: 'bardi',
+    label: copy.cameraTab,
+    panelId: 'device-panel-bardi',
+    status: status('bardi'),
+  },
+])
 
-function isUnauthorized(cause: unknown): boolean {
-  return cause instanceof ServiceError
-    ? cause.status === 401 || cause.code === 'UNAUTHENTICATED'
-    : typeof cause === 'object' &&
+let generation = 0
+let disposed = false
+function isCurrent(request: number) {
+  return !disposed && request === generation && isAdmin.value
+}
+function reportUnauthorized(cause: unknown, request: number): boolean {
+  const unauthorized =
+    cause instanceof ServiceError
+      ? cause.status === 401 || cause.code === 'UNAUTHENTICATED'
+      : typeof cause === 'object' &&
         cause !== null &&
         'status' in cause &&
         cause.status === 401
-}
-
-function isEsp32Limit(cause: unknown): boolean {
-  return cause instanceof ServiceError
-    ? cause.status === 409 || cause.code === 'ESP32_LIMIT_REACHED'
-    : typeof cause === 'object' &&
-        cause !== null &&
-        'status' in cause &&
-        cause.status === 409
-}
-
-function clearSensitiveState(): void {
-  credential.value = null
-  credentialVisible.value = false
-  credentialNotice.value = ''
-  cameraForm.password = ''
-}
-
-function resetScreenState(): void {
-  inventory.value = null
-  inventoryState.value = 'loading'
-  operation.value = null
-  errorMessage.value = ''
-  esp32FieldError.value = ''
-  cameraFieldErrors.value = {}
-  noticeMessage.value = ''
-  esp32HelpOpen.value = false
-  esp32Name.value = ''
-  cameraForm.name = ''
-  cameraForm.url = ''
-  cameraForm.username = ''
-  clearSensitiveState()
-}
-
-function reportUnauthorized(cause: unknown, generation: number): boolean {
-  if (isCurrent(generation) && isUnauthorized(cause)) {
+  if (isCurrent(request) && unauthorized) {
+    inventory.value = null
+    dialog.value = null
     emit('sessionExpired')
     return true
   }
   return false
 }
-
-async function loadInventory(generation: number): Promise<void> {
+async function loadInventory() {
+  const services = props.services
+  if (!services) return
+  const request = ++generation
   inventoryState.value = 'loading'
   errorMessage.value = ''
   try {
-    const result = await props.services.devices.inventory()
-    if (!isCurrent(generation)) return
+    const result = await services.devices.inventory()
+    if (!isCurrent(request)) return
     inventory.value = result
     inventoryState.value = 'ready'
   } catch (cause) {
-    if (!isCurrent(generation)) return
-    if (!reportUnauthorized(cause, generation)) {
+    if (!isCurrent(request)) return
+    if (!reportUnauthorized(cause, request)) {
+      inventory.value = null
       inventoryState.value = 'error'
-      errorMessage.value = copy.loadFailed
     }
   }
 }
-
-async function registerEsp32(): Promise<void> {
-  if (!isAdmin.value || isBusy.value) return
-  if (inventory.value?.esp32) {
+function chooseCategory(value: string) {
+  if (value === 'esp32' || value === 'bardi') {
+    errorMessage.value = ''
+    noticeMessage.value = ''
+    emit('update:category', value)
+  }
+}
+function openRegistration(category = props.category) {
+  if (
+    !isAdmin.value ||
+    !inventory.value ||
+    selecting.value ||
+    dialog.value ||
+    inventoryState.value !== 'ready'
+  )
+    return
+  if (category === 'esp32' && inventory.value.esp32) {
     noticeMessage.value = copy.esp32Limit
     return
   }
-  const name = esp32Name.value.trim()
-  if (!name) return
-
-  const generation = requestGeneration
-  operation.value = 'esp32'
-  esp32FieldError.value = ''
-  errorMessage.value = ''
-  noticeMessage.value = ''
-  try {
-    const result = await props.services.devices.registerEsp32(name)
-    if (!isCurrent(generation)) return
-    inventory.value = result.inventory
-    inventoryState.value = 'ready'
-    esp32Name.value = ''
-    if (result.credential) {
-      credential.value = result.credential
-      credentialVisible.value = false
-      credentialNotice.value = ''
-    } else {
-      noticeMessage.value = copy.credentialMissing
-    }
-  } catch (cause) {
-    if (!isCurrent(generation)) return
-    if (reportUnauthorized(cause, generation)) return
-    if (cause instanceof ServiceError && cause.status === 422)
-      esp32FieldError.value = cause.fieldErrors.name || ''
-    if (isEsp32Limit(cause)) {
-      noticeMessage.value = copy.esp32Limit
-      try {
-        const latest = await props.services.devices.inventory()
-        if (isCurrent(generation)) {
-          inventory.value = latest
-          inventoryState.value = 'ready'
-        }
-      } catch (refreshCause) {
-        if (reportUnauthorized(refreshCause, generation)) return
-        if (isCurrent(generation) && !inventory.value) {
-          inventoryState.value = 'error'
-        }
-      }
-    } else {
-      errorMessage.value = copy.esp32Failed
-    }
-  } finally {
-    if (isCurrent(generation)) operation.value = null
-  }
+  dialog.value = { action: 'register', category }
 }
-
-async function registerCamera(): Promise<void> {
-  if (!isAdmin.value || isBusy.value) return
-  const name = cameraForm.name.trim()
-  if (!name) return
-
-  const generation = requestGeneration
-  const url = cameraForm.url.trim()
-  const username = cameraForm.username.trim()
-  const password = cameraForm.password
-  cameraForm.password = ''
-  const input: CameraInput = { name }
-  if (url) {
-    input.connection = {
-      url,
-      ...(username ? { username } : {}),
-      ...(password ? { password } : {}),
-    }
-  }
-
-  operation.value = 'camera'
-  cameraFieldErrors.value = {}
-  errorMessage.value = ''
-  noticeMessage.value = ''
-  try {
-    const result = await props.services.devices.registerCamera(input)
-    if (!isCurrent(generation)) return
-    inventory.value = result
-    inventoryState.value = 'ready'
-    cameraForm.name = ''
-    cameraForm.url = ''
-    cameraForm.username = ''
-  } catch (cause) {
-    if (!isCurrent(generation)) return
-    if (cause instanceof ServiceError && cause.status === 422)
-      cameraFieldErrors.value = cause.fieldErrors
-    if (!reportUnauthorized(cause, generation))
-      errorMessage.value = copy.cameraFailed
-  } finally {
-    if (isCurrent(generation)) operation.value = null
-  }
+function openEsp32Management(action: Esp32Action) {
+  const device = inventory.value?.esp32
+  if (!isAdmin.value || !device || selecting.value || dialog.value) return
+  dialog.value = { action, device }
 }
-
-async function selectCamera(cameraId: string): Promise<void> {
-  if (!isAdmin.value || isBusy.value) return
-  if (!inventory.value?.cameras.some((camera) => camera.id === cameraId)) return
-
-  const generation = requestGeneration
-  operation.value = 'select'
+function openCameraManagement(
+  action: 'edit-camera' | 'remove-camera',
+  device: CameraSummary,
+) {
+  if (!isAdmin.value || selecting.value || dialog.value) return
+  dialog.value = { action, device }
+}
+function applyInventory(result: DeviceInventory) {
+  inventory.value = result
+  inventoryState.value = 'ready'
+  errorMessage.value = ''
+  noticeMessage.value = ''
+}
+function saved(result: DeviceInventory) {
+  applyInventory(result)
+  if (dialog.value?.action === 'edit-camera')
+    noticeMessage.value = copy.cameraUpdated
+}
+function managed(result: DeviceInventory) {
+  const operation = dialog.value
+  if (
+    !operation ||
+    operation.action === 'register' ||
+    operation.action === 'edit-camera'
+  )
+    return
+  const removedDeliveryCamera =
+    operation.action === 'remove-camera' &&
+    operation.device.id === selectedCameraId.value
+  applyInventory(result)
+  switch (operation.action) {
+    case 'rename-esp32':
+      noticeMessage.value = copy.esp32Renamed
+      break
+    case 'remove-esp32':
+      noticeMessage.value = copy.esp32Removed
+      break
+    case 'remove-camera':
+      noticeMessage.value =
+        removedDeliveryCamera && result.cameras.length
+          ? copy.deliveryCameraRemoved
+          : copy.cameraRemoved
+      break
+  }
+  void closeDeviceDialog()
+}
+async function closeDeviceDialog() {
+  dialog.value = null
+  await nextTick()
+  // A removed control cannot receive focus after the dialog closes.
+  if (document.activeElement === document.body)
+    document
+      .getElementById(`device-tabs-${props.category}`)
+      ?.focus({ preventScroll: true })
+}
+async function selectCamera(cameraId: string) {
+  const services = props.services
+  if (
+    !services ||
+    !isAdmin.value ||
+    selecting.value ||
+    dialog.value ||
+    !inventory.value?.cameras.some((camera) => camera.id === cameraId)
+  )
+    return
+  const request = generation
+  selecting.value = true
   errorMessage.value = ''
   noticeMessage.value = ''
   try {
-    const result = await props.services.devices.selectCamera(cameraId)
-    if (!isCurrent(generation)) return
-    inventory.value = result
-    inventoryState.value = 'ready'
+    const result = await services.devices.selectCamera(cameraId)
+    if (isCurrent(request)) inventory.value = result
   } catch (cause) {
-    if (!isCurrent(generation)) return
-    if (!reportUnauthorized(cause, generation))
+    if (!isCurrent(request)) return
+    if (!reportUnauthorized(cause, request))
       errorMessage.value = copy.selectionFailed
   } finally {
-    if (isCurrent(generation)) operation.value = null
+    if (isCurrent(request)) selecting.value = false
   }
 }
-
-function dismissCredential(): void {
-  clearSensitiveState()
-}
-
-function updateEsp32HelpOpen(event: Event): void {
-  const disclosure = event.currentTarget
-  if (disclosure instanceof HTMLDetailsElement)
-    esp32HelpOpen.value = disclosure.open
-}
-
-async function copyCredential(): Promise<void> {
-  const value = credential.value
-  if (!value) return
-  try {
-    if (!navigator.clipboard?.writeText)
-      throw new Error('Clipboard unavailable')
-    await navigator.clipboard.writeText(value)
-    credentialNotice.value = copy.credentialCopied
-  } catch {
-    credentialNotice.value = copy.credentialCopyFailed
-  }
-}
-
-function cameraConfigurationLabel(camera: CameraSummary): string {
-  return camera.configurationState === 'configured'
-    ? copy.cameraConfigured
-    : copy.cameraIncomplete
-}
-
 function cameraVerificationLabel(camera: CameraSummary): string {
   if (camera.verificationState === 'passed') return copy.verificationPassed
   if (camera.verificationState === 'failed') return copy.verificationFailed
   return copy.verificationNotTested
 }
-
 watch(
-  [() => props.user.id, () => props.user.householdId, () => props.user.role],
+  () =>
+    [
+      props.user.id,
+      props.user.householdId,
+      props.user.role,
+      props.services,
+    ] as const,
   () => {
-    requestGeneration += 1
-    resetScreenState()
-    if (isAdmin.value) void loadInventory(requestGeneration)
+    generation++
+    inventory.value = null
+    selecting.value = false
+    dialog.value = null
+    noticeMessage.value = ''
+    errorMessage.value = ''
+    inventoryState.value = 'loading'
+    if (isAdmin.value) void loadInventory()
   },
   { immediate: true, flush: 'sync' },
 )
-
+watch(
+  () => [props.registrationRequest, inventoryState.value] as const,
+  ([request, state]) => {
+    if (request && state === 'ready') {
+      openRegistration(request)
+      emit('registrationHandled')
+    }
+  },
+  { immediate: true },
+)
 onUnmounted(() => {
   disposed = true
-  requestGeneration += 1
-  clearSensitiveState()
+  generation++
+  inventory.value = null
 })
 </script>
 
 <template>
-  <section class="admin-screen devices-screen" aria-labelledby="devices-title">
-    <header class="admin-screen__header">
-      <h1 id="devices-title">{{ copy.title }}</h1>
-      <p class="admin-screen__intro">{{ copy.intro }}</p>
-    </header>
-
-    <p
-      v-if="!isAdmin"
-      class="admin-screen__banner admin-screen__banner--error"
-      role="alert"
-    >
+  <section class="devices-screen" aria-labelledby="devices-title">
+    <PageHeader :title="copy.title" title-id="devices-title">
+      <p>{{ copy.intro }}</p>
+    </PageHeader>
+    <p v-if="!isAdmin" class="banner banner--error" role="alert">
       {{ adminCopy.common.adminOnly }}
     </p>
-
     <template v-else>
-      <p
-        v-if="errorMessage"
-        class="admin-screen__banner admin-screen__banner--error"
-        role="alert"
-      >
+      <TabSelector
+        id="device-tabs"
+        :model-value="category"
+        :tabs="tabs"
+        :label="copy.tabLabel"
+        @update:model-value="chooseCategory"
+      />
+      <p v-if="services" class="devices-screen__status-note content-inset">
+        {{
+          services.mode === 'mock'
+            ? 'Mode demo. Perangkat dan pengaturannya disimulasikan.'
+            : ''
+        }}
+        {{ copy.setupStatusNote }}
+      </p>
+      <p v-else class="banner">
+        {{ deviceGuideCopy.common.registrationUnavailable }}
+      </p>
+      <p v-if="errorMessage" class="banner banner--error" role="alert">
         {{ errorMessage }}
       </p>
-      <p v-if="noticeMessage" class="admin-screen__banner" role="status">
+      <p v-if="noticeMessage" class="banner" role="status">
         {{ noticeMessage }}
       </p>
-
       <section
-        v-if="credential"
-        class="admin-panel credential-panel"
-        aria-labelledby="credential-title"
+        v-for="panelCategory in categories"
+        v-show="category === panelCategory"
+        :id="`device-panel-${panelCategory}`"
+        :key="panelCategory"
+        class="device-panel"
+        role="tabpanel"
+        :aria-labelledby="`device-tabs-${panelCategory}`"
+        :aria-busy="!!services && inventoryState === 'loading'"
+        tabindex="0"
       >
-        <h2 id="credential-title">{{ copy.credentialTitle }}</h2>
-        <p class="admin-panel__copy">{{ copy.credentialIntro }}</p>
-        <p
-          v-if="services.mode === 'mock'"
-          class="credential-panel__demo"
-          role="note"
-        >
-          {{ copy.demoCredentialLabel }}
+        <header class="device-panel__heading content-inset">
+          <h2>
+            {{
+              panelCategory === 'esp32' ? copy.esp32Title : copy.camerasTitle
+            }}
+          </h2>
+          <AppIcon :name="panelCategory === 'esp32' ? 'device' : 'camera'" />
+        </header>
+        <p v-if="services" class="device-panel__description content-inset">
+          {{
+            panelCategory === 'esp32'
+              ? esp32Description
+              : copy.camerasDescription
+          }}
         </p>
-        <p v-else class="credential-panel__device">{{ copy.esp32Title }}</p>
-        <label class="credential-field">
-          <span>{{ copy.identity }}</span>
-          <input :value="inventory?.esp32?.id ?? ''" readonly />
-        </label>
-        <label class="credential-field">
-          <span>{{ copy.credentialLabel }}</span>
-          <input
-            :type="credentialVisible ? 'text' : 'password'"
-            :value="credential"
-            readonly
-            autocomplete="off"
-            :aria-label="copy.credentialInputLabel"
-          />
-        </label>
-        <div class="credential-panel__actions">
+        <p
+          v-if="services && inventoryState === 'loading'"
+          class="device-panel__state"
+          role="status"
+        >
+          {{ adminCopy.common.loading }}
+        </p>
+        <div
+          v-else-if="services && inventoryState === 'error'"
+          class="device-panel__state"
+          role="alert"
+        >
+          <p>{{ copy.loadFailed }}</p>
           <button
-            class="admin-button admin-button--quiet"
+            class="button button--quiet"
             type="button"
-            @click="credentialVisible = !credentialVisible"
+            @click="loadInventory"
           >
-            <AppIcon :name="credentialVisible ? 'eyeOff' : 'eye'" />
-            {{ credentialVisible ? copy.hideCredential : copy.showCredential }}
-          </button>
-          <button
-            class="admin-button admin-button--primary"
-            type="button"
-            @click="copyCredential"
-          >
-            <AppIcon name="copy" />
-            {{ copy.copyCredential }}
+            <AppIcon name="refresh" />{{ adminCopy.common.retry }}
           </button>
         </div>
-        <p v-if="credentialNotice" class="admin-panel__notice" role="status">
-          {{ credentialNotice }}
-        </p>
-        <button
-          class="admin-button admin-button--quiet credential-panel__dismiss"
-          type="button"
-          @click="dismissCredential"
+        <template v-else-if="inventory">
+          <template v-if="panelCategory === 'esp32'">
+            <ul v-if="inventory.esp32" class="device-list">
+              <li>
+                <DeviceCard
+                  :id="inventory.esp32.id"
+                  :name="inventory.esp32.name"
+                  :description="copy.esp32Registered"
+                  :edit-label="copy.editEsp32"
+                  :busy="selecting"
+                  @edit="openEsp32Management('rename-esp32')"
+                  @remove="openEsp32Management('remove-esp32')"
+                />
+              </li>
+            </ul>
+            <p v-else class="device-panel__empty content-inset">
+              {{ copy.noEsp32 }}
+            </p>
+          </template>
+          <template v-else>
+            <p
+              v-if="!inventory.cameras.length"
+              class="device-panel__empty content-inset"
+            >
+              {{ copy.camerasEmpty }}
+            </p>
+            <ul v-else class="device-list">
+              <li v-for="camera in inventory.cameras" :key="camera.id">
+                <DeviceCard
+                  :id="camera.id"
+                  :name="camera.name"
+                  :description="
+                    camera.configurationState === 'configured'
+                      ? copy.cameraConfigured
+                      : copy.cameraIncomplete
+                  "
+                  :edit-label="copy.editCamera"
+                  :busy="selecting"
+                  @edit="openCameraManagement('edit-camera', camera)"
+                  @remove="openCameraManagement('remove-camera', camera)"
+                >
+                  <template #badge>
+                    <span
+                      class="camera-verification"
+                      :class="`camera-verification--${camera.verificationState}`"
+                      >{{ cameraVerificationLabel(camera) }}</span
+                    >
+                  </template>
+                  <template #actions>
+                    <span
+                      v-if="selectedCameraId === camera.id"
+                      class="selected-label"
+                      aria-current="true"
+                      ><AppIcon name="check" />{{ copy.selectedCamera }}</span
+                    >
+                    <button
+                      v-else
+                      class="button button--quiet camera-select"
+                      type="button"
+                      :disabled="selecting"
+                      @click="selectCamera(camera.id)"
+                    >
+                      <AppIcon name="camera" />{{
+                        selecting ? copy.selectingCamera : copy.selectCamera
+                      }}
+                    </button>
+                  </template>
+                </DeviceCard>
+              </li>
+            </ul>
+          </template>
+        </template>
+        <div
+          v-if="panelCategory === 'esp32' || !services || inventory"
+          class="device-panel__actions content-inset"
+          :class="{
+            'device-panel__actions--registered':
+              panelCategory === 'esp32' && inventory?.esp32,
+          }"
         >
-          <AppIcon name="check" />
-          {{ copy.credentialDismiss }}
-        </button>
+          <RouterLink
+            v-if="
+              panelCategory === 'esp32' ||
+              !services ||
+              (inventory && !isDeviceSetupComplete(inventory, panelCategory))
+            "
+            class="button button--quiet device-panel__guide"
+            :to="{
+              name: panelCategory === 'esp32' ? 'esp32-setup' : 'bardi-setup',
+            }"
+          >
+            <AppIcon name="book" />{{
+              panelCategory === 'esp32' ? copy.guideEsp32 : copy.guideCamera
+            }}
+          </RouterLink>
+          <a
+            v-if="
+              panelCategory === 'esp32' && inventory?.esp32 && esp32SourceHref
+            "
+            class="button button--quiet device-panel__source"
+            :href="esp32SourceHref"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <AppIcon name="external" />{{ deviceGuideCopy.esp32.sourceLink }}
+          </a>
+          <button
+            v-if="inventory && (panelCategory === 'bardi' || !inventory.esp32)"
+            class="button button--primary"
+            type="button"
+            :disabled="selecting"
+            @click="openRegistration(panelCategory)"
+          >
+            <AppIcon name="plus" />{{ copy.registerDevice }}
+          </button>
+        </div>
       </section>
-
-      <template v-else>
-        <section class="admin-panel" aria-labelledby="esp32-heading">
-          <div class="admin-panel__heading">
-            <div>
-              <h2 id="esp32-heading">
-                <AppIcon name="device" /> {{ copy.esp32Title }}
-              </h2>
-            </div>
-            <span v-if="inventory?.esp32" class="admin-pill">{{
-              copy.registeredLabel
-            }}</span>
-          </div>
-          <p class="admin-panel__copy">{{ copy.esp32Description }}</p>
-
-          <DeviceSetupGuide
-            v-if="inventoryState === 'ready' && !inventory?.esp32"
-            :services="props.services"
-            :user="props.user"
-            kind="esp32"
-            @session-expired="emit('sessionExpired')"
-          />
-
-          <p
-            v-if="inventoryState === 'loading'"
-            class="admin-screen__status"
-            role="status"
-          >
-            {{ adminCopy.common.loading }}
-          </p>
-          <div v-else-if="inventoryState === 'error'" class="admin-empty">
-            <p>{{ copy.loadFailed }}</p>
-            <button
-              class="admin-button admin-button--quiet"
-              type="button"
-              @click="loadInventory(requestGeneration)"
-            >
-              <AppIcon name="refresh" />
-              {{ adminCopy.common.retry }}
-            </button>
-          </div>
-          <div v-else-if="inventory?.esp32" class="device-summary">
-            <div class="device-summary__body">
-              <strong>{{ inventory.esp32.name }}</strong>
-              <span>{{ copy.esp32Registered }}</span>
-              <small>{{ copy.identity }} · {{ inventory.esp32.id }}</small>
-            </div>
-          </div>
-          <details
-            v-if="inventoryState === 'ready' && inventory?.esp32"
-            :key="`${props.user.id}:${props.user.householdId}:${props.user.role}`"
-            class="device-help-disclosure"
-            @toggle="updateEsp32HelpOpen"
-          >
-            <summary>{{ deviceGuideCopy.esp32.disclosure }}</summary>
-            <DeviceSetupGuide
-              v-if="esp32HelpOpen"
-              :services="props.services"
-              :user="props.user"
-              kind="esp32"
-              @session-expired="emit('sessionExpired')"
-            />
-          </details>
-          <form
-            v-if="inventoryState === 'ready' && !inventory?.esp32"
-            class="admin-form admin-form--inline"
-            @submit.prevent="registerEsp32"
-          >
-            <label class="admin-field">
-              <span>{{ copy.esp32Name }}</span>
-              <input
-                v-model.trim="esp32Name"
-                required
-                maxlength="80"
-                :placeholder="copy.esp32NamePlaceholder"
-                autocomplete="off"
-                :aria-invalid="!!esp32FieldError"
-                aria-describedby="esp32-name-error"
-              />
-              <span
-                v-if="esp32FieldError"
-                id="esp32-name-error"
-                class="admin-field__error"
-                >{{ esp32FieldError }}</span
-              >
-            </label>
-            <button
-              class="admin-button admin-button--primary"
-              type="submit"
-              :disabled="isBusy || inventoryState !== 'ready'"
-            >
-              <AppIcon name="plus" />
-              {{ operation === 'esp32' ? copy.savingEsp32 : copy.addEsp32 }}
-            </button>
-          </form>
-        </section>
-
-        <section class="admin-panel" aria-labelledby="cameras-heading">
-          <div class="admin-panel__heading">
-            <div>
-              <h2 id="cameras-heading">
-                <AppIcon name="camera" /> {{ copy.camerasTitle }}
-              </h2>
-            </div>
-            <span class="admin-pill">{{ inventory?.cameras.length ?? 0 }}</span>
-          </div>
-          <p class="admin-panel__copy">{{ copy.camerasDescription }}</p>
-
-          <p
-            v-if="inventoryState === 'loading'"
-            class="admin-screen__status"
-            role="status"
-          >
-            {{ adminCopy.common.loading }}
-          </p>
-          <div v-else-if="inventoryState === 'error'" class="admin-empty">
-            <p>{{ copy.loadFailed }}</p>
-            <button
-              class="admin-button admin-button--quiet"
-              type="button"
-              @click="loadInventory(requestGeneration)"
-            >
-              <AppIcon name="refresh" />
-              {{ adminCopy.common.retry }}
-            </button>
-          </div>
-          <p v-else-if="!inventory?.cameras.length" class="admin-empty">
-            {{ copy.camerasEmpty }}
-          </p>
-          <ul v-else class="camera-list">
-            <li
-              v-for="camera in inventory.cameras"
-              :key="camera.id"
-              class="camera-card"
-            >
-              <div class="camera-card__heading">
-                <div>
-                  <h3>{{ camera.name }}</h3>
-                  <p>{{ cameraConfigurationLabel(camera) }}</p>
-                </div>
-                <span
-                  class="camera-card__state"
-                  :class="`camera-card__state--${camera.verificationState}`"
-                >
-                  {{ cameraVerificationLabel(camera) }}
-                </span>
-              </div>
-              <div class="camera-card__footer">
-                <span
-                  v-if="selectedCameraId === camera.id"
-                  class="selected-label"
-                  aria-current="true"
-                >
-                  <AppIcon name="check" />
-                  {{ copy.selectedCamera }}
-                </span>
-                <span v-else class="camera-card__not-selected">{{
-                  copy.notSelected
-                }}</span>
-                <button
-                  v-if="selectedCameraId !== camera.id"
-                  class="admin-button admin-button--quiet"
-                  type="button"
-                  :disabled="isBusy"
-                  @click="selectCamera(camera.id)"
-                >
-                  <AppIcon name="camera" />
-                  {{
-                    operation === 'select'
-                      ? copy.selectingCamera
-                      : copy.selectCamera
-                  }}
-                </button>
-              </div>
-            </li>
-          </ul>
-
-          <DeviceSetupGuide
-            v-if="inventoryState === 'ready' && needsCameraGuide"
-            :services="props.services"
-            :user="props.user"
-            kind="bardi"
-            @session-expired="emit('sessionExpired')"
-          />
-
-          <form class="admin-form camera-form" @submit.prevent="registerCamera">
-            <h3>{{ copy.registerCameraTitle }}</h3>
-            <label class="admin-field">
-              <span>{{ copy.cameraName }}</span>
-              <input
-                v-model.trim="cameraForm.name"
-                required
-                maxlength="80"
-                :placeholder="copy.cameraNamePlaceholder"
-                autocomplete="off"
-                :aria-invalid="!!cameraFieldErrors.name"
-                aria-describedby="camera-name-error"
-              />
-              <span
-                v-if="cameraFieldErrors.name"
-                id="camera-name-error"
-                class="admin-field__error"
-                >{{ cameraFieldErrors.name }}</span
-              >
-            </label>
-            <details class="camera-form__details">
-              <summary>{{ copy.connectionDetails }}</summary>
-              <div class="camera-form__connection">
-                <label class="admin-field">
-                  <span>{{ copy.connectionUrl }}</span>
-                  <input
-                    v-model.trim="cameraForm.url"
-                    type="url"
-                    :placeholder="copy.connectionUrlPlaceholder"
-                    autocomplete="off"
-                  />
-                </label>
-                <label class="admin-field">
-                  <span>{{ copy.connectionUsername }}</span>
-                  <input
-                    v-model.trim="cameraForm.username"
-                    autocomplete="off"
-                  />
-                </label>
-                <label class="admin-field">
-                  <span>{{ copy.connectionPassword }}</span>
-                  <input
-                    v-model="cameraForm.password"
-                    type="password"
-                    autocomplete="off"
-                  />
-                </label>
-                <p class="admin-field__help">{{ copy.connectionHelp }}</p>
-              </div>
-            </details>
-            <button
-              class="admin-button admin-button--primary"
-              type="submit"
-              :disabled="isBusy || inventoryState !== 'ready'"
-            >
-              <AppIcon name="plus" />
-              {{ operation === 'camera' ? copy.savingCamera : copy.addCamera }}
-            </button>
-          </form>
-        </section>
-      </template>
+      <DeviceRegistrationDialog
+        v-if="
+          services &&
+          inventory &&
+          (dialog?.action === 'register' || dialog?.action === 'edit-camera')
+        "
+        :services="services"
+        :user="user"
+        :kind="dialog.action === 'register' ? dialog.category : 'bardi'"
+        :inventory="inventory"
+        :camera-to-edit="
+          dialog.action === 'edit-camera' ? dialog.device : undefined
+        "
+        @saved="saved"
+        @close="closeDeviceDialog"
+        @session-expired="emit('sessionExpired')"
+      />
+      <DeviceManagementDialog
+        v-else-if="
+          services &&
+          dialog &&
+          dialog.action !== 'register' &&
+          dialog.action !== 'edit-camera'
+        "
+        :devices="services.devices"
+        :device="dialog.device"
+        :action="dialog.action"
+        :clears-delivery-camera="
+          dialog.action === 'remove-camera' &&
+          selectedCameraId === dialog.device.id
+        "
+        @updated="managed"
+        @close="closeDeviceDialog"
+        @session-expired="emit('sessionExpired')"
+      />
     </template>
   </section>
 </template>
 
 <style scoped>
-.admin-screen {
-  width: min(100%, 920px);
-  margin: 0 auto;
-  padding: 44px 0 64px;
+.devices-screen {
+  padding-bottom: 64px;
   color: #233d37;
 }
-
-.admin-screen__header {
-  margin-bottom: 28px;
+.devices-screen > .banner {
+  padding-inline: var(--card-inset);
 }
-
-.admin-panel__label {
-  color: #53675a;
-  margin-bottom: 5px;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  letter-spacing: 1.7px;
-  line-height: 1.5;
-  text-transform: uppercase;
-}
-
-.admin-screen__header h1 {
-  margin: 0 0 10px;
-  font-size: 1.75rem;
-  letter-spacing: -1.5px;
-  line-height: 1.15;
-}
-
-.admin-screen__intro,
-.admin-panel__copy {
-  max-width: 640px;
+.device-panel__description {
+  max-width: 65ch;
   color: #53675a;
   font-size: 0.875rem;
   line-height: 1.7;
 }
-
-.admin-screen__banner {
-  margin-bottom: 16px;
-  padding: 14px 16px;
-  border: 1px solid #d3ddc7;
-  border-radius: 8px;
-  background: #e9eedf;
-  color: #526b46;
-  font-size: 0.875rem;
-  line-height: 1.6;
-}
-
-.admin-screen__banner--error {
-  border-color: #e6ccba;
-  background: #f9e9df;
-  color: #925b3a;
-}
-
-.admin-panel {
-  margin-top: 18px;
-  padding: clamp(20px, 4vw, 28px);
-  border: 1px solid #e0e4d9;
-  border-radius: 12px;
-  background: #fffefa;
-  box-shadow: 0 10px 28px #233d3708;
-}
-
-.admin-panel__heading,
-.camera-card__heading,
-.camera-card__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.admin-panel__heading h2,
-.credential-panel h2 {
-  margin-top: 5px;
-  font-size: 1.25rem;
-  letter-spacing: -0.5px;
-}
-
-.admin-panel__copy {
-  margin-top: 12px;
-  font-size: 0.875rem;
-}
-
-.admin-pill {
-  flex: 0 0 auto;
-  padding: 7px 10px;
-  border: 1px solid #d7dfd0;
-  border-radius: 999px;
-  background: #eef2e8;
-  color: #536c53;
-  font-size: 0.8125rem;
-}
-
-.admin-screen__status,
-.admin-empty {
-  margin-top: 18px;
-  padding: 16px;
-  border: 1px dashed #cfd8ca;
-  border-radius: 8px;
+.devices-screen__status-note {
+  margin: 12px 0 24px;
   color: #53675a;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   line-height: 1.6;
 }
-
-.admin-empty .admin-button {
-  margin-top: 12px;
-}
-
-.device-summary {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  margin-top: 20px;
-  padding: 18px;
-  border-radius: 9px;
-  background: #f0f2e9;
-}
-
-.device-summary__body {
-  display: grid;
-  gap: 4px;
+.device-panel {
   min-width: 0;
 }
-
-.device-summary__body strong {
-  overflow-wrap: anywhere;
-  font-size: 0.9375rem;
+.device-panel__heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
 }
-
-.device-summary__body span,
-.device-summary__body small {
+.device-panel__heading .app-icon {
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+.device-panel__heading h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.4;
+}
+.device-panel__state {
+  margin: 24px 0;
+  padding: 20px var(--card-inset);
+  border: 1px solid #dfe4d9;
+  border-radius: 12px;
+  background: #fffefa;
   color: #53675a;
-  font-size: 0.8125rem;
-  line-height: 1.5;
+  line-height: 1.6;
+}
+.device-panel__state .button {
+  margin-top: 14px;
+}
+.device-panel__empty {
+  margin: 24px 0 0;
+  color: #53675a;
+  line-height: 1.6;
+}
+.device-panel__actions {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  margin-top: 24px;
+}
+.device-panel__actions--registered {
+  display: flex;
+  flex-wrap: wrap;
+}
+.device-panel__actions .button {
+  min-height: 44px;
+  max-width: 100%;
+  gap: 8px;
+  padding: 12px 18px;
+  text-align: center;
+  text-decoration: none;
   overflow-wrap: anywhere;
 }
-
-.device-help-disclosure {
-  margin-top: 16px;
-  color: #536c53;
+.device-panel__actions--registered .button {
+  gap: 6px;
+  padding: 0;
+  background: transparent;
+  color: #234e41;
   font-size: 0.8125rem;
-}
-
-.device-help-disclosure summary {
-  width: fit-content;
-  min-height: 44px;
-  padding: 11px 0;
-  cursor: pointer;
-  font-weight: 600;
   text-decoration: underline;
-  text-decoration-color: #9aab94;
   text-underline-offset: 3px;
 }
-
-.device-help-disclosure :deep(.device-guide) {
-  margin-top: 8px;
+.device-panel__actions--registered .app-icon {
+  width: 1em;
+  height: 1em;
 }
-
-.admin-form {
-  display: grid;
-  gap: 14px;
-  margin-top: 20px;
-}
-
-.admin-form--inline {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-}
-
-.admin-field,
-.credential-field {
-  display: grid;
-  gap: 7px;
-  color: #435d4c;
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.admin-field input,
-.credential-field input {
-  width: 100%;
-  min-height: 46px;
-  padding: 11px 13px;
-  border: 1px solid #d6ded0;
-  border-radius: 7px;
-  background: #fffefa;
-  color: #233d37;
-  font: inherit;
-  font-size: 0.875rem;
-}
-
-.admin-field input::placeholder {
-  color: #53675a;
-}
-
-.admin-field input:focus,
-.credential-field input:focus {
-  outline: 2px solid #8da88e;
-  outline-offset: 2px;
-}
-
-.admin-button {
-  gap: 8px;
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  justify-content: center;
-  padding: 11px 15px;
-  border: 0;
-  border-radius: 7px;
-  font: inherit;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  text-align: center;
-}
-
-.admin-button--primary {
-  background: #234e41;
-  color: #f6f7ef;
-}
-
-.admin-button--primary:hover:not(:disabled) {
-  background: #173e32;
-}
-
-.admin-button--quiet {
-  background: #eef2e8;
-  color: #536c53;
-}
-
-.admin-button:disabled {
-  cursor: default;
-  opacity: 0.58;
-}
-
-.camera-list {
+.device-list {
   display: grid;
   gap: 12px;
-  margin: 20px 0 0;
+  margin: 24px 0 0;
   padding: 0;
   list-style: none;
 }
-
-.camera-card {
-  min-width: 0;
-  padding: 16px;
-  border: 1px solid #e3e8dd;
-  border-radius: 9px;
-  background: #fbfcf7;
-}
-
-.camera-card__heading {
-  align-items: flex-start;
-}
-
-.camera-card__heading h3,
-.camera-form h3 {
-  font-size: 0.9375rem;
-  font-weight: 650;
-}
-
-.camera-card__heading p,
-.camera-card__not-selected {
-  margin-top: 5px;
-  color: #53675a;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-}
-
-.camera-card__state {
-  max-width: 180px;
+.camera-verification {
+  max-width: 100%;
   padding: 6px 8px;
   border-radius: 6px;
   background: #f0efe6;
   color: #6f6342;
   font-size: 0.8125rem;
-  line-height: 1.4;
+  line-height: 1.5;
   text-align: center;
+  overflow-wrap: anywhere;
 }
-
-.camera-card__state--passed {
+.camera-verification--passed {
   background: #e4efe6;
-  color: #417453;
+  color: #326143;
 }
-
-.camera-card__state--failed {
+.camera-verification--failed {
   background: #fae9df;
   color: #925b3a;
 }
-
-.camera-card__footer {
-  margin-top: 15px;
-  padding-top: 13px;
-  border-top: 1px solid #e9ece3;
+.camera-select {
+  gap: 8px;
+  text-align: start;
 }
-
 .selected-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: #426749;
   font-size: 0.8125rem;
-  font-weight: 700;
+  font-weight: 650;
+  line-height: 1.5;
 }
-
-.selected-label span {
-  margin-right: 4px;
-}
-
-.camera-form {
-  padding-top: 20px;
-  border-top: 1px solid #e9ece3;
-}
-
-.camera-form__details {
-  color: #536c53;
-  font-size: 0.8125rem;
-}
-
-.camera-form__details summary {
-  min-height: 40px;
-  padding-top: 10px;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.camera-form__connection {
-  display: grid;
-  gap: 14px;
-  padding: 10px 0 0;
-}
-
-.admin-field__help {
-  margin-top: -5px;
-  color: #53675a;
-  font-size: 0.8125rem;
-  line-height: 1.6;
-}
-
-.credential-panel {
-  border-color: #d4dfcf;
-  background: #f8faf4;
-}
-
-.credential-panel__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.credential-field {
-  margin-top: 18px;
-}
-
-.credential-panel__dismiss {
-  margin-top: 20px;
-}
-
-.credential-panel__demo,
-.credential-panel__device {
-  display: inline-block;
-  margin-top: 14px;
-  padding: 7px 10px;
-  border: 1px solid #d7dfd0;
-  border-radius: 7px;
-  background: #eef2e8;
-  color: #536c53;
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.admin-panel__notice {
-  margin-top: 12px;
-  color: #536c53;
-  font-size: 0.8125rem;
-}
-
-@media (max-width: 620px) {
-  .admin-screen {
-    padding: 30px 0 48px;
-  }
-
-  .admin-form--inline {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .admin-form--inline .admin-button {
-    width: 100%;
-  }
-
-  .camera-card__heading {
-    flex-direction: column;
-  }
-
-  .camera-card__footer {
-    align-items: flex-start;
-    flex-direction: column;
+@media (max-width: 640px) {
+  .devices-screen {
+    padding-bottom: 46px;
   }
 }
 </style>

@@ -1,10 +1,28 @@
 import type { SetupContent } from '../types/app'
+import type { AppServices } from '../services/contracts'
 
 export type SetupReferenceTarget = 'source' | 'guide'
 
 const esp32Paths: Record<SetupReferenceTarget, string> = {
   source: 'apps/esp32/src/main.cpp',
   guide: 'apps/esp32/README.md',
+}
+
+export const esp32SetupContent: SetupContent = {
+  kind: 'esp32',
+  readiness: 'scaffold',
+  sourceUrl: esp32Paths.source,
+  guideUrl: esp32Paths.guide,
+}
+
+export const deviceGuideServices: Pick<AppServices, 'setup'> = {
+  setup: {
+    async content(kind) {
+      return kind === 'esp32'
+        ? esp32SetupContent
+        : { kind, readiness: 'pending', sourceUrl: null, guideUrl: null }
+    },
+  },
 }
 
 const repository = 'https://github.com/ahmadnaufal-f/cekrir'

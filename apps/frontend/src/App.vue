@@ -1,80 +1,174 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 import type {
   ApiServices,
   PackageNotification,
   User,
 } from './features/api/contracts'
-import { parseApiRoute, shipmentRoute, type Route } from './features/api/routes'
-import ApiAuth from './features/ApiAuth.vue'
-import ShipmentView from './features/ShipmentView.vue'
-import NotificationFeed from './features/NotificationFeed.vue'
-import UserRoles from './features/UserRoles.vue'
-import AppIcon from './components/AppIcon.vue'
+import AppHeader from './components/AppHeader.vue'
+import AppNavigation from './components/AppNavigation.vue'
+import ShipmentAlert from './components/ShipmentAlert.vue'
+import {
+  canSendDeviceNotification,
+  listenForShipmentNotificationTaps,
+  requestNotificationPermission,
+  showPackageNotification,
+  type NotificationShipmentTarget,
+} from './lib/notifications'
+import { deviceGuideServices } from './lib/setup-reference'
+import { loginRoute, signedInRoute } from './router'
+import type { DeviceCategory } from './types/device-ui'
 const { services } = defineProps<{ services: ApiServices }>()
+const router = useRouter()
+const route = useRoute()
 const user = shallowRef<User | null>(services.user())
-const route = ref<Route>(parseApiRoute(location.hash))
+const accountName = computed(() => user.value?.full_name?.trim())
+const isAdmin = computed(() => user.value?.role === 'admin')
+const modeLabel = computed(() =>
+  services.mode === 'mock' ? 'Demo · data simulasi' : 'Mode live',
+)
+const onShipmentList = computed(() => route.name === 'shipments')
+const inSettings = computed(() => route.name === 'settings')
 const revision = ref(0)
 const liveStatus = ref('unavailable')
 const alert = shallowRef<PackageNotification | null>(null)
+const shipmentNotificationsEnabled = ref(true)
+const notificationPermissionRequest = shallowRef<symbol | null>(null)
+const notificationSettingMessage = ref('')
 const notice = ref('')
-let pendingLink: Route | null = route.value.startsWith('/shipments/')
-  ? route.value
-  : null
-let disconnect: (() => void) | null = null
-const id = computed(() =>
-  route.value.startsWith('/shipments/')
-    ? decodeURIComponent(route.value.slice(11))
-    : null,
+const deviceCategory = shallowRef<DeviceCategory>('esp32')
+const registrationRequest = shallowRef<DeviceCategory | null>(null)
+const guideKind = computed(() => route.meta.guide)
+const inFocusedPage = computed(
+  () =>
+    !!user.value &&
+    (route.name === 'shipment-detail' || (isAdmin.value && !!guideKind.value)),
 )
-const nav = computed(() => [
-  { path: '/shipments' as Route, label: 'Paket', icon: 'package' as const },
-  {
-    path: '/notifications' as Route,
-    label: 'Notifikasi',
-    icon: 'bell' as const,
-  },
-  ...(user.value?.role === 'admin'
-    ? [{ path: '/members' as Route, label: 'Pengguna', icon: 'users' as const }]
-    : []),
-  { path: '/settings' as Route, label: 'Akun', icon: 'user' as const },
-])
-function navigate(value: Route, replace = false) {
-  route.value = value
-  if (replace) history.replaceState(null, '', `#${value}`)
-  else location.hash = value
+const showNavigation = computed(
+  () => isAdmin.value && !inSettings.value && !inFocusedPage.value,
+)
+const deviceServices = computed(
+  () =>
+    services.devices && {
+      mode: services.mode,
+      devices: services.devices,
+    },
+)
+let disconnect: (() => void) | null = null
+let stopNotificationTaps: (() => void) | undefined
+let pendingNotificationShipment: NotificationShipmentTarget | null = null
+let signingOut = false
+function leaveDeviceGuide(register = false) {
+  registrationRequest.value = register ? (guideKind.value ?? null) : null
+  void router.push({ name: 'devices' })
+}
+function backFromSettings() {
+  if (router.options.history.state.settingsOpenedInApp) router.back()
+  else void router.replace({ name: 'shipments' })
 }
 function focusMain() {
   document.getElementById('main-content')?.focus()
 }
-function changedHash() {
-  route.value = parseApiRoute(location.hash)
+function shipmentLocation(shipmentId: string) {
+  return { name: 'shipment-detail', params: { id: shipmentId } }
 }
-function openShipment(value: string) {
-  navigate(shipmentRoute(value))
+function openShipment(shipmentId: string) {
+  void router.push(shipmentLocation(shipmentId))
+}
+function openShipmentAlert(shipmentId: string) {
+  openShipment(shipmentId)
+  alert.value = null
+}
+function openDeviceNotificationShipment(target: NotificationShipmentTarget) {
+  if (!user.value) {
+    pendingNotificationShipment = target
+    return
+  }
+  if (user.value.id !== target.accountId) return
+  if (
+    target.kind === 'report' &&
+    alert.value?.shipment_id === target.shipmentId
+  )
+    alert.value = null
+  openShipment(target.shipmentId)
+}
+function shipmentNotificationKey(userId: string) {
+  return `cekrir:${services.mode}:shipment-notifications:${userId}`
+}
+function readShipmentNotificationSetting(userId: string) {
+  try {
+    return localStorage.getItem(shipmentNotificationKey(userId)) !== 'off'
+  } catch {
+    return true
+  }
+}
+async function setShipmentNotifications(enabled: boolean) {
+  const accountId = user.value?.id
+  if (!accountId || notificationPermissionRequest.value) return
+  notificationSettingMessage.value = ''
+  if (enabled && canSendDeviceNotification()) {
+    const request = Symbol()
+    notificationPermissionRequest.value = request
+    try {
+      const permitted = await requestNotificationPermission()
+      if (notificationPermissionRequest.value !== request) return
+      if (!permitted) {
+        notificationSettingMessage.value =
+          'Izinkan notifikasi Cekrir di pengaturan perangkat untuk mengaktifkan notifikasi paket.'
+        return
+      }
+    } catch {
+      if (notificationPermissionRequest.value === request)
+        notificationSettingMessage.value =
+          'Izin notifikasi perangkat belum dapat diperiksa. Coba lagi.'
+      return
+    } finally {
+      if (notificationPermissionRequest.value === request)
+        notificationPermissionRequest.value = null
+    }
+  }
+  if (user.value?.id !== accountId) return
+  shipmentNotificationsEnabled.value = enabled
+  if (!enabled) alert.value = null
+  try {
+    localStorage.setItem(
+      shipmentNotificationKey(accountId),
+      enabled ? 'on' : 'off',
+    )
+  } catch {
+    // Keep the preference for the current session if storage is unavailable.
+  }
 }
 function logout() {
-  pendingLink = null
-  alert.value = null
+  signingOut = true
   services.auth.logout()
-  notice.value = 'Anda telah keluar.'
-  navigate('/login', true)
+  signingOut = false
 }
 const unsubscribe = services.subscribe((next) => {
   const previous = user.value
   user.value = next
   if (!next && previous) {
-    notice.value = 'Sesi berakhir. Silakan masuk lagi.'
-    pendingLink = id.value ? shipmentRoute(id.value) : null
+    notice.value = signingOut
+      ? 'Anda telah keluar.'
+      : 'Sesi berakhir. Silakan masuk lagi.'
     alert.value = null
-    navigate('/login', true)
+    void router.replace(signingOut ? { name: 'login' } : loginRoute(route))
   }
   if (next && !previous) {
     notice.value = ''
-    const target = pendingLink
-    pendingLink = null
-    navigate(target || '/shipments', true)
+    deviceCategory.value = 'esp32'
+    registrationRequest.value = null
+    const target = pendingNotificationShipment
+    pendingNotificationShipment = null
+    void router.replace(
+      target?.accountId === next.id
+        ? shipmentLocation(target.shipmentId)
+        : signedInRoute(router, route.query.redirect),
+    )
   }
+  if (next && previous && route.meta.requiresAdmin && next.role !== 'admin')
+    void router.replace({ name: 'shipments' })
 })
 watch(
   () => user.value?.id,
@@ -82,10 +176,23 @@ watch(
     disconnect?.()
     disconnect = null
     alert.value = null
+    notificationPermissionRequest.value = null
+    notificationSettingMessage.value = ''
+    shipmentNotificationsEnabled.value = value
+      ? readShipmentNotificationSetting(value)
+      : true
     if (value)
       disconnect = services.notifications.connect({
         event(notification) {
-          alert.value = notification
+          if (shipmentNotificationsEnabled.value) {
+            alert.value = notification
+            void showPackageNotification(
+              value,
+              notification,
+              () =>
+                user.value?.id === value && shipmentNotificationsEnabled.value,
+            ).catch(() => undefined)
+          }
           revision.value++
         },
         ready() {
@@ -99,154 +206,147 @@ watch(
   { immediate: true },
 )
 watch(
-  [route, () => user.value?.role],
-  () => {
-    if (!user.value && route.value !== '/login') {
-      if (id.value) pendingLink = route.value
-      navigate('/login', true)
-    } else if (
-      user.value &&
-      (route.value === '/login' ||
-        (route.value === '/members' && user.value.role !== 'admin'))
-    )
-      navigate('/shipments', true)
+  guideKind,
+  (kind) => {
+    if (kind) deviceCategory.value = kind
   },
   { immediate: true },
 )
-watch(route, () =>
-  queueMicrotask(() => {
-    window.scrollTo(0, 0)
+watch(
+  () => route.fullPath,
+  () => {
+    if (route.name !== 'devices') registrationRequest.value = null
     document.getElementById('main-content')?.focus({ preventScroll: true })
-  }),
+  },
+  { flush: 'post' },
 )
+
+const screenKey = computed(() => {
+  const account = user.value
+  return onShipmentList.value || route.name === 'shipment-detail'
+    ? `shipments:${account?.id}:${account?.role}`
+    : `${String(route.name)}:${account?.id}`
+})
+
+const screenBindings = computed(() => {
+  const account = user.value
+  if (route.name === 'login') return { services }
+  if (!account || (route.meta.requiresAdmin && account.role !== 'admin'))
+    return null
+
+  switch (route.name) {
+    case 'shipments':
+    case 'shipment-detail':
+      return {
+        services,
+        user: account,
+        id: typeof route.params.id === 'string' ? route.params.id : null,
+        revision: revision.value,
+        notifiedShipmentId: alert.value?.shipment_id,
+        onOpen: openShipment,
+        onBack: () => router.push({ name: 'shipments' }),
+      }
+    case 'devices':
+      return {
+        category: deviceCategory.value,
+        'onUpdate:category': (kind: DeviceCategory) =>
+          (deviceCategory.value = kind),
+        services: deviceServices.value,
+        user: account,
+        registrationRequest: registrationRequest.value,
+        onRegistrationHandled: () => (registrationRequest.value = null),
+        onSessionExpired: () => services.auth.logout(),
+      }
+    case 'esp32-setup':
+    case 'bardi-setup':
+      return {
+        services: deviceGuideServices,
+        user: account,
+        kind: guideKind.value,
+        devices: deviceServices.value?.devices,
+        onBack: () => leaveDeviceGuide(),
+        onRegister: () => leaveDeviceGuide(true),
+        onSessionExpired: () => services.auth.logout(),
+      }
+    case 'members':
+      return { services, currentUserId: account.id }
+    case 'settings':
+      return {
+        services,
+        user: account,
+        liveStatus: liveStatus.value,
+        notifications: shipmentNotificationsEnabled.value,
+        checkingNotificationPermission:
+          notificationPermissionRequest.value !== null,
+        notificationSettingMessage: notificationSettingMessage.value,
+        'onUpdate:notifications': setShipmentNotifications,
+        onLogout: logout,
+      }
+    default:
+      return null
+  }
+})
 function resume() {
   if (document.visibilityState === 'visible') revision.value++
 }
 onMounted(() => {
-  window.addEventListener('hashchange', changedHash)
   document.addEventListener('visibilitychange', resume)
+  stopNotificationTaps = listenForShipmentNotificationTaps(
+    openDeviceNotificationShipment,
+  )
 })
 onUnmounted(() => {
   unsubscribe()
   disconnect?.()
-  window.removeEventListener('hashchange', changedHash)
+  notificationPermissionRequest.value = null
+  stopNotificationTaps?.()
   document.removeEventListener('visibilitychange', resume)
 })
 </script>
 <template>
-  <div class="app-shell api-shell">
+  <div
+    class="app-shell api-shell"
+    :class="{ 'api-shell--auth': !user, 'api-shell--with-nav': showNavigation }"
+  >
     <a class="skip-link" href="#main-content" @click.prevent="focusMain"
       >Lewati ke konten</a
     >
-    <header class="api-topbar">
-      <a
-        class="brand"
-        href="#/shipments"
-        @click.prevent="navigate(user ? '/shipments' : '/login')"
-        >cekrir<span class="brand__dot">.</span></a
-      ><a
-        v-if="user"
-        href="#/settings"
-        @click.prevent="navigate('/settings')"
-        >{{ user.full_name }}</a
-      >
-    </header>
-    <p class="mode-label">
-      {{ services.mode === 'mock' ? 'Demo · data simulasi' : 'Mode live' }}
-    </p>
-    <p v-if="services.mode === 'mock'" class="banner">
-      Data simulasi, tanpa email, perangkat, atau notifikasi nyata.
-    </p>
+    <AppHeader
+      v-if="!inFocusedPage"
+      :key="user?.id ?? 'signed-out'"
+      :signed-in="!!user"
+      :display-name="accountName"
+      :account-current="inSettings"
+      :mode-label="modeLabel"
+      @back="backFromSettings"
+      @logout="logout"
+    />
     <p v-if="notice" class="banner" role="status">{{ notice }}</p>
-    <aside v-if="alert && user" class="banner api-actions" role="status">
-      <span>{{ alert.title }} · {{ alert.message }}</span
-      ><button
-        class="text-button"
-        @click="
-          openShipment(alert.shipment_id);
-          alert = null
-        "
-      >
-        Lihat paket</button
-      ><button class="text-button" @click="alert = null">Tutup</button>
-    </aside>
+    <ShipmentAlert
+      v-if="alert && user && !onShipmentList"
+      :notification="alert"
+      @open="openShipmentAlert"
+      @dismiss="alert = null"
+    />
     <main id="main-content" tabindex="-1">
-      <ApiAuth v-if="!user" :services="services" />
-      <template v-else>
-        <ShipmentView
-          v-if="route.startsWith('/shipments')"
-          :key="`${user.id}:${user.role}`"
-          :services="services"
-          :user="user"
-          :id="id"
-          :revision="revision"
-          @open="openShipment"
-          @back="navigate('/shipments')"
-        />
-        <NotificationFeed
-          v-else-if="route === '/notifications'"
-          :key="user.id"
-          :services="services"
-          :revision="revision"
-          :live-status="liveStatus"
-          @open="openShipment"
-        />
-        <UserRoles
-          v-else-if="route === '/members' && user.role === 'admin'"
-          :key="user.id"
-          :services="services"
-        />
-        <section v-else>
-          <h1>Akun</h1>
-          <article class="panel">
-            <h2>{{ user.full_name }}</h2>
-            <p>{{ user.email }}</p>
-            <p>{{ user.role === 'admin' ? 'Admin' : 'Anggota' }}</p>
-            <p class="supporting">
-              Sesi disimpan sementara. Muat ulang halaman atau tutup aplikasi
-              untuk mengakhiri sesi lokal. Keluar tidak mencabut token di
-              server.
-            </p>
-            <button class="button button--quiet" @click="logout">Keluar</button>
-          </article>
-          <article class="panel">
-            <h2>Ketersediaan layanan</h2>
-            <p>
-              Catatan paket digunakan bersama; pemisahan lokasi penerimaan belum
-              tersedia.
-            </p>
-            <p>
-              Pengelolaan perangkat, foto pengiriman, pembayaran, dan notifikasi
-              latar belakang belum tersedia di aplikasi ini.
-            </p>
-            <p>
-              Pembaruan langsung:
-              {{
-                liveStatus === 'connected'
-                  ? 'terhubung'
-                  : services.mode === 'mock'
-                    ? 'simulasi'
-                    : 'sementara tidak tersedia'
-              }}. Daftar notifikasi dapat dimuat ulang.
-            </p>
-          </article>
-        </section>
-      </template>
+      <RouterView v-slot="{ Component }">
+        <component
+          :is="Component"
+          v-if="Component && screenBindings"
+          :key="screenKey"
+          v-bind="screenBindings"
+        >
+          <template v-if="onShipmentList" #after-summary>
+            <ShipmentAlert
+              v-if="alert"
+              :notification="alert"
+              @open="openShipmentAlert"
+              @dismiss="alert = null"
+            />
+          </template>
+        </component>
+      </RouterView>
     </main>
-    <nav v-if="user" class="api-nav" aria-label="Navigasi utama">
-      <a
-        v-for="link in nav"
-        :key="link.path"
-        :href="`#${link.path}`"
-        :aria-current="
-          route === link.path || (link.path === '/shipments' && id)
-            ? 'page'
-            : undefined
-        "
-        @click.prevent="navigate(link.path)"
-        ><AppIcon :name="link.icon" /><span>{{ link.label }}</span></a
-      >
-    </nav>
-    <footer>cekrir · Catatan paket dan pelacakan</footer>
+    <AppNavigation v-if="showNavigation" />
   </div>
 </template>

@@ -6,7 +6,6 @@ import {
   type TokenPair,
   type User,
 } from './contracts'
-import { parseApiRoute } from './routes'
 import { createApiMock } from './mock'
 import { createShipmentServices } from './index'
 const user: User = {
@@ -259,10 +258,38 @@ describe('shipments, errors and UI boundary', () => {
       'resi_number',
     )
   })
-  it('redirects old delivery links and rejects malformed IDs', () => {
-    expect(parseApiRoute('#/deliveries/abc')).toBe('/shipments/abc')
-    expect(parseApiRoute('#/shipments/%2fadmin')).toBe('/shipments')
-    expect(parseApiRoute('#/shipments/%00')).toBe('/shipments')
+  it('uses the active demo session for device inventory and registration', async () => {
+    const client = createApiMock()
+    const devices = client.devices!
+    await expect(devices.inventory()).rejects.toMatchObject({ status: 401 })
+    await client.auth.login({
+      email: 'admin@demo.test',
+      password: 'demo12345678',
+    })
+    await devices.registerEsp32('ESP32 demo')
+    const device = (await devices.inventory()).esp32!
+    expect(device.name).toBe('ESP32 demo')
+    await expect(
+      devices.renameEsp32(device.id, 'ESP32 teras'),
+    ).resolves.toMatchObject({
+      esp32: { id: device.id, name: 'ESP32 teras' },
+    })
+    await client.auth.login({
+      email: 'member@demo.test',
+      password: 'demo12345678',
+    })
+    await expect(devices.inventory()).rejects.toMatchObject({ status: 403 })
+    await expect(devices.removeEsp32(device.id)).rejects.toMatchObject({
+      status: 403,
+    })
+    await expect(
+      devices.updateCamera('camera-demo-porch', { name: 'Kamera teras' }),
+    ).rejects.toMatchObject({ status: 403 })
+    await expect(
+      devices.removeCamera('camera-demo-porch'),
+    ).rejects.toMatchObject({
+      status: 403,
+    })
   })
   it('mock registration stays pending; admin role changes apply without replacing identity', async () => {
     const client = createApiMock()
@@ -286,6 +313,39 @@ describe('shipments, errors and UI boundary', () => {
 })
 
 describe('foreground notifications', () => {
+  it('simulates one camera detection and cancels it when disconnected', async () => {
+    vi.useFakeTimers()
+    const client = createApiMock({ simulateDetection: true })
+    await client.auth.login({
+      email: 'member@demo.test',
+      password: 'demo12345678',
+    })
+    const event = vi.fn()
+    const handlers = { event, status: vi.fn(), ready: vi.fn() }
+    const disconnect = client.notifications.connect(handlers)
+
+    disconnect()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(event).not.toHaveBeenCalled()
+    expect((await client.shipments.list()).items).toHaveLength(1)
+
+    client.notifications.connect(handlers)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(event).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ shipment_id: 'demo-detected-shipment' }),
+    )
+    await expect(
+      client.shipments.find('demo-detected-shipment'),
+    ).resolves.toMatchObject({
+      resi_number: 'DEMO-NEW-001',
+      source: 'camera',
+    })
+
+    client.notifications.connect(handlers)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(event).toHaveBeenCalledTimes(1)
+  })
+
   class FakeSocket {
     onmessage: ((event: { data: string }) => void) | null = null
     onclose: ((event: { code: number }) => void) | null = null

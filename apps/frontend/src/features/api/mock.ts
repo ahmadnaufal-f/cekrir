@@ -1,7 +1,13 @@
 import { createApiClient } from './client'
-import type { ApiServices, Shipment, User } from './contracts'
+import type {
+  ApiServices,
+  PackageNotification,
+  Shipment,
+  User,
+} from './contracts'
+import { createMockServices } from '../../services/mock'
 
-export function createApiMock(): ApiServices {
+export function createApiMock({ simulateDetection = false } = {}): ApiServices {
   const date = '2026-11-19T08:00:00Z'
   const users: User[] = ['admin', 'member'].map((role, index) => ({
     id: `demo-user-${index}`,
@@ -11,28 +17,37 @@ export function createApiMock(): ApiServices {
     is_active: true,
     created_at: date,
   }))
-  const shipments: Shipment[] = [
+  const demoShipment: Shipment = {
+    id: 'demo-shipment-1',
+    courier: 'jne',
+    resi_number: 'DEMO123456',
+    status: 'in_transit',
+    summary: 'Paket simulasi sedang dikirim.',
+    provider: 'demo',
+    source: 'camera',
+    camera_id: 'demo-camera',
+    created_at: date,
+    checked_at: date,
+    last_detected_at: date,
+    history: [
+      {
+        occurred_at: date,
+        description: 'Diterima di pusat sortir',
+        location: 'Jakarta',
+      },
+    ],
+  }
+  const shipments = [demoShipment]
+  const notifications: PackageNotification[] = [
     {
-      id: 'demo-shipment-1',
-      courier: 'jne',
-      resi_number: 'DEMO123456',
-      status: 'in_transit',
-      summary: 'Paket simulasi sedang dikirim.',
-      provider: 'demo',
-      source: 'camera',
-      camera_id: 'demo-camera',
+      id: 'demo-notification',
+      shipment_id: demoShipment.id,
+      title: 'Paket terdeteksi',
+      message: 'Notifikasi simulasi dalam aplikasi.',
       created_at: date,
-      checked_at: date,
-      last_detected_at: date,
-      history: [
-        {
-          occurred_at: date,
-          description: 'Diterima di pusat sortir',
-          location: 'Jakarta',
-        },
-      ],
     },
   ]
+  let detectionPending = simulateDetection
   const pending = new Set<string>()
   const client = createApiClient({
     baseUrl: 'https://demo.invalid/api/v1',
@@ -89,7 +104,7 @@ export function createApiMock(): ApiServices {
         )
         if (existing) return response(existing)
         const value: Shipment = {
-          ...shipments[0]!,
+          ...demoShipment,
           ...body,
           id: `demo-shipment-${shipments.length + 1}`,
           source: 'manual',
@@ -117,17 +132,7 @@ export function createApiMock(): ApiServices {
       }
       if (path === '/notifications')
         return response(
-          Number(url.searchParams.get('offset'))
-            ? []
-            : [
-                {
-                  id: 'demo-notification',
-                  shipment_id: 'demo-shipment-1',
-                  title: 'Paket terdeteksi',
-                  message: 'Notifikasi simulasi dalam aplikasi.',
-                  created_at: date,
-                },
-              ],
+          Number(url.searchParams.get('offset')) ? [] : notifications,
         )
       if (user.role !== 'admin') return response({}, 403)
       if (path === '/auth/users') return response(users)
@@ -140,14 +145,57 @@ export function createApiMock(): ApiServices {
       return response({}, 404)
     },
   })
+  const { devices } = createMockServices({
+    deviceUser() {
+      const user = client.user()
+      return (
+        user && {
+          id: user.id,
+          role: user.role,
+          displayName: user.full_name,
+          loginId: user.email,
+          householdId: 'household-demo',
+        }
+      )
+    },
+  })
   return {
     ...client,
     mode: 'mock',
+    devices,
     notifications: {
       ...client.notifications,
       connect(handlers) {
         handlers.status('demo')
-        return () => {}
+        if (!detectionPending) return () => {}
+
+        const timer = setTimeout(() => {
+          if (!detectionPending || !client.user()) return
+          detectionPending = false
+
+          const now = new Date().toISOString()
+          const shipment: Shipment = {
+            ...demoShipment,
+            id: 'demo-detected-shipment',
+            resi_number: 'DEMO-NEW-001',
+            summary: 'Paket baru terdeteksi oleh kamera simulasi.',
+            created_at: now,
+            checked_at: now,
+            last_detected_at: now,
+            history: [],
+          }
+          const notification: PackageNotification = {
+            id: 'demo-detection',
+            shipment_id: shipment.id,
+            title: 'Paket terdeteksi',
+            message: `Paket dengan resi ${shipment.resi_number} terdeteksi.`,
+            created_at: now,
+          }
+          shipments.unshift(shipment)
+          notifications.unshift(notification)
+          handlers.event(notification)
+        }, 1000)
+        return () => clearTimeout(timer)
       },
     },
   }

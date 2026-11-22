@@ -190,6 +190,9 @@ describe('live service selection', () => {
       code: 'integration_unavailable',
       status: 501,
     })
+    await expect(
+      services.deliveries.totals({ date: '2026-11-16', timeZone: 'UTC' }),
+    ).rejects.toMatchObject({ code: 'integration_unavailable', status: 501 })
     expect(fetch).not.toHaveBeenCalled()
   })
 
@@ -207,11 +210,18 @@ describe('live service selection', () => {
           password: 'secret',
         }),
       () => services.deliveries.list(),
+      () => services.deliveries.list(undefined, { search: 'DEMO-SPX-1009' }),
+      () => services.deliveries.totals({ date: '2026-11-16', timeZone: 'UTC' }),
       () => services.deliveries.detail('opaque-delivery-id'),
       () => services.deliveries.photo('opaque-delivery-id'),
       () => services.devices.inventory(),
       () => services.devices.registerEsp32('Scanner'),
+      () => services.devices.renameEsp32('opaque-esp32-id', 'Pintu'),
+      () => services.devices.removeEsp32('opaque-esp32-id'),
       () => services.devices.registerCamera({ name: 'Porch' }),
+      () =>
+        services.devices.updateCamera('opaque-camera-id', { name: 'Porch' }),
+      () => services.devices.removeCamera('opaque-camera-id'),
       () => services.devices.selectCamera('opaque-camera-id'),
       () => services.members.list(),
       () =>

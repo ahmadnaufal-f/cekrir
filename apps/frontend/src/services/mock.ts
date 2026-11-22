@@ -3,7 +3,10 @@ import type {
   CameraInput,
   CameraSummary,
   DeliveryDetail,
+  DeliveryListQuery,
   DeliverySummary,
+  DeliveryTotals,
+  DeliveryTotalsQuery,
   DeviceInventory,
   DeviceRegistration,
   LoginInput,
@@ -12,6 +15,8 @@ import type {
   SetupContent,
   SignupInput,
 } from '../types/app'
+import { getCalendarDate } from '../lib/delivery-date'
+import { normalizeDeliverySearch } from '../lib/delivery-search'
 import {
   ServiceError,
   type AppServices,
@@ -30,11 +35,16 @@ export { MOCK_DEMO_ACCOUNTS, MOCK_DELIVERY_IDS } from './mock-fixtures'
 export interface MockServiceOptions {
   /** Smaller pages are useful for exercising cursor behaviour in a local demo. Default: 20. */
   pageSize?: number
+  deviceUser?: () => AppUser | null
 }
 
 export type MockFailurePoint =
   | 'esp32-registration'
+  | 'esp32-rename'
+  | 'esp32-removal'
   | 'camera-registration'
+  | 'camera-update'
+  | 'camera-removal'
   | 'camera-selection'
   | 'push-upsert'
   | 'push-detach'
@@ -83,6 +93,7 @@ const ERROR_COPY = {
   accountEmailExists: 'Akun dengan email ini sudah terdaftar.',
   accountLoginExists: 'ID masuk ini sudah digunakan.',
   esp32Limit: 'Setiap lokasi penerimaan hanya dapat mendaftarkan satu ESP32.',
+  esp32Missing: 'ESP32 tidak ditemukan.',
   photoPending: 'Ilustrasi demo masih disiapkan.',
   photoUnavailable: 'Foto tidak tersedia.',
   installationForbidden: 'Instalasi notifikasi ini terhubung ke akun lain.',
@@ -93,10 +104,14 @@ const ERROR_COPY = {
     householdName: 'Nama lokasi penerimaan wajib diisi.',
     password: 'Kata sandi wajib diisi.',
     name: 'Nama perangkat wajib diisi.',
+    url: 'Isi alamat RTSP untuk mengganti detail koneksi.',
     loginId: 'ID masuk wajib diisi.',
     initialPassword: 'Kata sandi awal wajib diisi.',
     installationId: 'ID instalasi wajib diisi.',
     token: 'Token notifikasi wajib diisi.',
+    date: 'Tanggal kalender tidak valid.',
+    timeZone: 'Zona waktu tidak valid.',
+    search: 'Kata pencarian tidak valid (maksimal 200 karakter).',
   },
 } as const
 type MockField = keyof typeof ERROR_COPY.fields
@@ -134,6 +149,26 @@ function fieldError(field: MockField): ServiceError {
   return new ServiceError('VALIDATION_ERROR', ERROR_COPY.validation, 422, {
     [field]: ERROR_COPY.fields[field],
   })
+}
+
+function isCalendarDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+    return false
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  )
+}
+
+function isTimeZone(value: unknown): value is string {
+  if (typeof value !== 'string' || !value.trim()) return false
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value })
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function createMockHarness(
@@ -264,8 +299,7 @@ export function createMockHarness(
     return record.user
   }
 
-  function requireAdmin(): AppUser {
-    const user = currentUser()
+  function requireAdmin(user = currentUser()): AppUser {
     if (user.role !== 'admin') {
       throw new ServiceError('FORBIDDEN', ERROR_COPY.adminOnly, 403)
     }
@@ -291,6 +325,28 @@ export function createMockHarness(
     if (!household)
       throw new ServiceError('NOT_FOUND', ERROR_COPY.householdMissing, 404)
     return household
+  }
+
+  function deviceHousehold(): HouseholdRecord {
+    const user = options.deviceUser ? options.deviceUser() : currentUser()
+    if (!user)
+      throw new ServiceError('UNAUTHENTICATED', ERROR_COPY.unauthenticated, 401)
+    return getHousehold(requireAdmin(user))
+  }
+
+  function requireEsp32(inventory: MutableInventory, id: string) {
+    const device = inventory.esp32
+    if (!device || device.id !== id)
+      throw new ServiceError('ESP32_NOT_FOUND', ERROR_COPY.esp32Missing, 404)
+    return device
+  }
+
+  function requireCameraIndex(inventory: MutableInventory, id: string) {
+    const index = inventory.cameras.findIndex((camera) => camera.id === id)
+    if (index >= 0) return index
+    if (findCameraOwner(id))
+      throw new ServiceError('FORBIDDEN', ERROR_COPY.cameraForbidden, 403)
+    throw new ServiceError('CAMERA_NOT_FOUND', ERROR_COPY.cameraMissing, 404)
   }
 
   const services: AppServices = {
@@ -362,12 +418,59 @@ export function createMockHarness(
       },
     },
     deliveries: {
+      async totals(query: DeliveryTotalsQuery): Promise<DeliveryTotals> {
+        const user = currentUser()
+        if (!isCalendarDate(query?.date)) throw fieldError('date')
+        if (!isTimeZone(query?.timeZone)) throw fieldError('timeZone')
+
+        const householdDeliveries = [...deliveries.values()].filter(
+          (delivery) => delivery.householdId === user.householdId,
+        )
+        return {
+          date: query.date,
+          timeZone: query.timeZone,
+          receivedToday: householdDeliveries.filter(
+            (delivery) =>
+              getCalendarDate(new Date(delivery.scannedAt), query.timeZone) ===
+              query.date,
+          ).length,
+          receivedAllTime: householdDeliveries.length,
+        }
+      },
       async list(
         cursor?: string,
+        query?: DeliveryListQuery,
       ): Promise<{ items: DeliverySummary[]; nextCursor: string | null }> {
         const user = currentUser()
+        if (
+          query !== undefined &&
+          (typeof query !== 'object' || query === null || Array.isArray(query))
+        ) {
+          throw fieldError('search')
+        }
+        const rawSearch: unknown = query?.search
+        if (rawSearch !== undefined && typeof rawSearch !== 'string') {
+          throw fieldError('search')
+        }
+        if (typeof rawSearch === 'string' && rawSearch.length > 200) {
+          throw fieldError('search')
+        }
+
+        const search = normalizeDeliverySearch(rawSearch ?? '')
+        const searchTokens = search ? search.split(' ') : []
         const items = [...deliveries.values()]
           .filter((delivery) => delivery.householdId === user.householdId)
+          .filter((delivery) => {
+            if (searchTokens.length === 0) return true
+            const fields = normalizeDeliverySearch(
+              [
+                delivery.trackingNumber,
+                delivery.courier?.name ?? '',
+                delivery.courier?.code ?? '',
+              ].join(' '),
+            )
+            return searchTokens.every((token) => fields.includes(token))
+          })
           .sort(
             (a, b) =>
               b.scannedAt.localeCompare(a.scannedAt) ||
@@ -444,12 +547,10 @@ export function createMockHarness(
     },
     devices: {
       async inventory(): Promise<DeviceInventory> {
-        const user = requireAdmin()
-        return cloneInventory(getHousehold(user).inventory)
+        return cloneInventory(deviceHousehold().inventory)
       },
       async registerEsp32(name: string): Promise<DeviceRegistration> {
-        const user = requireAdmin()
-        const household = getHousehold(user)
+        const household = deviceHousehold()
         if (!name.trim()) throw fieldError('name')
         if (household.inventory.esp32) {
           throw new ServiceError('ESP32_LIMIT', ERROR_COPY.esp32Limit, 409)
@@ -466,9 +567,24 @@ export function createMockHarness(
           credential: `DEMO-ONLY-NOT-VALID-DEVICE-CREDENTIAL-${number}`,
         }
       },
+      async renameEsp32(id: string, name: string): Promise<DeviceInventory> {
+        const { inventory } = deviceHousehold()
+        const device = requireEsp32(inventory, id)
+        const label = name.trim()
+        if (!label) throw fieldError('name')
+        injectFailure('esp32-rename')
+        inventory.esp32 = { ...device, name: label }
+        return cloneInventory(inventory)
+      },
+      async removeEsp32(id: string): Promise<DeviceInventory> {
+        const { inventory } = deviceHousehold()
+        requireEsp32(inventory, id)
+        injectFailure('esp32-removal')
+        inventory.esp32 = null
+        return cloneInventory(inventory)
+      },
       async registerCamera(input: CameraInput): Promise<DeviceInventory> {
-        const user = requireAdmin()
-        const household = getHousehold(user)
+        const household = deviceHousehold()
         const name = input.name.trim()
         if (!name) throw fieldError('name')
         injectFailure('camera-registration')
@@ -485,25 +601,44 @@ export function createMockHarness(
         household.inventory.cameras.push(camera)
         return cloneInventory(household.inventory)
       },
+      async updateCamera(
+        id: string,
+        input: CameraInput,
+      ): Promise<DeviceInventory> {
+        const { inventory } = deviceHousehold()
+        const index = requireCameraIndex(inventory, id)
+        const camera = inventory.cameras[index]!
+        const name = input.name.trim()
+        if (!name) throw fieldError('name')
+        if (input.connection && !input.connection.url.trim())
+          throw fieldError('url')
+        injectFailure('camera-update')
+        // Keep the saved state for a rename. Replacing connection details requires verification again.
+        inventory.cameras[index] = input.connection
+          ? {
+              ...camera,
+              name,
+              configurationState: 'configured',
+              verificationState: 'not_tested',
+            }
+          : { ...camera, name }
+        return cloneInventory(inventory)
+      },
+      async removeCamera(id: string): Promise<DeviceInventory> {
+        const { inventory } = deviceHousehold()
+        const index = requireCameraIndex(inventory, id)
+        injectFailure('camera-removal')
+        inventory.cameras.splice(index, 1)
+        if (inventory.selectedDeliveryCameraId === id)
+          inventory.selectedDeliveryCameraId = null
+        return cloneInventory(inventory)
+      },
       async selectCamera(id: string): Promise<DeviceInventory> {
-        const user = requireAdmin()
-        const household = getHousehold(user)
-        const owned = household.inventory.cameras.some(
-          (camera) => camera.id === id,
-        )
-        if (!owned) {
-          if (findCameraOwner(id)) {
-            throw new ServiceError('FORBIDDEN', ERROR_COPY.cameraForbidden, 403)
-          }
-          throw new ServiceError(
-            'CAMERA_NOT_FOUND',
-            ERROR_COPY.cameraMissing,
-            404,
-          )
-        }
+        const { inventory } = deviceHousehold()
+        requireCameraIndex(inventory, id)
         injectFailure('camera-selection')
-        household.inventory.selectedDeliveryCameraId = id
-        return cloneInventory(household.inventory)
+        inventory.selectedDeliveryCameraId = id
+        return cloneInventory(inventory)
       },
     },
     members: {
