@@ -52,6 +52,19 @@ class Settings(BaseSettings):
     binderbyte_api_key: SecretStr | None = None
     cctv_encryption_key: SecretStr | None = None
     firebase_credentials_file: str | None = None
+    cctv_rtsp_url: str | None = None
+    cctv_username: str | None = None
+    cctv_password: SecretStr | None = None
+    cctv_photo_dir: Path = Path(__file__).resolve().parents[4] / "data" / "cctv-photos"
+    tuya_api_key: SecretStr | None = Field(default=None, validation_alias="TUYA_API_KEY")
+    tuya_api_endpoint: HttpUrl | None = Field(default=None, validation_alias="TUYA_API_ENDPOINT")
+    tuya_cctv_device_id: str | None = Field(
+        default=None,
+        min_length=5,
+        max_length=100,
+        pattern=r"^[A-Za-z0-9_-]+$",
+        validation_alias="TUYA_CCTV_DEVICE_ID",
+    )
 
     @field_validator("database_url")
     @classmethod
@@ -83,6 +96,15 @@ class Settings(BaseSettings):
             )
         if bool(self.smtp_username) != bool(self.smtp_password):
             raise ValueError("CEKRIR_SMTP_USERNAME and CEKRIR_SMTP_PASSWORD must be set together")
+        if self.tuya_api_key:
+            if not self.tuya_api_endpoint or not self.tuya_cctv_device_id:
+                raise ValueError(
+                    "TUYA_API_ENDPOINT and TUYA_CCTV_DEVICE_ID are required with TUYA_API_KEY"
+                )
+            if self.tuya_api_endpoint.scheme != "https":
+                raise ValueError("TUYA_API_ENDPOINT must use HTTPS")
+        elif self.tuya_api_endpoint or self.tuya_cctv_device_id:
+            raise ValueError("TUYA_API_KEY is required for Tuya CCTV capture")
         return self
 
     @field_validator("bootstrap_admin_password")

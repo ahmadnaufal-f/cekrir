@@ -106,7 +106,15 @@ def test_invalid_barcode_and_unknown_shipment(client):
 
 
 def test_database_survives_restart_and_concurrent_detections(database_url, provider):
-    settings = Settings(_env_file=None, DATABASE_URL=database_url, ingest_api_key="test-key")
+    email = f"restart-test-{uuid4()}@example.test"
+    password = "a long test password"
+    settings = Settings(
+        _env_file=None,
+        DATABASE_URL=database_url,
+        ingest_api_key="test-key",
+        bootstrap_admin_email=email,
+        bootstrap_admin_password=password,
+    )
     payload = {"resi_number": "AB12345", "courier": "jne", "camera_id": "front-door"}
     with TestClient(create_app(settings=settings, provider=provider)) as client:
         authorize_admin(client)
@@ -121,7 +129,17 @@ def test_database_survives_restart_and_concurrent_detections(database_url, provi
             )
         assert all(result.status_code == 200 for result in results)
         assert sum(result.json()["created"] for result in results) == 1
-        assert len(client.get("/api/v1/notifications").json()) == 1
+        token = client.post(
+            "/api/v1/auth/login", json={"email": email, "password": password}
+        ).json()["access_token"]
+        assert (
+            len(
+                client.get(
+                    "/api/v1/notifications", headers={"Authorization": f"Bearer {token}"}
+                ).json()
+            )
+            == 1
+        )
     with TestClient(create_app(settings=settings, provider=provider)) as client:
         authorize_admin(client)
         assert len(client.get("/api/v1/shipments").json()) == 1

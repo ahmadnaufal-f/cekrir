@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 import psycopg
 import pytest
@@ -71,7 +72,14 @@ def provider():
 
 @pytest.fixture
 def client(provider, database_url):
-    settings = Settings(_env_file=None, DATABASE_URL=database_url, ingest_api_key="test-key")
+    email = f"api-test-{uuid4()}@example.test"
+    settings = Settings(
+        _env_file=None,
+        DATABASE_URL=database_url,
+        ingest_api_key="test-key",
+        bootstrap_admin_email=email,
+        bootstrap_admin_password="a long test password",
+    )
     assert settings.database_url == database_url
     with TestClient(create_app(settings=settings, provider=provider)) as test_client:
         authorize_admin(test_client)

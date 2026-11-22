@@ -1,4 +1,7 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from cekrir.db.session import get_session
@@ -6,6 +9,7 @@ from cekrir.dependencies import get_provider, get_publisher
 from cekrir.middleware import RequirePermission
 from cekrir.schemas import ShipmentRead
 from cekrir.services import binderbyte, shipments
+from cekrir.services.cctv_photos import photo_path
 from cekrir.services.notifications import NotificationPublisher
 from cekrir.services.tracking import TrackingProvider
 from cekrir.validation.shipments import ResiInput
@@ -33,6 +37,43 @@ def list_shipments(
     session: Session = Depends(get_session),
 ):
     return shipments.list_shipments(session, limit, offset)
+
+
+@router.get(
+    "/shipments/{shipment_id}",
+    response_model=ShipmentRead,
+    dependencies=[Depends(RequirePermission("shipments:read"))],
+)
+def get_shipment(shipment_id: UUID, session: Session = Depends(get_session)):
+    try:
+        return shipments.get_shipment(session, str(shipment_id))
+    except shipments.ShipmentNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get(
+    "/shipments/{shipment_id}/photo",
+    dependencies=[Depends(RequirePermission("shipments:read"))],
+)
+def get_shipment_photo(
+    shipment_id: UUID, request: Request, session: Session = Depends(get_session)
+):
+    try:
+        shipment = shipments.get_shipment(session, str(shipment_id))
+    except shipments.ShipmentNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if shipment.photo_status == "pending":
+        raise HTTPException(status_code=409, detail="Photo capture is pending")
+    if shipment.photo_status != "ready":
+        raise HTTPException(status_code=404, detail="Photo is unavailable")
+    path = photo_path(request.app.state.settings.cctv_photo_dir, shipment_id)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Photo is unavailable")
+    return FileResponse(
+        path,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
 
 
 @router.post(

@@ -196,7 +196,7 @@ describe('live service selection', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('leaves unsupported live operations explicit and makes no guessed network calls', async () => {
+  it('leaves remaining unsupported live operations explicit and makes no guessed network calls', async () => {
     const services = createLiveServices()
     const fetch = vi.fn()
     vi.stubGlobal('fetch', fetch)

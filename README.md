@@ -4,7 +4,7 @@ GitHub-connected frontend deployment: https://cekrir-frontend.vercel.app (curren
 
 A monorepo for a household delivery app. The confirmed target uses proximity-triggered **ESP32 camera images** for Python barcode decoding; the selected **BARDI CCTV** supplies the separate delivery photo. The existing backend and firmware remain scaffold implementations pending alignment.
 
-The frontend now implements household screens with explicit development mocks. Auth, delivery events, photos, devices, members, and Android server push are **not live integrations**. See the [frontend specification map](docs/frontend/spec-map.md), [integration and verification report](docs/frontend/integration-status.md), and [backend/firmware handoff](docs/frontend/backend-gaps.md).
+The frontend has household screens and development mocks. The backend now supports Tuya delivery photos, but the frontend has no photo viewer yet. Live integration coverage varies by screen; see the [frontend specification map](docs/frontend/spec-map.md), [integration report](docs/frontend/integration-status.md), and [backend handoff](docs/frontend/backend-gaps.md).
 
 Three apps, one repository:
 
@@ -65,7 +65,15 @@ curl -X POST http://127.0.0.1:8000/api/v1/detections \
   -d '{"resi_number":"CEKRIR987654","courier":"jne","camera_id":"front-door"}'
 ```
 
-This backend detection creates a shipment and feed notification. If `CEKRIR_INGEST_API_KEY` is configured, send the matching `X-Ingest-Key` header; otherwise use an admin bearer token. It does not populate the household mock UI or deliver remote push. Its permanent courier/resi uniqueness differs from the target household delivery-event deduplication window.
+This backend detection creates a shipment and feed notification. If `CEKRIR_INGEST_API_KEY` is configured, send the matching `X-Ingest-Key` header; otherwise use an admin bearer token. With Tuya configured, the first accepted detection also queues one CCTV photo. Its permanent courier/resi uniqueness differs from the target household delivery-event deduplication window.
+
+## Tuya delivery photos
+
+Set `TUYA_API_KEY`, `TUYA_API_ENDPOINT`, and `TUYA_CCTV_DEVICE_ID` in the ignored `apps/backend/.env`. The device ID must identify the selected delivery camera in the Tuya account. The backend requires all three values together and uses HTTPS to request one JPEG after either `POST /api/v1/detections` or a successfully decoded `POST /api/v1/detections/frame`. Run `pnpm run db:deploy` after updating the backend. See [the cloud capture test](docs/tuya-cloud-capture-research.md).
+
+The scan response is independent of capture: it reports `photo_status: "pending"` when a photo is queued. Read `GET /api/v1/shipments/{id}` for the current status. Once `ready`, its `photo_url` points to `GET /api/v1/shipments/{id}/photo`, which requires a bearer token with `shipments:read`. Clients must fetch the JPEG with that token; an ordinary unauthenticated image tag cannot load it. Capture failures set `photo_status: "unavailable"` while preserving the shipment and notification. Duplicate scans of the same courier and resi do not queue another photo.
+
+JPEGs are saved under `CEKRIR_CCTV_PHOTO_DIR` (default `data/cctv-photos/`, ignored by Git). Mount that directory on persistent storage for a deployed backend. The current capture task runs inside the API process; a process crash can leave a photo marked `pending`, so a durable worker is needed before relying on this flow for high availability.
 
 ## ESP32 camera scanner
 
@@ -158,6 +166,6 @@ See [architecture and next steps](docs/architecture.md) and [tracking/CCTV integ
 
 ## Scope of this scaffold
 
-This is a **development prototype**. The app and API bind to loopback by default. The backend now has basic member/admin JWT authentication for its shipment API, but the frontend account flows still use fixtures and backend records are not scoped to households. Household delivery events, protected CCTV capture, and Android remote push remain gaps. The optional ingestion key protects camera submissions; it is not a user identity. See the frontend handoff documents for the per-operation status.
+This is a **development prototype**. The app and API bind to loopback by default. Backend records are not scoped to households. Household delivery events and Android remote push remain gaps. The backend has protected Tuya CCTV photos, while the frontend does not yet display them. The optional ingestion key protects camera submissions; it is not a user identity. See the frontend handoff documents for the per-operation status.
 
 No license has been chosen; add one before distributing the project.

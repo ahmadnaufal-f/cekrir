@@ -23,6 +23,7 @@ from cekrir.routers.payments import router as payment_router
 from cekrir.services.auth import ensure_bootstrap_admin
 from cekrir.services.notifications import NotificationPublisher
 from cekrir.services.tracking import TrackingProvider, TrackingUnavailable, build_tracking_provider
+from cekrir.services.tuya_capture import TuyaCapture
 
 
 def create_app(
@@ -58,6 +59,15 @@ def create_app(
         redis.client, settings, session_factory
     )
     app.state.tracking_provider = provider or build_tracking_provider(settings)
+    app.state.photo_capturer = (
+        TuyaCapture(
+            settings.tuya_api_key.get_secret_value(),
+            str(settings.tuya_api_endpoint),
+            settings.tuya_cctv_device_id,
+        )
+        if settings.tuya_api_key
+        else None
+    )
 
     app.add_middleware(RolePermissionMiddleware)
     app.add_middleware(
