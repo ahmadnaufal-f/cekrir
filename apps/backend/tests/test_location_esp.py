@@ -93,7 +93,7 @@ def test_location_onboarding_with_postgresql(database_url):
                         for row in list_owned_locations(session, admin.id)
                         if row["id"] == first["id"]
                     )
-                    assert location["onboarding_complete"] is True
+                    assert location["onboarding_complete"] is False  # awaiting a device check-in
                     assert location["esp_device_id"] == device_id
                     assert len(location["camera_ids"]) == 2
                     remove_esp(session, first["id"], admin.id)

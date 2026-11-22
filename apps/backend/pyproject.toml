@@ -18,6 +18,8 @@ dependencies = [
   "pillow>=12,<14",
   "zxing-cpp>=3,<4",
   "resend>=2.55,<3",
+  "firebase-admin>=7.0,<8",
+  "cryptography>=44,<47",
 ]
 
 [project.optional-dependencies]

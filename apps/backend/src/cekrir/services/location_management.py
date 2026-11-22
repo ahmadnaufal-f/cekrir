@@ -22,7 +22,7 @@ class EspAlreadyAssigned(Exception):
 
 def list_owned_locations(session: Session, admin_id: UUID) -> list[dict]:
     rows = session.execute(
-        select(Location, EspDevice.device_id)
+        select(Location, EspDevice.device_id, EspDevice.last_seen_at)
         .outerjoin(EspDevice, EspDevice.location_id == Location.id)
         .where(Location.admin_user_id == admin_id)
         .order_by(Location.name)
@@ -36,13 +36,13 @@ def list_owned_locations(session: Session, admin_id: UUID) -> list[dict]:
     ):
         cameras.setdefault(location_id, []).append(camera_id)
     locations = []
-    for location, esp_id in rows:
+    for location, esp_id, esp_last_seen in rows:
         locations.append(
             {
                 "id": location.id,
                 "name": location.name,
                 "esp_device_id": esp_id,
-                "onboarding_complete": esp_id is not None,
+                "onboarding_complete": esp_last_seen is not None,
                 "camera_ids": cameras.get(location.id, []),
             }
         )

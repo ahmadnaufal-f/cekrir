@@ -1,4 +1,6 @@
 import type { DeliveryPushData } from '../types/app'
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
+import { PushNotifications } from '@capacitor/push-notifications'
 
 export type PushPermissionState =
   | 'not-requested'
@@ -289,6 +291,63 @@ class SingleListenerPushBridge {
   protected clearListeners(): void {
     this.listeners = null
   }
+}
+
+export class AndroidPushBridge extends SingleListenerPushBridge implements PushBridge {
+  readonly kind = 'native' as const
+  private handles: PluginListenerHandle[] = []
+  private ready: Promise<void> = Promise.resolve()
+  private setupError: unknown = null
+  private closed = false
+
+  override subscribe(listeners: PushBridgeListeners): () => void {
+    const unsubscribe = super.subscribe(listeners)
+    this.ready = Promise.allSettled([
+      PushNotifications.addListener('registration', (event) => this.emitToken(event.value)),
+      PushNotifications.addListener('registrationError', (event) => this.emitError(event)),
+      PushNotifications.addListener('pushNotificationReceived', (event) => this.emitReceived(event)),
+      PushNotifications.addListener('pushNotificationActionPerformed', (event) => this.emitTapped(event.notification)),
+    ]).then(async (results) => {
+      const handles = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
+      const failure = results.find((result) => result.status === 'rejected')
+      if (this.closed || failure) await Promise.all(handles.map((handle) => handle.remove()))
+      else this.handles = handles
+      if (failure?.status === 'rejected') throw failure.reason
+    }).catch((error: unknown) => { this.setupError = error; this.emitError(error) })
+    return unsubscribe
+  }
+
+  async permission(): Promise<PushPermissionState> {
+    return this.mapPermission((await PushNotifications.checkPermissions()).receive)
+  }
+
+  async requestPermission(): Promise<PushPermissionState> {
+    return this.mapPermission((await PushNotifications.requestPermissions()).receive)
+  }
+
+  private mapPermission(value: string): PushPermissionState {
+    return value === 'granted' ? 'granted' : value === 'denied' ? 'denied' : 'not-requested'
+  }
+
+  async register(): Promise<void> {
+    await this.ready
+    if (this.setupError) throw this.setupError
+    await PushNotifications.register()
+  }
+
+  async dispose(): Promise<void> {
+    this.closed = true
+    this.clearListeners()
+    await this.ready
+    await Promise.all(this.handles.map((handle) => handle.remove()))
+    this.handles = []
+  }
+}
+
+export function createDevicePushBridge(): PushBridge {
+  return Capacitor.getPlatform() === 'android'
+    ? new AndroidPushBridge()
+    : new UnavailablePushBridge()
 }
 
 /** Browser and unconfigured native builds report unavailable honestly. */

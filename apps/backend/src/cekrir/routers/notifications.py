@@ -16,12 +16,53 @@ from cekrir.db.session import get_session
 from cekrir.dependencies import get_user_id
 from cekrir.middleware import RequirePermission
 from cekrir.schemas import NotificationRead
-from cekrir.services import email_notifications, notifications
+from cekrir.services import email_notifications, notifications, push_notifications
 from cekrir.services.email import EmailUnavailable
+from cekrir.validation.devices import FcmRegistration, FcmUnregister
 from cekrir.validation.notifications import EmailNotificationInput
 from cekrir.validation.payments import IdempotencyKey
 
 router = APIRouter(prefix="/api/v1", tags=["notifications"])
+
+
+@router.post(
+    "/notifications/fcm/unregister", dependencies=[Depends(RequirePermission("notifications:read"))]
+)
+def unregister_fcm_token(
+    payload: FcmUnregister,
+    user_id: UUID = Depends(get_user_id),
+    session: Session = Depends(get_session),
+):
+    push_notifications.unregister_by_token(session, user_id, payload.token.get_secret_value())
+    return {"detail": "Push device removed"}
+
+
+@router.post("/notifications/fcm", dependencies=[Depends(RequirePermission("notifications:read"))])
+def register_fcm(
+    payload: FcmRegistration,
+    user_id: UUID = Depends(get_user_id),
+    session: Session = Depends(get_session),
+):
+    try:
+        return push_notifications.register_token(session, user_id, payload)
+    except push_notifications.PushLocationNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except push_notifications.PushTokenConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.delete(
+    "/notifications/fcm/{device_id}",
+    dependencies=[Depends(RequirePermission("notifications:read"))],
+)
+def unregister_fcm(
+    device_id: UUID, user_id: UUID = Depends(get_user_id), session: Session = Depends(get_session)
+):
+    try:
+        push_notifications.unregister_token(session, user_id, device_id)
+    except push_notifications.PushLocationNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"detail": "Push device removed"}
 
 
 @router.post(

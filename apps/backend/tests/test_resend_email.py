@@ -34,7 +34,7 @@ def test_verification_is_sent_via_resend():
     assert kwargs["url"] == "https://api.resend.com/emails"
 
 
-def test_resend_failure_is_reported_without_exposing_provider_response():
+def test_resend_failure_is_reported_without_exposing_provider_response(caplog):
     client = Mock()
     client.request.return_value = (
         b'{"name":"validation_error","message":"private provider detail"}',
@@ -44,6 +44,10 @@ def test_resend_failure_is_reported_without_exposing_provider_response():
     with patch("cekrir.services.email.resend.RequestsClient", return_value=client):
         with pytest.raises(EmailUnavailable, match="Email could not be sent"):
             send_email(resend_settings(), "user@example.test", "Subject", "Message")
+    assert "status=403" in caplog.text
+    assert "private provider detail" not in caplog.text
+    assert "user@example.test" not in caplog.text
+    assert "re_test_key" not in caplog.text
 
 
 def test_resend_requires_a_sender_and_api_key():

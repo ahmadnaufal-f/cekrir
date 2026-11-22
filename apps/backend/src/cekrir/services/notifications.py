@@ -14,16 +14,24 @@ from cekrir.services.frontend_notifications import (
     NOTIFICATION_CHANNEL,
     FrontendNotificationPublisher,
 )
+from cekrir.services.push_notifications import PushNotificationPublisher
 
 
 class NotificationPublisher:
     def __init__(self, client: Redis, settings: Settings | None = None, session_factory=None):
         self.frontend = FrontendNotificationPublisher(client)
         self.email = EmailNotificationPublisher(settings, session_factory)
+        self.push = (
+            PushNotificationPublisher(settings, session_factory)
+            if settings and session_factory
+            else None
+        )
 
     def publish(self, notification: NotificationRead) -> None:
         self.frontend.publish(notification)
         self.email.publish(notification)
+        if self.push:
+            self.push.publish(notification)
 
 
 class NotificationAuthenticationRequired(Exception):

@@ -17,23 +17,31 @@ Except for health and the public authentication endpoints, send `Authorization: 
 | Method | Path | Permission / authentication | Request and result |
 | --- | --- | --- | --- |
 | GET | `/health` | Public | Returns `status`, configured `tracking_provider`, and Redis availability. |
-| POST | `/api/v1/auth/register` | Public | JSON `email`, `full_name`, `password`; 201 with a verification message. Password: 12–72 characters and no more than 72 UTF-8 bytes. Duplicate email: 409; email service unavailable: 503. A 503 can occur after the account has been created. |
-| POST | `/api/v1/auth/login` | Public | JSON `email`, `password`; returns access and refresh tokens, expiration times in seconds, and `user`. Invalid credentials or unverified email: 401. |
-| POST | `/api/v1/auth/refresh` | Public | JSON `refresh_token`; returns a fresh token pair and user. Invalid or expired token: 401. |
-| POST | `/api/v1/auth/verify-email` | Public | JSON `token` from the email; returns confirmation. Invalid or expired token: 400. |
+| POST | `/api/v1/auth/register` | Public | JSON `email`, `full_name`, `password`; 201 with a verification message and `location_id` and `esp_device_id` set to null. New accounts are inactive members without a location until assigned by an admin. Password: 12–72 characters and no more than 72 UTF-8 bytes. Duplicate email: 409; email service unavailable: 503. A 503 can occur after the inactive account has been created; use the resend-verification endpoint to retry. |
+| POST | `/api/v1/auth/login` | Public | JSON `email`, `password`; returns tokens, `user`, `location_id` and `esp_device_id`. Admin login creates a default location and ESP identifier if needed and reuses them on later logins. Invalid credentials or unverified email: 401. |
+| POST | `/api/v1/auth/refresh` | Public | JSON `refresh_token`; returns a fresh token pair, user, `location_id` and `esp_device_id`. Invalid or expired token: 401. |
+| POST | `/api/v1/auth/verify-email` | Public | JSON `token` from the email; confirms the address and activates the account. Invalid or expired token: 400. |
 | GET | `/api/v1/auth/verify-email?token=...` | Public | HTML verification page. The user confirms with its button, which posts the token. This page is excluded from the generated OpenAPI schema. |
-| POST | `/api/v1/auth/resend-verification` | Public | JSON `email`, `password`; returns a generic verification message. Email service unavailable: 503. |
+| POST | `/api/v1/auth/resend-verification` | Public | JSON `email`, `password`; works for inactive unverified users and returns a generic verification message. A new link is sent at most once per 60 seconds. Email service unavailable: 503. |
 | GET | `/api/v1/auth/users` | `users:read` | Returns an array of users. |
 | PATCH | `/api/v1/auth/users/{user_id}/role` | `users:role:update` | UUID `user_id`; JSON `role` is `admin` or `member`. Returns the updated user; 404 if missing, 409 for a conflicting location assignment. |
 | GET | `/api/v1/shipments` | `shipments:read` | Returns shipments. Query `limit` defaults to 100, range 1–500; `offset` defaults to 0, minimum 0. |
 | POST | `/api/v1/shipments` | `shipments:create` | JSON `resi_number`, `courier`. Returns shipment: 201 if created, 200 if already present. Tracking provider failure: 502. |
 | POST | `/api/v1/shipments/{shipment_id}/refresh` | `shipments:refresh` | Refreshes tracking and returns the shipment; 404 if missing, 502 for provider failure. |
+| POST | `/api/v1/tracking/binderbyte` | `shipments:read` | JSON `resi_number`, `courier`, optional `phone_last_five`; returns BinderByte summary, detail and history; 503 when unavailable or unconfigured. |
+| POST | `/api/v1/devices/{device_id}/frames?courier=jne` | `X-Device-Key` | Raw JPEG from the assigned ESP. Authenticates its individual key, records its check-in and processes barcodes. |
 | POST | `/api/v1/detections` | `detections:create` or ingestion key as described below | JSON `resi_number`, `courier`, `camera_id`; returns `created` and `shipment`. |
 | POST | `/api/v1/detections/frame?courier=jne&camera_id=door` | `detections:create` or ingestion key as described below | Raw JPEG body with `Content-Type: image/jpeg`; returns `detected_count`, `ambiguous`, and `detections`. |
 | GET | `/api/v1/notifications` | `notifications:read` | Returns notifications. Supports the same `limit` and `offset` rules as shipments. |
+| POST | `/api/v1/notifications/fcm` | `notifications:read` | JSON `token`, `location_id`; associates a push token with the authenticated user and an accessible location. |
+| POST | `/api/v1/notifications/fcm/unregister` | `notifications:read` | JSON `token`; removes the authenticated user's push registration. |
+| DELETE | `/api/v1/notifications/fcm/{device_id}` | `notifications:read` | Removes the authenticated user's push registration by its returned UUID. |
 | POST | `/api/v1/notifications/email` | `notifications:send` | JSON `user_id`, `subject`, `message`; requires `Idempotency-Key`. Sends to the authenticated admin or an active, verified member of a location the admin owns. Returns 404 for an unavailable recipient and 503 for delivery errors. |
 | GET | `/api/v1/locations` | `locations:manage` | Lists owned locations, each with `esp_device_id`, `onboarding_complete`, and `camera_ids`. |
 | POST | `/api/v1/locations` | `locations:manage` | JSON `name`; creates a location owned by the admin. Onboarding is incomplete until an ESP is assigned. |
+| POST | `/api/v1/locations/{location_id}/esp/credentials` | `locations:manage` | Rotates the ESP key and returns `device_id` and `device_key` once. Previously issued keys stop working. |
+| POST | `/api/v1/locations/{location_id}/cctv` | `locations:manage` | JSON `name`, `stream_url`, `username`, `password`; encrypts the connection details and returns the camera ID and name. |
+| GET | `/api/v1/locations/{location_id}/cctv` | `locations:manage` | Lists the location's CCTV cameras without returning their connection details. |
 | PUT | `/api/v1/locations/{location_id}/esp/{device_id}` | `locations:manage` | Assigns an ESP identifier to an owned location. Idempotent for the same assignment; returns 409 if either the location or ESP is already assigned elsewhere. |
 | DELETE | `/api/v1/locations/{location_id}/esp` | `locations:manage` | Removes the ESP assignment, making onboarding incomplete until another ESP is assigned. |
 | PUT | `/api/v1/locations/{location_id}/members/{user_id}` | `locations:manage` | Assigns a user to an admin-owned location; repeats are safe. |
@@ -45,7 +53,11 @@ Except for health and the public authentication endpoints, send `Authorization: 
 
 For detection endpoints, if `CEKRIR_INGEST_API_KEY` is configured, the matching `X-Ingest-Key` header is required instead of bearer authentication. If it is not configured, a bearer token with `detections:create` is required. JPEG requests are limited to 512 KiB, 2 megapixels and 2048 pixels per side. Wrong content type returns 415, oversized body 413, and invalid image or metadata 422. The detector reports ambiguous multiple codes instead of creating a shipment. It does not save frames as images.
 
-Payments are draft records only: no QRIS transaction or payment processing endpoint is implemented yet. Roles and permissions have no standalone CRUD endpoints. A location can have at most one ESP and any number of cameras; a location is considered onboarded when an ESP is assigned. Existing locations start incomplete after migration. ESP assignment records an identifier only: it does not verify device ownership, provision Wi-Fi, issue credentials, or establish connectivity. Those require a separate device provisioning and authentication flow.
+Payments are draft records only: no QRIS transaction or payment processing endpoint is implemented yet. Roles and permissions have no standalone CRUD endpoints. A location can have at most one ESP and any number of cameras. `onboarding_complete` becomes true after the assigned ESP makes an authenticated frame request. A matching physical detection sets the existing shipment to delivered without replacing its other details; a new barcode creates a delivered shipment. The configured CCTV details are stored for later use; registering a CCTV does not start a camera connection or scanning worker.
+
+Login and refresh report the oldest accessible location and its ESP ID, if any. Admins can list all their locations with `GET /api/v1/locations`. An unassigned member, or a location without an assigned ESP, receives null for the missing ID. An ESP ID alone does not grant access; only the location admin can issue its device key.
+
+See [device, push, and tracking setup](../../docs/device-onboarding.md) for the frontend and ESP flow, required secrets, Firebase setup, and BinderByte configuration.
 
 ### Email notifications
 

@@ -80,9 +80,13 @@ def verify_email_user_id(session: Session, token: str) -> UUID | None:
     )
     if verification is None or verification.expires_at <= now:
         return None
-    session.execute(
-        update(User).where(User.id == verification.user_id).values(email_verified_at=now)
+    updated = session.execute(
+        update(User)
+        .where(User.id == verification.user_id, User.email_verified_at.is_(None))
+        .values(email_verified_at=now, is_active=True)
     )
+    if updated.rowcount != 1:
+        return None
     user_id = verification.user_id
     session.delete(verification)
     return user_id

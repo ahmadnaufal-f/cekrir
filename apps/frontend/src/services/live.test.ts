@@ -198,7 +198,6 @@ describe('live service selection', () => {
     const fetch = vi.fn()
     vi.stubGlobal('fetch', fetch)
     const operations: Array<() => Promise<unknown>> = [
-      () => services.auth.login({ loginId: 'admin', password: 'secret' }),
       () =>
         services.auth.signup({
           displayName: 'Admin',
@@ -209,9 +208,6 @@ describe('live service selection', () => {
       () => services.deliveries.list(),
       () => services.deliveries.detail('opaque-delivery-id'),
       () => services.deliveries.photo('opaque-delivery-id'),
-      () => services.devices.inventory(),
-      () => services.devices.registerEsp32('Scanner'),
-      () => services.devices.registerCamera({ name: 'Porch' }),
       () => services.devices.selectCamera('opaque-camera-id'),
       () => services.members.list(),
       () =>
@@ -221,13 +217,6 @@ describe('live service selection', () => {
           initialPassword: 'secret',
         }),
       () => services.setup.content('bardi'),
-      () =>
-        services.push.upsert({
-          installationId: 'installation-1',
-          platform: 'android',
-          token: 'token',
-        }),
-      () => services.push.detach('installation-1'),
     ]
 
     expect(services.mode).toBe('live')

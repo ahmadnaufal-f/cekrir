@@ -38,7 +38,7 @@ class User(Base):
         nullable=False,
     )
     role_record: Mapped[Role] = relationship(lazy="joined")
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     email_verified_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True, precision=3)
     )

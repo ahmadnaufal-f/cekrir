@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DeviceSetupGuide from '../components/DeviceSetupGuide.vue'
+import EspFirmwareGenerator from '../components/EspFirmwareGenerator.vue'
 import AppIcon from '../components/AppIcon.vue'
 import { computed, onUnmounted, reactive, shallowRef, watch } from 'vue'
 import { adminCopy } from '../lib/admin-copy'
@@ -123,11 +124,11 @@ async function loadInventory(generation: number): Promise<void> {
 
 async function registerEsp32(): Promise<void> {
   if (!isAdmin.value || isBusy.value) return
-  if (inventory.value?.esp32) {
+  if (inventory.value?.esp32 && props.services.mode !== 'live') {
     noticeMessage.value = copy.esp32Limit
     return
   }
-  const name = esp32Name.value.trim()
+  const name = esp32Name.value.trim() || inventory.value?.esp32?.name || ''
   if (!name) return
 
   const generation = requestGeneration
@@ -368,6 +369,8 @@ onUnmounted(() => {
         <p v-if="credentialNotice" class="admin-panel__notice" role="status">
           {{ credentialNotice }}
         </p>
+        <EspFirmwareGenerator v-if="services.mode === 'live' && inventory?.esp32"
+          :device-id="inventory.esp32.id" :device-key="credential" />
         <button
           class="admin-button admin-button--quiet credential-panel__dismiss"
           type="button"
@@ -424,6 +427,12 @@ onUnmounted(() => {
               <span>{{ copy.esp32Registered }}</span>
               <small>{{ copy.identity }} · {{ inventory.esp32.id }}</small>
             </div>
+          </div>
+          <div v-if="services.mode === 'live' && inventory?.esp32" class="admin-panel__copy">
+            <p>Membuat kunci baru akan menonaktifkan kunci ESP32 sebelumnya.</p>
+            <button class="admin-button admin-button--primary" type="button" :disabled="isBusy" @click="registerEsp32">
+              Siapkan atau ganti kunci ESP32
+            </button>
           </div>
           <details
             v-if="inventoryState === 'ready' && inventory?.esp32"

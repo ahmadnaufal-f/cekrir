@@ -86,10 +86,17 @@ class TokenRead(BaseModel):
     expires_in: int
     refresh_expires_in: int
     user: UserRead
+    location_id: UUID | None = None
+    esp_device_id: str | None = None
 
 
 class VerificationPending(BaseModel):
     detail: str = "Check your email for a verification link."
+
+
+class RegistrationPending(VerificationPending):
+    location_id: UUID | None = None
+    esp_device_id: str | None = None
 
 
 class PaymentRead(BaseModel):

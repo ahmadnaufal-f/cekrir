@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from cekrir.db.session import get_session
 from cekrir.middleware import RequirePermission
-from cekrir.schemas import TokenRead, UserRead, VerificationPending
+from cekrir.schemas import RegistrationPending, TokenRead, UserRead, VerificationPending
 from cekrir.services import accounts
 from cekrir.services.email_verification import EmailUnavailable
 from cekrir.validation.auth import (
@@ -20,7 +20,7 @@ from cekrir.validation.auth import (
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
-@router.post("/register", response_model=VerificationPending, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=RegistrationPending, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterInput, request: Request, session: Session = Depends(get_session)):
     try:
         accounts.register_account(session, request.app.state.settings, payload)
@@ -28,7 +28,7 @@ def register(payload: RegisterInput, request: Request, session: Session = Depend
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except EmailUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return VerificationPending()
+    return RegistrationPending()
 
 
 @router.post("/login", response_model=TokenRead)

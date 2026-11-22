@@ -1,3 +1,4 @@
+import re
 from secrets import compare_digest
 
 import anyio
@@ -45,6 +46,11 @@ class RolePermissionMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
         if path in self.PUBLIC_PATHS or not path.startswith("/api/v1/"):
+            return await call_next(request)
+        # This one route uses its own per-device credential dependency.
+        if request.method == "POST" and re.fullmatch(
+            r"/api/v1/devices/[A-Za-z0-9._:-]+/frames", path
+        ):
             return await call_next(request)
 
         permissions = self._route_permissions(request)

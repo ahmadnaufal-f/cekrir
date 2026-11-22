@@ -17,6 +17,7 @@ from cekrir.routers import (
     notification_router,
     shipment_router,
 )
+from cekrir.routers.detections import device_router
 from cekrir.routers.locations import router as location_router
 from cekrir.routers.payments import router as payment_router
 from cekrir.services.auth import ensure_bootstrap_admin
@@ -63,7 +64,13 @@ def create_app(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
-        allow_headers=["Content-Type", "Authorization", "X-Ingest-Key", "Idempotency-Key"],
+        allow_headers=[
+            "Content-Type",
+            "Authorization",
+            "X-Ingest-Key",
+            "X-Device-Key",
+            "Idempotency-Key",
+        ],
     )
 
     @app.exception_handler(TrackingUnavailable)
@@ -81,6 +88,7 @@ def create_app(
     app.include_router(auth_router)
     app.include_router(shipment_router)
     app.include_router(detection_router)
+    app.include_router(device_router)
     app.include_router(camera_router)
     app.include_router(notification_router)
     app.include_router(payment_router)

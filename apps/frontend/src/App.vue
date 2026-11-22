@@ -15,7 +15,7 @@ import NotificationSettings from './screens/NotificationSettings.vue'
 import { createPushController } from './composables/usePush'
 import {
   createSimulatedPushBridge,
-  createUnavailablePushBridge,
+  createDevicePushBridge,
 } from './lib/push'
 import { deliveryRoute, guardRoute, useNavigation } from './lib/navigation'
 import { ui, errorMessage } from './lib/strings'
@@ -40,7 +40,7 @@ const deliveryId = computed(() =>
 const bridge =
   services.mode === 'mock' && import.meta.env.DEV
     ? createSimulatedPushBridge()
-    : createUnavailablePushBridge()
+    : createDevicePushBridge()
 const push = createPushController({
   bridge,
   service: services.push,

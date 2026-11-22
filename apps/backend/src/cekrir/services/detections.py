@@ -6,7 +6,7 @@ from cekrir.services.barcodes import decode_frame
 from cekrir.services.notifications import NotificationPublisher
 from cekrir.services.shipments import submit_shipment
 from cekrir.services.tracking import TrackingProvider
-from cekrir.validation.shipments import CameraFrameInput, DetectionInput
+from cekrir.validation.shipments import CameraFrameInput, CourierInput, DetectionInput
 
 
 def ingest_detection(
@@ -44,4 +44,21 @@ def ingest_frame(
                 resi_number=shipment.resi_number, shipment_id=shipment.id, created=created
             )
         ],
+    )
+
+
+def ingest_esp_frame(
+    frame: bytes,
+    device_id: str,
+    metadata: CourierInput,
+    session: Session,
+    provider: TrackingProvider,
+    publisher: NotificationPublisher,
+) -> CameraFrameResult:
+    return ingest_frame(
+        frame,
+        CameraFrameInput(camera_id=device_id, **metadata.model_dump()),
+        session,
+        provider,
+        publisher,
     )

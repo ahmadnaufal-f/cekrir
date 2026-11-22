@@ -1,12 +1,13 @@
 import logging
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from jwt import InvalidTokenError
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from cekrir.config import Settings
-from cekrir.db.model import User
+from cekrir.db.model import EspDevice, Location, LocationMember, User
 from cekrir.db.repository import UserRepository
 from cekrir.schemas import TokenRead, UserRead
 from cekrir.services.auth import (
@@ -78,6 +79,7 @@ def register_account(session: Session, settings: Settings, payload: RegisterInpu
         full_name=payload.full_name,
         password_hash=hash_password(payload.password),
         role_record=repository.role_by_code("member"),
+        is_active=False,
     )
     session.add(user)
     token = new_verification_token()
@@ -96,6 +98,20 @@ def register_account(session: Session, settings: Settings, payload: RegisterInpu
         ) from exc
 
 
+def location_for_user(session: Session, user: User) -> tuple[UUID | None, str | None]:
+    query = select(Location.id, EspDevice.device_id).outerjoin(
+        EspDevice, EspDevice.location_id == Location.id
+    )
+    if user.role == "admin":
+        query = query.where(Location.admin_user_id == user.id)
+    else:
+        query = query.join(LocationMember, LocationMember.location_id == Location.id).where(
+            LocationMember.user_id == user.id
+        )
+    row = session.execute(query.order_by(Location.created_at, Location.id).limit(1)).first()
+    return (row[0], row[1]) if row else (None, None)
+
+
 def login_account(session: Session, settings: Settings, payload: CredentialsInput) -> TokenRead:
     user = UserRepository(session).by_email(payload.email)
     if (
@@ -106,7 +122,34 @@ def login_account(session: Session, settings: Settings, payload: CredentialsInpu
     ):
         session.rollback()
         raise InvalidCredentials("Invalid email or password")
-    return token_response(user, settings)
+    location_id = None
+    esp_device_id = None
+    if user.role == "admin":
+        # Serialize concurrent first logins so they reuse the same default setup.
+        session.scalar(select(User.id).where(User.id == user.id).with_for_update())
+        location = session.scalar(
+            select(Location)
+            .where(Location.admin_user_id == user.id)
+            .order_by(Location.created_at, Location.id)
+            .limit(1)
+        )
+        if location is None:
+            location = Location(name="Main Location", admin=user)
+            session.add(location)
+            session.flush()
+        esp = session.scalar(select(EspDevice).where(EspDevice.location_id == location.id))
+        if esp is None:
+            esp = EspDevice(device_id=str(uuid4()), location_id=location.id)
+            session.add(esp)
+            session.flush()
+        location_id, esp_device_id = location.id, esp.device_id
+        session.commit()
+    else:
+        location_id, esp_device_id = location_for_user(session, user)
+    response = token_response(user, settings)
+    response.location_id = location_id
+    response.esp_device_id = esp_device_id
+    return response
 
 
 def refresh_account(session: Session, settings: Settings, token: str) -> TokenRead:
@@ -117,7 +160,9 @@ def refresh_account(session: Session, settings: Settings, token: str) -> TokenRe
     user = UserRepository(session).by_id(user_id)
     if user is None or not user.is_active or user.email_verified_at is None:
         raise InvalidRefreshToken("Invalid or expired refresh token")
-    return token_response(user, settings)
+    response = token_response(user, settings)
+    response.location_id, response.esp_device_id = location_for_user(session, user)
+    return response
 
 
 def confirm_account_email(session: Session, token: str, settings: Settings) -> None:
@@ -148,7 +193,6 @@ def resend_account_verification(
     if (
         user is None
         or user.email_verified_at is not None
-        or not user.is_active
         or not verify_password(payload.password, user.password_hash)
     ):
         session.rollback()

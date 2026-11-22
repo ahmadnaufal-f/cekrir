@@ -1,17 +1,67 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Request, Response, status
 from sqlalchemy.orm import Session
 
 from cekrir.db.session import get_session
 from cekrir.dependencies import get_user_id
 from cekrir.middleware import RequirePermission
 from cekrir.schemas import LocationRead
-from cekrir.services import location_management
+from cekrir.services import devices, location_management
+from cekrir.validation.devices import CctvCreate
 from cekrir.validation.locations import LocationCreate
 
 router = APIRouter(prefix="/api/v1/locations", tags=["locations"])
+
+
+@router.post(
+    "/{location_id}/esp/credentials", dependencies=[Depends(RequirePermission("locations:manage"))]
+)
+def provision_esp(
+    location_id: UUID,
+    response: Response,
+    admin_id: UUID = Depends(get_user_id),
+    session: Session = Depends(get_session),
+):
+    try:
+        result = devices.issue_esp_credential(session, admin_id, location_id)
+    except (devices.DeviceNotFound, location_management.LocationResourceNotFound) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    response.headers["Cache-Control"] = "no-store"
+    return result
+
+
+@router.post(
+    "/{location_id}/cctv",
+    status_code=201,
+    dependencies=[Depends(RequirePermission("locations:manage"))],
+)
+def create_cctv(
+    location_id: UUID,
+    payload: CctvCreate,
+    request: Request,
+    admin_id: UUID = Depends(get_user_id),
+    session: Session = Depends(get_session),
+):
+    try:
+        return devices.add_cctv(session, request.app.state.settings, admin_id, location_id, payload)
+    except location_management.LocationResourceNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except devices.EncryptionNotConfigured as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/{location_id}/cctv", dependencies=[Depends(RequirePermission("locations:manage"))])
+def get_cctv(
+    location_id: UUID,
+    admin_id: UUID = Depends(get_user_id),
+    session: Session = Depends(get_session),
+):
+    try:
+        return devices.list_cctv(session, admin_id, location_id)
+    except location_management.LocationResourceNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get(

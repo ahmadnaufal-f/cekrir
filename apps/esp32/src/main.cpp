@@ -28,7 +28,11 @@ bool validateConfig() {
   String base = config::kApiBaseUrl;
   useTls = base.startsWith("https://");
   if (String(config::kWifiSsid).isEmpty() || String(config::kWifiSsid) == "CHANGE_ME" ||
+#ifdef CEKRIR_DEVICE_AUTH
+      String(config::kDeviceKey).isEmpty() || String(config::kDeviceKey) == "CHANGE_ME" ||
+#else
       String(config::kIngestApiKey).isEmpty() || String(config::kIngestApiKey) == "CHANGE_ME" ||
+#endif
       base.indexOf(".invalid") >= 0 || !scan_policy::validCourier(config::kCourier) ||
       strlen(config::kCameraId) == 0 || strlen(config::kCameraId) > 100 ||
       config::kScanIntervalMs < 1000 || config::kMaxRetryMs < config::kScanIntervalMs ||
@@ -44,9 +48,14 @@ bool validateConfig() {
     return false;
   }
   while (base.endsWith("/")) base.remove(base.length() - 1);
+#ifdef CEKRIR_DEVICE_AUTH
+  frameUrl = base + "/devices/" + scan_policy::urlEncode(config::kCameraId).c_str() +
+             "/frames?courier=" + scan_policy::urlEncode(config::kCourier).c_str();
+#else
   frameUrl = base + "/detections/frame?courier=" +
              scan_policy::urlEncode(config::kCourier).c_str() + "&camera_id=" +
              scan_policy::urlEncode(config::kCameraId).c_str();
+#endif
   return true;
 }
 
@@ -112,7 +121,11 @@ UploadResult sendFrame(camera_fb_t* frame) {
   http.useHTTP10(true);  // A bounded Content-Length response, without chunked transfer.
   http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
   http.addHeader("Content-Type", "image/jpeg");
+#ifdef CEKRIR_DEVICE_AUTH
+  http.addHeader("X-Device-Key", config::kDeviceKey);
+#else
   http.addHeader("X-Ingest-Key", config::kIngestApiKey);
+#endif
   const int status = http.POST(frame->buf, frame->len);
   UploadResult result;
   if (status == 200 && http.getSize() > 0 && http.getSize() <= 2048) {

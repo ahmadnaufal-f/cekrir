@@ -1,0 +1,29 @@
+info:
+  name: Test login onboarding response
+  type: http
+  seq: 9
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/auth/login"
+  body:
+    type: json
+    data: |-
+      {"email": "{{email}}", "password": "{{password}}"}
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("Login includes location and ESP IDs", function () {
+          expect(res.status).to.equal(200);
+          expect(res.body).to.have.property("location_id");
+          expect(res.body).to.have.property("esp_device_id");
+          if (res.body.user.role === "admin") {
+            expect(res.body.location_id).to.be.a("string").and.not.empty;
+            expect(res.body.esp_device_id).to.be.a("string").and.not.empty;
+          } else if (res.body.location_id === null) {
+            expect(res.body.esp_device_id).to.equal(null);
+          }
+        });
+docs:
+  content: Login can create an admin's default location and ESP identifier. Copy tokens and IDs from the response into the selected environment; keep tokens private.
+  type: text/markdown

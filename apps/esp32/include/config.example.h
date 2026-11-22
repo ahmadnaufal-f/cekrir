@@ -9,6 +9,8 @@ constexpr char kWifiPassword[] = "CHANGE_ME";
 constexpr char kApiBaseUrl[] = "https://api.example.invalid/api/v1";
 constexpr char kIngestApiKey[] = "CHANGE_ME";  // Match backend CEKRIR_INGEST_API_KEY.
 constexpr char kCameraId[] = "esp32-front-door";
+// For the onboarded-device build, use the ESP ID and one-time device key from the API.
+constexpr char kDeviceKey[] = "CHANGE_ME";
 constexpr char kCourier[] = "jne";  // The barcode alone does not identify a courier.
 
 // PEM root CA that signs your HTTPS API certificate. Never disable verification.

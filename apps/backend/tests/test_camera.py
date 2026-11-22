@@ -49,7 +49,7 @@ def test_camera_jpeg_to_shipment_and_notification(client, provider, barcode_form
     repeated = client.post(ENDPOINT, params=PARAMS, content=frame, headers=HEADERS)
     assert repeated.json()["detections"][0]["created"] is False
     assert len(client.get("/api/v1/notifications").json()) == 1
-    assert provider.calls == 1
+    assert provider.calls == 0
 
 
 def test_blank_frame_and_unrelated_qr_do_not_create_shipments(client, provider):
@@ -118,14 +118,15 @@ def test_chunked_upload_cannot_bypass_the_body_limit(client):
     assert response.status_code == 413
 
 
-def test_camera_tracking_failure_preserves_atomic_registration(client, provider):
+def test_camera_arrival_does_not_depend_on_tracking_provider(client, provider):
     provider.fail = True
     response = client.post(
         ENDPOINT, params=PARAMS, content=jpeg(barcode_image("CEKRIR001")), headers=HEADERS
     )
-    assert response.status_code == 502
-    assert client.get("/api/v1/shipments").json() == []
-    assert client.get("/api/v1/notifications").json() == []
+    assert response.status_code == 200
+    assert client.get("/api/v1/shipments").json()[0]["status"] == "delivered"
+    assert len(client.get("/api/v1/notifications").json()) == 1
+    assert provider.calls == 0
 
 
 def test_camera_metadata_is_validated(client):

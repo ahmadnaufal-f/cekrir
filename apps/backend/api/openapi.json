@@ -48,7 +48,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VerificationPending"
+                  "$ref": "#/components/schemas/RegistrationPending"
                 }
               }
             }
@@ -316,6 +316,50 @@
         ]
       }
     },
+    "/api/v1/tracking/binderbyte": {
+      "post": {
+        "tags": [
+          "shipments"
+        ],
+        "summary": "Check Binderbyte",
+        "operationId": "check_binderbyte_api_v1_tracking_binderbyte_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BinderByteInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/v1/shipments": {
       "get": {
         "tags": [
@@ -522,6 +566,93 @@
         "description": "When CEKRIR_INGEST_API_KEY is configured, the matching X-Ingest-Key is required; otherwise use a bearer token with detections:create."
       }
     },
+    "/api/v1/devices/{device_id}/frames": {
+      "post": {
+        "tags": [
+          "devices"
+        ],
+        "summary": "Ingest Device Frame",
+        "operationId": "ingest_device_frame_api_v1_devices__device_id__frames_post",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Device Id"
+            }
+          },
+          {
+            "name": "courier",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 32,
+              "pattern": "^[a-z0-9_-]+$",
+              "title": "Courier"
+            }
+          },
+          {
+            "name": "X-Device-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Device-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraFrameResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "DeviceKey": []
+          }
+        ]
+      }
+    },
     "/api/v1/detections/frame": {
       "post": {
         "tags": [
@@ -596,6 +727,140 @@
           }
         ],
         "description": "When CEKRIR_INGEST_API_KEY is configured, the matching X-Ingest-Key is required; otherwise use a bearer token with detections:create."
+      }
+    },
+    "/api/v1/notifications/fcm/unregister": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Unregister Fcm Token",
+        "operationId": "unregister_fcm_token_api_v1_notifications_fcm_unregister_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FcmUnregister"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/notifications/fcm": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Register Fcm",
+        "operationId": "register_fcm_api_v1_notifications_fcm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FcmRegistration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/notifications/fcm/{device_id}": {
+      "delete": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Unregister Fcm",
+        "operationId": "unregister_fcm_api_v1_notifications_fcm__device_id__delete",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Device Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
       }
     },
     "/api/v1/notifications/email": {
@@ -808,6 +1073,152 @@
                 "schema": {
                   "$ref": "#/components/schemas/PaymentRead"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/locations/{location_id}/esp/credentials": {
+      "post": {
+        "tags": [
+          "locations"
+        ],
+        "summary": "Provision Esp",
+        "operationId": "provision_esp_api_v1_locations__location_id__esp_credentials_post",
+        "parameters": [
+          {
+            "name": "location_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Location Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/locations/{location_id}/cctv": {
+      "post": {
+        "tags": [
+          "locations"
+        ],
+        "summary": "Create Cctv",
+        "operationId": "create_cctv_api_v1_locations__location_id__cctv_post",
+        "parameters": [
+          {
+            "name": "location_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Location Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CctvCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "get": {
+        "tags": [
+          "locations"
+        ],
+        "summary": "Get Cctv",
+        "operationId": "get_cctv_api_v1_locations__location_id__cctv_get",
+        "parameters": [
+          {
+            "name": "location_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Location Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -1232,6 +1643,42 @@
   },
   "components": {
     "schemas": {
+      "BinderByteInput": {
+        "properties": {
+          "courier": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 2,
+            "pattern": "^[a-z0-9_-]+$",
+            "title": "Courier"
+          },
+          "resi_number": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 3,
+            "pattern": "^[A-Za-z0-9-]+$",
+            "title": "Resi Number"
+          },
+          "phone_last_five": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]{5}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone Last Five"
+          }
+        },
+        "type": "object",
+        "required": [
+          "courier",
+          "resi_number"
+        ],
+        "title": "BinderByteInput"
+      },
       "CameraFrameResult": {
         "properties": {
           "detected_count": {
@@ -1254,6 +1701,46 @@
         },
         "type": "object",
         "title": "CameraFrameResult"
+      },
+      "CctvCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "stream_url": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Stream Url"
+          },
+          "username": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "format": "password",
+            "title": "Username",
+            "writeOnly": true
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "format": "password",
+            "title": "Password",
+            "writeOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "stream_url",
+          "username",
+          "password"
+        ],
+        "title": "CctvCreate"
       },
       "CredentialsInput": {
         "properties": {
@@ -1354,6 +1841,46 @@
           "message"
         ],
         "title": "EmailNotificationInput"
+      },
+      "FcmRegistration": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "format": "password",
+            "title": "Token",
+            "writeOnly": true
+          },
+          "location_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Location Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "location_id"
+        ],
+        "title": "FcmRegistration"
+      },
+      "FcmUnregister": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "format": "password",
+            "title": "Token",
+            "writeOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "title": "FcmUnregister"
       },
       "FrameDetection": {
         "properties": {
@@ -1601,6 +2128,40 @@
         ],
         "title": "RegisterInput"
       },
+      "RegistrationPending": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "default": "Check your email for a verification link."
+          },
+          "location_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Id"
+          },
+          "esp_device_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Esp Device Id"
+          }
+        },
+        "type": "object",
+        "title": "RegistrationPending"
+      },
       "ResiInput": {
         "properties": {
           "courier": {
@@ -1769,6 +2330,29 @@
           },
           "user": {
             "$ref": "#/components/schemas/UserRead"
+          },
+          "location_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Id"
+          },
+          "esp_device_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Esp Device Id"
           }
         },
         "type": "object",
@@ -1934,6 +2518,11 @@
         "type": "apiKey",
         "in": "header",
         "name": "X-Ingest-Key"
+      },
+      "DeviceKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Device-Key"
       }
     }
   }

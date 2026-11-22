@@ -1,5 +1,6 @@
 """Transactional email delivery through Resend or the existing SMTP transport."""
 
+import logging
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -17,6 +18,7 @@ class EmailUnavailable(Exception):
 # The SDK stores its API key and HTTP client globally. Keep each call's
 # configuration together when multiple request threads are sending email.
 _resend_lock = Lock()
+logger = logging.getLogger(__name__)
 
 
 def require_delivery_configuration(settings: Settings) -> None:
@@ -56,6 +58,21 @@ def send_email(
                 finally:
                     resend.api_key, resend.default_http_client = old_key, old_client
         except resend.exceptions.ResendError as exc:
+            # Do not log the provider's message, response body, recipient or API key.
+            error_type = str(exc.error_type)
+            if error_type not in {
+                "validation_error",
+                "invalid_api_key",
+                "restricted_api_key",
+                "missing_api_key",
+                "rate_limit_exceeded",
+                "application_error",
+                "internal_server_error",
+                "HttpClientError",
+            }:
+                error_type = "unknown"
+            status = exc.code if isinstance(exc.code, int) and 400 <= exc.code <= 599 else "unknown"
+            logger.warning("Resend email request failed: status=%s type=%s", status, error_type)
             raise EmailUnavailable("Email could not be sent") from exc
         return
 

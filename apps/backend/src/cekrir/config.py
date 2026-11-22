@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     tracking_api_url: HttpUrl | None = None
     tracking_api_key: SecretStr | None = None
     ingest_api_key: SecretStr | None = None
+    binderbyte_api_key: SecretStr | None = None
+    cctv_encryption_key: SecretStr | None = None
+    firebase_credentials_file: str | None = None
 
     @field_validator("database_url")
     @classmethod

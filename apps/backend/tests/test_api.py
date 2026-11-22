@@ -44,8 +44,9 @@ def test_repeated_camera_frames_do_not_repeat_lookups_or_notifications(client, p
     assert second.json()["created"] is False
     assert first.json()["shipment"]["id"] == second.json()["shipment"]["id"]
     assert second.json()["shipment"]["last_detected_at"] is not None
+    assert second.json()["shipment"]["status"] == "delivered"
     assert len(client.get("/api/v1/notifications").json()) == 1
-    assert provider.calls == 1
+    assert provider.calls == 0
 
 
 def test_same_resi_on_different_couriers_is_distinct(client):
