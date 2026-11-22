@@ -6,6 +6,7 @@ import {
   shallowRef,
   useTemplateRef,
 } from 'vue'
+import { RouterLink } from 'vue-router'
 import { accountInitials } from '../lib/account-initials'
 import { ui } from '../lib/strings'
 import AppIcon from './AppIcon.vue'
@@ -18,7 +19,6 @@ const props = defineProps<{
   modeLabel: string
 }>()
 const emit = defineEmits<{
-  navigate: [path: '/login' | '/shipments' | '/settings']
   back: []
   logout: []
 }>()
@@ -50,7 +50,6 @@ function closeOnEscape(event: KeyboardEvent) {
 function openSettings() {
   menuOpen.value = false
   if (props.accountCurrent) avatar.value?.focus()
-  else emit('navigate', '/settings')
 }
 onMounted(() => {
   updateScroll()
@@ -77,12 +76,11 @@ onUnmounted(() => {
       class="site-header__back"
       @click="emit('back')"
     />
-    <a
+    <RouterLink
       v-else
       class="brand"
-      :href="signedIn ? '#/shipments' : '#/login'"
+      :to="{ name: signedIn ? 'shipments' : 'login' }"
       aria-label="Cekrir"
-      @click.prevent="emit('navigate', signedIn ? '/shipments' : '/login')"
     >
       <svg viewBox="0 0 28 28" fill="none" aria-hidden="true">
         <path
@@ -98,7 +96,7 @@ onUnmounted(() => {
         />
       </svg>
       <span>cekrir<span class="brand__dot">.</span></span>
-    </a>
+    </RouterLink>
     <div
       v-if="signedIn"
       ref="account"
@@ -124,14 +122,13 @@ onUnmounted(() => {
         id="account-dropdown-actions"
         class="account-dropdown__actions"
       >
-        <a
-          href="#/settings"
+        <RouterLink
+          :to="{ name: 'settings', state: { settingsOpenedInApp: true } }"
           class="account-dropdown__action"
-          :aria-current="accountCurrent ? 'page' : undefined"
-          @click.prevent="openSettings"
+          @click="openSettings"
         >
           <AppIcon name="user" /> Pengaturan
-        </a>
+        </RouterLink>
         <button
           type="button"
           class="account-dropdown__action"

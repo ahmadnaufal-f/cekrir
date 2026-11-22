@@ -1,6 +1,6 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
 import type { PackageNotification } from '../features/api/contracts'
-import { shipmentRoute } from '../features/api/routes'
 
 export type ShipmentAlertContent = Pick<
   PackageNotification,
@@ -11,6 +11,7 @@ export type ShipmentAlertContent = Pick<
 
 const props = defineProps<{ notification: ShipmentAlertContent }>()
 const emit = defineEmits<{ open: [shipmentId: string]; dismiss: [] }>()
+const router = useRouter()
 
 function openShipment() {
   const id = props.notification.shipment_id
@@ -28,7 +29,12 @@ function openShipment() {
       <a
         v-if="notification.shipment_id"
         class="text-button shipment-alert__link"
-        :href="`#${shipmentRoute(notification.shipment_id)}`"
+        :href="
+          router.resolve({
+            name: 'shipment-detail',
+            params: { id: notification.shipment_id },
+          }).href
+        "
         @click.prevent="openShipment"
       >
         Lihat paket

@@ -6,7 +6,6 @@ import {
   type TokenPair,
   type User,
 } from './contracts'
-import { parseApiRoute } from './routes'
 import { createApiMock } from './mock'
 import { createShipmentServices } from './index'
 const user: User = {
@@ -257,19 +256,6 @@ describe('shipments, errors and UI boundary', () => {
     ).toEqual({})
     expect(validateShipment({ courier: '/', resi_number: 'a' })).toHaveProperty(
       'resi_number',
-    )
-  })
-  it('redirects old delivery and notification links and rejects malformed IDs', () => {
-    expect(parseApiRoute('#/deliveries/abc')).toBe('/shipments/abc')
-    expect(parseApiRoute('#/notifications')).toBe('/shipments')
-    expect(parseApiRoute('#/shipments/%2fadmin')).toBe('/shipments')
-    expect(parseApiRoute('#/shipments/%00')).toBe('/shipments')
-  })
-  it('recognizes the Devices tab after a hash change', () => {
-    expect(parseApiRoute('#/devices')).toBe('/devices')
-    expect(parseApiRoute('#/devices/setup/esp32')).toBe('/devices/setup/esp32')
-    expect(parseApiRoute('#/devices/setup/cameras')).toBe(
-      '/devices/setup/cameras',
     )
   })
   it('uses the active demo session for device inventory and registration', async () => {

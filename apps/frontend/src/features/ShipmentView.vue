@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import BackButton from '../components/BackButton.vue'
 import DeliveryCard from '../components/DeliveryCard.vue'
 import DeliveryCardSkeleton from '../components/DeliveryCardSkeleton.vue'
@@ -10,7 +11,6 @@ import PullToRefresh from '../components/PullToRefresh.vue'
 import RefreshButton from '../components/RefreshButton.vue'
 import SearchInput from '../components/SearchInput.vue'
 import type { ApiServices, Shipment, User } from './api/contracts'
-import { shipmentRoute } from './api/routes'
 import { deliveryCopy as copy } from '../lib/delivery-copy'
 import { getCalendarDate } from '../lib/delivery-date'
 import { normalizeDeliverySearch } from '../lib/delivery-search'
@@ -24,6 +24,7 @@ const props = defineProps<{
   notifiedShipmentId?: string
 }>()
 const emit = defineEmits<{ open: [id: string]; back: [] }>()
+const router = useRouter()
 const items = shallowRef<Shipment[]>([])
 const selected = ref<Shipment | null>(null)
 const loading = ref(false)
@@ -337,7 +338,12 @@ onUnmounted(() => {
               <li v-for="item in visibleItems" :key="item.id">
                 <DeliveryCard
                   :delivery="deliveryCard(item)"
-                  :href="`#${shipmentRoute(item.id)}`"
+                  :href="
+                    router.resolve({
+                      name: 'shipment-detail',
+                      params: { id: item.id },
+                    }).href
+                  "
                   :is-new="item.id === notifiedShipmentId"
                   timestamp-label="Ditambahkan"
                   @open="emit('open', $event)"

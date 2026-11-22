@@ -15,7 +15,7 @@ Active routes are `#/shipments`, `#/shipments/:id`, `#/settings`, and the admin-
 
 ## Architecture and boundaries
 
-`src/features/api/` contains wire DTOs, the HTTP/session client, notification connection lifecycle, route parser, and the API-compatible development mock. `src/features/` contains the active screens. `App.vue` owns session-aware navigation and foreground notifications. Legacy shipment helpers share the active client's session. The prior household components/services remain unmounted as historical prototype code; their tests do not establish household integration.
+`src/features/api/` contains wire DTOs, the HTTP/session client, notification connection lifecycle, and the API-compatible development mock. `src/router.ts` defines the Vue Router routes and access checks. Hash history keeps links compatible with static hosting and Capacitor, and shipment detail and device guide links resume after sign-in. `App.vue` provides session state and foreground notifications to the routed views. Legacy shipment helpers share the active client's session. The prior household components/services remain unmounted as historical prototype code. Their tests do not establish household integration.
 
 The backend records and user list are **shared**, not household-scoped. The active UI does not fabricate household IDs, delivery photos, device registration, member creation, camera previews, payment processing, or push-installation endpoints. The detection endpoints remain scanner/backend integrations; ingestion keys are never placed in frontend configuration. Existing user permissions are enforced by the backend; client role guards only control presentation.
 

@@ -1,33 +1,33 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Route } from '../features/api/routes'
+import { RouterLink, useRoute } from 'vue-router'
 import { shellCopy as copy } from '../lib/shell-copy'
 import { ui } from '../lib/strings'
 import AppIcon, { type IconName } from './AppIcon.vue'
 
-const props = defineProps<{ isAdmin: boolean; route: Route }>()
-const emit = defineEmits<{ navigate: [path: Route] }>()
+const props = defineProps<{ isAdmin: boolean }>()
+const route = useRoute()
 interface NavigationLink {
-  path: Route
+  name: 'shipments' | 'devices' | 'members'
   label: string
   icon: IconName
 }
 const links = computed<NavigationLink[]>(() => {
   const shipments: NavigationLink = {
-    path: '/shipments',
+    name: 'shipments',
     label: ui.packages,
     icon: 'package',
   }
   return props.isAdmin
     ? [
         shipments,
-        { path: '/devices', label: ui.devices, icon: 'device' },
-        { path: '/members', label: 'Pengguna', icon: 'users' },
+        { name: 'devices', label: ui.devices, icon: 'device' },
+        { name: 'members', label: 'Pengguna', icon: 'users' },
       ]
     : [shipments]
 })
 const activeIndex = computed(() =>
-  links.value.findIndex((link) => link.path === props.route),
+  links.value.findIndex((link) => link.name === route.name),
 )
 </script>
 
@@ -44,15 +44,13 @@ const activeIndex = computed(() =>
       :style="{ '--active-index': activeIndex, '--tab-count': links.length }"
       aria-hidden="true"
     />
-    <a
+    <RouterLink
       v-for="link in links"
-      :key="link.path"
-      :href="`#${link.path}`"
-      :aria-current="route === link.path ? 'page' : undefined"
-      @click.prevent="emit('navigate', link.path)"
+      :key="link.name"
+      :to="{ name: link.name }"
     >
       <AppIcon :name="link.icon" /><span>{{ link.label }}</span>
-    </a>
+    </RouterLink>
   </nav>
 </template>
 
