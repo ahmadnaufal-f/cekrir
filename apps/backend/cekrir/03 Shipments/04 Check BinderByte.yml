@@ -1,0 +1,26 @@
+info:
+  name: Check tracking with BinderByte
+  type: http
+  seq: 4
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/tracking/binderbyte"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+  body:
+    type: json
+    data: |-
+      {"resi_number": "{{resiNumber}}", "courier": "{{courier}}"}
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("Tracking information is returned", function () {
+          expect(res.status).to.equal(200);
+          expect(res.body).to.have.property("summary").that.is.an("object");
+          expect(res.body).to.have.property("history").that.is.an("array");
+        });
+docs:
+  content: Requires CEKRIR_BINDERBYTE_API_KEY on the server and a valid courier and tracking number. Each request may consume provider quota. Add phone_last_five to the body for couriers that require it.
+  type: text/markdown

@@ -26,6 +26,7 @@ def main() -> None:
     schemes = main_spec.setdefault("components", {}).setdefault("securitySchemes", {})
     schemes["BearerAuth"] = {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
     schemes["IngestKey"] = {"type": "apiKey", "in": "header", "name": "X-Ingest-Key"}
+    schemes["DeviceKey"] = {"type": "apiKey", "in": "header", "name": "X-Device-Key"}
     for path, methods in main_spec["paths"].items():
         if path in PUBLIC_PATHS:
             continue
@@ -33,6 +34,8 @@ def main() -> None:
             if method not in {"get", "post", "patch", "put", "delete"}:
                 continue
             operation["security"] = [{"BearerAuth": []}]
+            if method == "post" and path == "/api/v1/devices/{device_id}/frames":
+                operation["security"] = [{"DeviceKey": []}]
             if method == "post" and path in {"/api/v1/detections", "/api/v1/detections/frame"}:
                 operation["security"].append({"IngestKey": []})
                 operation["description"] = (

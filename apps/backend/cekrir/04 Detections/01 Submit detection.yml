@@ -1,0 +1,20 @@
+info:
+  name: "Submit detection"
+  type: http
+  seq: 13
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/detections"
+  headers:
+    - name: X-Ingest-Key
+      value: "{{ingestKey}}"
+  body:
+    type: json
+    data: |-
+      {
+        "resi_number": "{{trackingNumber}}",
+        "courier": "jne",
+        "camera_id": "{{cameraId}}"
+      }
+

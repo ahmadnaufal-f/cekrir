@@ -7,6 +7,14 @@ from pydantic import BaseModel, ConfigDict, Field
 ShipmentStatus = Literal["pending", "in_transit", "delivered", "exception"]
 
 
+class LocationRead(BaseModel):
+    id: UUID
+    name: str
+    esp_device_id: str | None
+    onboarding_complete: bool
+    camera_ids: list[str]
+
+
 class FrameDetection(BaseModel):
     resi_number: str
     shipment_id: UUID
@@ -78,10 +86,17 @@ class TokenRead(BaseModel):
     expires_in: int
     refresh_expires_in: int
     user: UserRead
+    location_id: UUID | None = None
+    esp_device_id: str | None = None
 
 
 class VerificationPending(BaseModel):
     detail: str = "Check your email for a verification link."
+
+
+class RegistrationPending(VerificationPending):
+    location_id: UUID | None = None
+    esp_device_id: str | None = None
 
 
 class PaymentRead(BaseModel):

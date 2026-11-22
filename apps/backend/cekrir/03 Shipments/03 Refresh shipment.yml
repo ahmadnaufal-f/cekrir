@@ -1,0 +1,12 @@
+info:
+  name: "Refresh shipment"
+  type: http
+  seq: 12
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/shipments/{{shipmentId}}/refresh"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+

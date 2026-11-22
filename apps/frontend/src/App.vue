@@ -9,6 +9,8 @@ import type {
 import AppHeader from './components/AppHeader.vue'
 import AppNavigation from './components/AppNavigation.vue'
 import ShipmentAlert from './components/ShipmentAlert.vue'
+import { createPushController } from './composables/usePush'
+import { createDevicePushBridge } from './lib/push'
 import {
   canSendDeviceNotification,
   listenForShipmentNotificationTaps,
@@ -30,6 +32,33 @@ const modeLabel = computed(() =>
 )
 const onShipmentList = computed(() => route.name === 'shipments')
 const inSettings = computed(() => route.name === 'settings')
+const pushUser = computed(() =>
+  user.value
+    ? {
+        id: user.value.id,
+        householdId: services.locationId?.() ?? '',
+        role: user.value.role,
+        displayName: user.value.full_name,
+        loginId: user.value.email,
+      }
+    : null,
+)
+const push = services.push
+  ? createPushController({
+      bridge: createDevicePushBridge(),
+      service: services.push,
+      user: pushUser,
+      onNavigate(id) {
+        if (!user.value) return false
+        void router.push({ name: 'shipment-detail', params: { id } })
+        return true
+      },
+      onRefresh() {
+        revision.value++
+      },
+    })
+  : null
+const pushState = push?.state
 const revision = ref(0)
 const liveStatus = ref('unavailable')
 const alert = shallowRef<PackageNotification | null>(null)
@@ -107,6 +136,7 @@ async function setShipmentNotifications(enabled: boolean) {
   const accountId = user.value?.id
   if (!accountId || notificationPermissionRequest.value) return
   notificationSettingMessage.value = ''
+  if (enabled && push) await push.enable()
   if (enabled && canSendDeviceNotification()) {
     const request = Symbol()
     notificationPermissionRequest.value = request
@@ -140,7 +170,11 @@ async function setShipmentNotifications(enabled: boolean) {
     // Keep the preference for the current session if storage is unavailable.
   }
 }
-function logout() {
+async function logout() {
+  if (push && !(await push.beforeLogout())) {
+    notice.value = 'Tidak dapat menonaktifkan notifikasi. Coba lagi.'
+    return
+  }
   signingOut = true
   services.auth.logout()
   signingOut = false
@@ -296,6 +330,7 @@ onMounted(() => {
   )
 })
 onUnmounted(() => {
+  push?.dispose()
   unsubscribe()
   disconnect?.()
   notificationPermissionRequest.value = null
@@ -322,6 +357,11 @@ onUnmounted(() => {
       @logout="logout"
     />
     <p v-if="notice" class="banner" role="status">{{ notice }}</p>
+    <aside v-if="pushState?.banner && user" class="banner" role="status">
+      Package notification
+      <button type="button" @click="push?.tapBanner()">Open</button>
+      <button type="button" @click="push?.dismissBanner()">Dismiss</button>
+    </aside>
     <ShipmentAlert
       v-if="alert && user && !onShipmentList"
       :notification="alert"

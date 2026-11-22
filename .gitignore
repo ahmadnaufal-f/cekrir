@@ -20,5 +20,9 @@ data/
 .pio/
 apps/esp32/include/config.h
 apps/esp32/include/wifi_camera_config.h
+apps/esp32/include/proximity_config.h
+apps/backend/firebase-service-account.json
+apps/frontend/android/app/google-services.json
+apps/frontend/ios/App/App/GoogleService-Info.plist
 apps/esp32/captures/
 .vercel/

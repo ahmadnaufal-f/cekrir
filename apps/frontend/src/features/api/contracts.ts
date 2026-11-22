@@ -23,6 +23,8 @@ export interface TokenPair {
   refresh_expires_in: number
   token_type?: 'bearer'
   user: User
+  location_id?: string | null
+  esp_device_id?: string | null
 }
 export interface VerificationPending {
   detail?: string
@@ -36,6 +38,8 @@ export interface ApiServices {
   user(): User | null
   subscribe(listener: (user: User | null) => void): () => void
   devices?: AppServices['devices']
+  push?: AppServices['push']
+  locationId?(): string | null
   auth: {
     login(input: Credentials): Promise<User>
     register(input: Registration): Promise<VerificationPending>

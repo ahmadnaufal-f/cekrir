@@ -5,7 +5,17 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from cekrir.db.model import Notification, Role, Shipment, ShipmentSource, ShipmentStatus, User
+from cekrir.db.model import (
+    CameraDevice,
+    CctvCamera,
+    EspDevice,
+    Notification,
+    Role,
+    Shipment,
+    ShipmentSource,
+    ShipmentStatus,
+    User,
+)
 from cekrir.schemas import (
     NotificationRead,
     ShipmentRead,
@@ -51,16 +61,25 @@ class ShipmentRepository:
             return None
         return self.session.get(Shipment, identifier)
 
-    def record_detection(self, shipment_id: UUID, payload: DetectionInput) -> ShipmentRead:
+    def record_detection(
+        self, shipment_id: UUID, payload: DetectionInput
+    ) -> tuple[ShipmentRead, NotificationRead | None]:
+        notification = None
         with self.session.begin():
             shipment = self.session.scalar(
                 select(Shipment).where(Shipment.id == shipment_id).with_for_update()
             )
             if shipment is None:
                 raise RuntimeError("Shipment disappeared while recording a camera detection")
+            first_detection = shipment.last_detected_at is None
             shipment.camera_id = payload.camera_id
             shipment.last_detected_at = datetime.now(UTC)
-        return ShipmentRead.model_validate(shipment)
+            if shipment.status != ShipmentStatus.DELIVERED or first_detection:
+                shipment.status = ShipmentStatus.DELIVERED
+                notification = self._notify(shipment, "Package arrived", arrived=True)
+        return ShipmentRead.model_validate(shipment), (
+            NotificationRead.model_validate(notification) if notification else None
+        )
 
     def register(
         self, payload: ResiInput, snapshot: TrackingSnapshot, provider: str
@@ -75,8 +94,8 @@ class ShipmentRepository:
                     courier=payload.courier,
                     source=ShipmentSource.CAMERA if camera else ShipmentSource.MANUAL,
                     camera_id=payload.camera_id if camera else None,
-                    status=ShipmentStatus(snapshot.status),
-                    summary=snapshot.summary,
+                    status=ShipmentStatus.DELIVERED if camera else ShipmentStatus(snapshot.status),
+                    summary="Package detected at location" if camera else snapshot.summary,
                     provider=provider,
                     history=[event.model_dump(mode="json") for event in snapshot.history],
                     last_detected_at=datetime.now(UTC) if camera else None,
@@ -86,12 +105,25 @@ class ShipmentRepository:
             )
             shipment_id = self.session.scalar(statement)
             if shipment_id is None:
-                existing = self.find_shipment(payload)
+                existing = self.session.scalar(
+                    select(Shipment)
+                    .where(
+                        Shipment.courier == payload.courier,
+                        Shipment.resi_number == payload.resi_number,
+                    )
+                    .with_for_update()
+                )
                 if existing is None:
                     raise RuntimeError("Conflicting shipment could not be found")
                 if camera:
+                    first_detection = existing.last_detected_at is None
                     existing.camera_id = payload.camera_id
                     existing.last_detected_at = datetime.now(UTC)
+                    if existing.status != ShipmentStatus.DELIVERED or first_detection:
+                        existing.status = ShipmentStatus.DELIVERED
+                        created_notification = self._notify(
+                            existing, "Package arrived", arrived=True
+                        )
                 shipment = existing
                 created = False
             else:
@@ -99,7 +131,7 @@ class ShipmentRepository:
                 if shipment is None:
                     raise RuntimeError("Registered shipment could not be loaded")
                 created_notification = self._notify(
-                    shipment, "Package detected" if camera else "Package added"
+                    shipment, "Package arrived" if camera else "Package added", arrived=camera
                 )
                 created = True
         return (
@@ -119,23 +151,54 @@ class ShipmentRepository:
             if shipment is None:
                 raise LookupError("Shipment not found")
             previous_status = shipment.status
-            shipment.status = ShipmentStatus(snapshot.status)
+            shipment.status = (
+                ShipmentStatus.DELIVERED
+                if shipment.last_detected_at is not None
+                else ShipmentStatus(snapshot.status)
+            )
             shipment.summary = snapshot.summary
             shipment.provider = provider
             shipment.history = [event.model_dump(mode="json") for event in snapshot.history]
             shipment.checked_at = datetime.now(UTC)
             if previous_status != shipment.status:
-                changed_notification = self._notify(shipment, "Package status changed")
+                arrived = shipment.status == ShipmentStatus.DELIVERED
+                changed_notification = self._notify(
+                    shipment, "Package arrived" if arrived else "Package status changed"
+                )
         return (
             ShipmentRead.model_validate(shipment),
             NotificationRead.model_validate(changed_notification) if changed_notification else None,
         )
 
-    def _notify(self, shipment: Shipment, title: str) -> Notification:
+    def _notify(self, shipment: Shipment, title: str, *, arrived: bool = False) -> Notification:
+        location_id = None
+        if shipment.camera_id:
+            location_id = self.session.scalar(
+                select(EspDevice.location_id).where(EspDevice.device_id == shipment.camera_id)
+            )
+            if location_id is None:
+                location_id = self.session.scalar(
+                    select(CameraDevice.location_id).where(
+                        CameraDevice.camera_id == shipment.camera_id
+                    )
+                )
+            if location_id is None:
+                try:
+                    camera_uuid = UUID(shipment.camera_id)
+                except ValueError:
+                    camera_uuid = None
+                if camera_uuid:
+                    location_id = self.session.scalar(
+                        select(CctvCamera.location_id).where(CctvCamera.id == camera_uuid)
+                    )
         notification = Notification(
             shipment_id=shipment.id,
+            location_id=location_id,
             title=title,
-            message=f"{shipment.courier.upper()} | {shipment.resi_number}: {shipment.summary}",
+            message=(
+                f"{shipment.courier.upper()} | {shipment.resi_number}: "
+                f"{'Package detected at location' if arrived else shipment.summary}"
+            ),
         )
         self.session.add(notification)
         self.session.flush()

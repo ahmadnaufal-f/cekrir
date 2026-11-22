@@ -1,0 +1,26 @@
+info:
+  name: Submit ESP JPEG frame
+  type: http
+  seq: 3
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/devices/{{espDeviceId}}/frames?courier=jne"
+  headers:
+    - name: X-Device-Key
+      value: "{{deviceKey}}"
+    - name: Content-Type
+      value: image/jpeg
+  body:
+    type: none
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("Device frame was accepted", function () {
+          expect(res.status).to.equal(200);
+          expect(res.body).to.have.property("detected_count");
+          expect(res.body).to.have.property("detections").that.is.an("array");
+        });
+docs:
+  content: Choose a JPEG file as the binary request body in Bruno before sending. A barcode may create or update a real shipment and send notifications. Maximum frame size is 512 KiB.
+  type: text/markdown

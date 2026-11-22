@@ -25,7 +25,7 @@
 | Team              | Project initiator owns PM, frontend, and CCTV setup. Teammate owns backend and ESP32                             |
 | Availability      | Weekday nights and full weekends, with Codex assisted coding                                                     |
 | Mobile app        | Vue, Vite, and Capacitor. Android is the MVP. iOS is a future extension                                          |
-| Backend           | Python with FastAPI, PostgreSQL, SQLAlchemy ORM, and Alembic migrations                                            |
+| Backend           | Python with FastAPI, PostgreSQL, SQLAlchemy ORM, and Alembic migrations                                          |
 | Scanner           | ESP32 camera and proximity sensor. Python backend decodes barcode images                                         |
 | Courier feedback  | Light and buzzer signal successful decoding, without waiting for CCTV, tracking lookup, or push completion       |
 | CCTV              | Multiple cameras can be registered. Admin designates one for delivery capture                                    |

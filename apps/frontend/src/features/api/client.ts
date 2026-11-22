@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core'
 import { ServiceError } from '../../services/contracts'
+import type { CameraInput, DeviceInventory } from '../../types/app'
 import type {
   ApiServices,
   TokenPair,
@@ -199,9 +200,124 @@ export function createApiClient(options: ClientOptions = {}): ApiServices {
     })
     return { items, nextOffset: items.length === 100 ? offset + 100 : null }
   }
+  function locationId(): string {
+    if (!pair?.location_id)
+      throw new ServiceError(
+        'location_unavailable',
+        'Lokasi belum tersedia.',
+        404,
+      )
+    return pair.location_id
+  }
+  async function inventory(): Promise<DeviceInventory> {
+    const id = locationId()
+    const locations =
+      await authorized<Array<{ id: string; esp_device_id: string | null }>>(
+        '/locations',
+      )
+    const location = locations.find((item) => item.id === id)
+    if (!location)
+      throw new ServiceError(
+        'location_unavailable',
+        'Lokasi belum tersedia.',
+        404,
+      )
+    const cameras = await authorized<Array<{ id: string; name: string }>>(
+      `/locations/${encodeURIComponent(id)}/cctv`,
+    )
+    return {
+      esp32: location.esp_device_id
+        ? { id: location.esp_device_id, name: 'ESP32' }
+        : null,
+      cameras: cameras.map((camera) => ({
+        ...camera,
+        configurationState: 'configured',
+        verificationState: 'not_tested',
+      })),
+      selectedDeliveryCameraId: null,
+    }
+  }
+  const installations = new Map<string, string>()
+  const unavailable = async (): Promise<never> => {
+    throw new ServiceError(
+      'integration_unavailable',
+      'Fitur belum tersedia.',
+      501,
+    )
+  }
   const service: ApiServices = {
     mode: 'live',
     user: () => pair?.user || null,
+    locationId: () => pair?.location_id || null,
+    devices: {
+      inventory,
+      async registerEsp32() {
+        const existing = await inventory()
+        const data = await authorized<{
+          device_id: string
+          device_key: string
+        }>(`/locations/${encodeURIComponent(locationId())}/esp/credentials`, {
+          method: 'POST',
+        })
+        return {
+          inventory: {
+            ...existing,
+            esp32: { id: data.device_id, name: 'ESP32' },
+          },
+          credential: data.device_key,
+        }
+      },
+      async registerCamera(input: CameraInput) {
+        const connection = input.connection
+        if (!connection?.url || !connection.username || !connection.password)
+          throw new ServiceError(
+            'validation',
+            'RTMP URL, username, and password are required.',
+            422,
+          )
+        await authorized(
+          `/locations/${encodeURIComponent(locationId())}/cctv`,
+          post({
+            name: input.name,
+            stream_url: connection.url,
+            username: connection.username,
+            password: connection.password,
+          }),
+        )
+        return inventory()
+      },
+      renameEsp32: unavailable,
+      removeEsp32: unavailable,
+      updateCamera: unavailable,
+      removeCamera: unavailable,
+      selectCamera: unavailable,
+    },
+    push: {
+      async upsert(registration) {
+        const previous = installations.get(registration.installationId)
+        if (previous && previous !== registration.token)
+          await authorized(
+            '/notifications/fcm/unregister',
+            post({ token: previous }),
+          )
+        installations.set(registration.installationId, registration.token)
+        await authorized(
+          '/notifications/fcm',
+          post({ location_id: locationId(), token: registration.token }),
+        )
+      },
+      async detach(id) {
+        const token = installations.get(id)
+        if (!token)
+          throw new ServiceError(
+            'push_token_missing',
+            'Token belum tersedia.',
+            409,
+          )
+        await authorized('/notifications/fcm/unregister', post({ token }))
+        installations.delete(id)
+      },
+    },
     subscribe(listener) {
       listeners.add(listener)
       return () => listeners.delete(listener)

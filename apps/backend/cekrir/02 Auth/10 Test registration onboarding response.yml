@@ -1,0 +1,23 @@
+info:
+  name: Test registration onboarding response
+  type: http
+  seq: 10
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/auth/register"
+  body:
+    type: json
+    data: |-
+      {"email": "{{newEmail}}", "full_name": "Bruno Test User", "password": "{{newPassword}}"}
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("New member has no location or ESP until assigned", function () {
+          expect(res.status).to.equal(201);
+          expect(res.body).to.have.property("location_id", null);
+          expect(res.body).to.have.property("esp_device_id", null);
+        });
+docs:
+  content: Creates a real inactive account and sends a verification email. Use an unused test email; a mail delivery error may still leave an account behind.
+  type: text/markdown

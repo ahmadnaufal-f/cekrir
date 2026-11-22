@@ -1,0 +1,25 @@
+info:
+  name: "Refresh token"
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/auth/refresh"
+  body:
+    type: json
+    data: |-
+      {
+        "refresh_token": "{{refreshToken}}"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("Refresh includes the location and ESP IDs", function () {
+          expect(res.status).to.equal(200);
+          expect(res.body).to.have.property("location_id");
+          expect(res.body).to.have.property("esp_device_id");
+        });
+

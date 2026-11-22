@@ -1,0 +1,12 @@
+info:
+  name: "Remove member"
+  type: http
+  seq: 20
+
+http:
+  method: DELETE
+  url: "{{baseUrl}}/api/v1/locations/{{locationId}}/members/{{userId}}"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+

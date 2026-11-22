@@ -5,7 +5,8 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from cekrir.db.session import get_session
-from cekrir.schemas import TokenRead, UserRead, VerificationPending
+from cekrir.middleware import RequirePermission
+from cekrir.schemas import RegistrationPending, TokenRead, UserRead, VerificationPending
 from cekrir.services import accounts
 from cekrir.services.email_verification import EmailUnavailable
 from cekrir.validation.auth import (
@@ -19,7 +20,7 @@ from cekrir.validation.auth import (
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
-@router.post("/register", response_model=VerificationPending, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=RegistrationPending, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterInput, request: Request, session: Session = Depends(get_session)):
     try:
         accounts.register_account(session, request.app.state.settings, payload)
@@ -27,7 +28,7 @@ def register(payload: RegisterInput, request: Request, session: Session = Depend
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except EmailUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return VerificationPending()
+    return RegistrationPending()
 
 
 @router.post("/login", response_model=TokenRead)
@@ -47,9 +48,11 @@ def refresh(payload: RefreshInput, request: Request, session: Session = Depends(
 
 
 @router.post("/verify-email")
-def confirm_email(payload: VerificationInput, session: Session = Depends(get_session)):
+def confirm_email(
+    payload: VerificationInput, request: Request, session: Session = Depends(get_session)
+):
     try:
-        accounts.confirm_account_email(session, payload.token)
+        accounts.confirm_account_email(session, payload.token, request.app.state.settings)
     except accounts.InvalidVerificationToken as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"detail": "Email verified. You can now sign in."}
@@ -102,12 +105,18 @@ def verification_page():
     )
 
 
-@router.get("/users", response_model=list[UserRead])
+@router.get(
+    "/users", response_model=list[UserRead], dependencies=[Depends(RequirePermission("users:read"))]
+)
 def list_users(session: Session = Depends(get_session)):
     return accounts.list_accounts(session)
 
 
-@router.patch("/users/{user_id}/role", response_model=UserRead)
+@router.patch(
+    "/users/{user_id}/role",
+    response_model=UserRead,
+    dependencies=[Depends(RequirePermission("users:role:update"))],
+)
 def update_role(user_id: UUID, payload: RoleUpdate, session: Session = Depends(get_session)):
     try:
         return accounts.change_role(session, user_id, payload.role)

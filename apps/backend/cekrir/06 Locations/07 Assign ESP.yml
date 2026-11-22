@@ -1,0 +1,11 @@
+info:
+  name: Assign ESP
+  type: http
+  seq: 7
+
+http:
+  method: PUT
+  url: "{{baseUrl}}/api/v1/locations/{{locationId}}/esp/{{espDeviceId}}"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"

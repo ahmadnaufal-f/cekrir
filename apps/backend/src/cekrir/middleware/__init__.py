@@ -1,3 +1,3 @@
-from cekrir.middleware.role_permissions import RolePermissionMiddleware
+from cekrir.middleware.role_permissions import RequirePermission, RolePermissionMiddleware
 
-__all__ = ["RolePermissionMiddleware"]
+__all__ = ["RequirePermission", "RolePermissionMiddleware"]

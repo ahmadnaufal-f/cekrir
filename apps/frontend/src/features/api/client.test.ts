@@ -34,6 +34,49 @@ afterEach(() => {
 })
 
 describe('API session transport', () => {
+  it('uses the signed-in location for ESP provisioning and FCM registration', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        json({
+          ...tokens(),
+          location_id: 'location-1',
+          esp_device_id: 'esp-1',
+        }),
+      )
+      .mockResolvedValueOnce(
+        json([{ id: 'location-1', esp_device_id: 'esp-1' }]),
+      )
+      .mockResolvedValueOnce(json([]))
+      .mockResolvedValueOnce(
+        json({ device_id: 'esp-1', device_key: 'device-key' }),
+      )
+      .mockResolvedValueOnce(
+        json({ device_id: 'push-id', location_id: 'location-1' }),
+      )
+      .mockResolvedValueOnce(json({ detail: 'removed' }))
+    const client = createApiClient({ fetch })
+    await client.auth.login(credentials)
+    expect(client.locationId?.()).toBe('location-1')
+    const esp = await client.devices!.registerEsp32('ESP32')
+    expect(esp.credential).toBe('device-key')
+    expect(String(fetch.mock.calls[3]?.[0])).toContain(
+      '/locations/location-1/esp/credentials',
+    )
+    await client.push!.upsert({
+      installationId: 'one',
+      platform: 'android',
+      token: 'push-token',
+    })
+    expect(JSON.parse(String(fetch.mock.calls[4]?.[1]?.body))).toEqual({
+      location_id: 'location-1',
+      token: 'push-token',
+    })
+    await client.push!.detach('one')
+    expect(String(fetch.mock.calls[5]?.[0])).toContain(
+      '/notifications/fcm/unregister',
+    )
+  })
   it('uses exact paths and maps registration to pending without a session', async () => {
     const fetch = vi
       .fn()

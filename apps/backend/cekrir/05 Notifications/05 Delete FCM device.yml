@@ -1,0 +1,21 @@
+info:
+  name: Delete FCM device
+  type: http
+  seq: 5
+http:
+  method: DELETE
+  url: "{{baseUrl}}/api/v1/notifications/fcm/{{fcmDeviceId}}"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("Push device is removed", function () {
+          expect(res.status).to.equal(200);
+          expect(res.body).to.have.property("detail");
+        });
+docs:
+  content: Removes the signed-in user's FCM registration by ID and stops notifications to it.
+  type: text/markdown

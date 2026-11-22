@@ -1,0 +1,12 @@
+info:
+  name: "Assign camera"
+  type: http
+  seq: 19
+
+http:
+  method: PUT
+  url: "{{baseUrl}}/api/v1/locations/{{locationId}}/cameras/{{cameraId}}"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+

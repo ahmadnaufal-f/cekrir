@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, shallowRef, watch } from 'vue'
 import { RouterLink } from 'vue-router'
+import EspFirmwareGenerator from '../components/EspFirmwareGenerator.vue'
 import AppIcon from '../components/AppIcon.vue'
 import TabSelector from '../components/TabSelector.vue'
 import DeviceCard from '../components/DeviceCard.vue'
@@ -48,6 +49,8 @@ const selecting = shallowRef(false)
 const errorMessage = shallowRef('')
 const noticeMessage = shallowRef('')
 const dialog = shallowRef<DeviceDialog | null>(null)
+const deviceKey = shallowRef<string | null>(null)
+const provisioning = shallowRef(false)
 const isAdmin = computed(() => props.user.role === 'admin')
 const selectedCameraId = computed(
   () => inventory.value?.selectedDeliveryCameraId ?? null,
@@ -116,6 +119,31 @@ async function loadInventory() {
       inventory.value = null
       inventoryState.value = 'error'
     }
+  }
+}
+async function provisionEsp() {
+  if (!props.services || !inventory.value?.esp32 || provisioning.value) return
+  if (
+    !window.confirm(
+      'Creating a key will invalidate the existing ESP key. Continue?',
+    )
+  )
+    return
+  const request = generation
+  provisioning.value = true
+  deviceKey.value = null
+  try {
+    const result = await props.services.devices.registerEsp32(
+      inventory.value.esp32.name,
+    )
+    if (!isCurrent(request)) return
+    inventory.value = result.inventory
+    deviceKey.value = result.credential || null
+  } catch (cause) {
+    if (isCurrent(request) && !reportUnauthorized(cause, request))
+      errorMessage.value = copy.esp32Failed
+  } finally {
+    if (isCurrent(request)) provisioning.value = false
   }
 }
 function chooseCategory(value: string) {
@@ -240,6 +268,7 @@ watch(
     ] as const,
   () => {
     generation++
+    deviceKey.value = null
     inventory.value = null
     selecting.value = false
     dialog.value = null
@@ -264,6 +293,7 @@ onUnmounted(() => {
   disposed = true
   generation++
   inventory.value = null
+  deviceKey.value = null
 })
 </script>
 
@@ -427,6 +457,19 @@ onUnmounted(() => {
               panelCategory === 'esp32' && inventory?.esp32,
           }"
         >
+          <button
+            v-if="
+              services?.mode === 'live' &&
+              panelCategory === 'esp32' &&
+              inventory?.esp32
+            "
+            class="button button--quiet"
+            type="button"
+            :disabled="provisioning"
+            @click="provisionEsp"
+          >
+            Create or rotate ESP key
+          </button>
           <RouterLink
             v-if="
               panelCategory === 'esp32' ||
@@ -463,6 +506,11 @@ onUnmounted(() => {
             <AppIcon name="plus" />{{ copy.registerDevice }}
           </button>
         </div>
+        <EspFirmwareGenerator
+          v-if="panelCategory === 'esp32' && inventory?.esp32 && deviceKey"
+          :device-id="inventory.esp32.id"
+          :device-key="deviceKey"
+        />
       </section>
       <DeviceRegistrationDialog
         v-if="

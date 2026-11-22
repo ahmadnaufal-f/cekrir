@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from cekrir.config import Settings
 from cekrir.db.session import get_session
 from cekrir.dependencies import get_provider, get_publisher, get_user_id
+from cekrir.middleware import RequirePermission
 from cekrir.routers.auth import router as auth_router
 from cekrir.routers.detections import camera_router
 from cekrir.routers.payments import router as payments_router
@@ -19,10 +20,18 @@ from cekrir.validation.shipments import CameraFrameInput
 def client_for(router):
     app = FastAPI()
     app.include_router(router)
+    override_permissions(app, router)
     app.dependency_overrides[get_session] = lambda: object()
     app.dependency_overrides[get_provider] = lambda: object()
     app.dependency_overrides[get_publisher] = lambda: object()
     return TestClient(app)
+
+
+def override_permissions(app, router):
+    for route in router.routes:
+        for dependency in getattr(route, "dependencies", []):
+            if isinstance(dependency.dependency, RequirePermission):
+                app.dependency_overrides[dependency.dependency] = lambda: None
 
 
 def test_invalid_shipment_is_rejected_before_service():
@@ -96,6 +105,7 @@ def test_registration_validation_runs_before_service():
 def test_payment_service_conflict_is_mapped_to_http_409():
     app = FastAPI()
     app.include_router(payments_router)
+    override_permissions(app, payments_router)
     app.dependency_overrides[get_session] = lambda: object()
     app.dependency_overrides[get_user_id] = lambda: "test-user"
     with patch(

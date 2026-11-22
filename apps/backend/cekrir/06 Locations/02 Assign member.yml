@@ -1,0 +1,12 @@
+info:
+  name: "Assign member"
+  type: http
+  seq: 18
+
+http:
+  method: PUT
+  url: "{{baseUrl}}/api/v1/locations/{{locationId}}/members/{{userId}}"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+

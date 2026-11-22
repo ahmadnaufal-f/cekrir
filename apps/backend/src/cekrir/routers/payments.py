@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from cekrir.db.session import get_session
 from cekrir.dependencies import get_user_id
+from cekrir.middleware import RequirePermission
 from cekrir.schemas import PaymentRead
 from cekrir.services import payments
 from cekrir.validation.payments import IdempotencyKey, PaymentCreate
@@ -12,7 +13,12 @@ from cekrir.validation.payments import IdempotencyKey, PaymentCreate
 router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
 
 
-@router.post("", response_model=PaymentRead, status_code=201)
+@router.post(
+    "",
+    response_model=PaymentRead,
+    status_code=201,
+    dependencies=[Depends(RequirePermission("payments:create"))],
+)
 def create_payment_draft(
     payload: PaymentCreate,
     response: Response,
@@ -28,7 +34,11 @@ def create_payment_draft(
     return payment
 
 
-@router.get("/{payment_id}", response_model=PaymentRead)
+@router.get(
+    "/{payment_id}",
+    response_model=PaymentRead,
+    dependencies=[Depends(RequirePermission("payments:read"))],
+)
 def read_payment(
     payment_id: UUID,
     user_id: UUID = Depends(get_user_id),

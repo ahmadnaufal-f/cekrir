@@ -3,9 +3,18 @@
 #include <HTTPClient.h>
 #include <WebServer.h>
 #include <WiFi.h>
+#include <driver/gpio.h>
 #include <esp_camera.h>
 
 #include "camera_pins.h"
+#include "detection_sequence.h"
+#include "proximity_policy.h"
+
+#if __has_include("proximity_config.h")
+#include "proximity_config.h"
+#else
+#include "proximity_config.example.h"
+#endif
 
 #if __has_include("wifi_camera_config.h")
 #include "wifi_camera_config.h"
@@ -15,18 +24,73 @@
 
 namespace {
 constexpr uint32_t kReconnectIntervalMs = 15000;
-constexpr uint32_t kSendTimeoutMs = 15000;
-#ifdef CEKRIR_VIDEO_MODE
-constexpr uint32_t kUploadIntervalMs = 100;
-#else
-constexpr uint32_t kUploadIntervalMs = 1000;
-#endif
 WebServer server(80);
 bool cameraReady = false;
 bool serverReady = false;
+bool sensorReady = false;
+bool buzzerOn = false;
+bool lightRed = false;
 uint32_t lastReconnect = 0;
-uint32_t lastUpload = 0;
+uint32_t lastSensorSample = 0;
 uint32_t successfulUploads = 0;
+camera_fb_t* pendingFrame = nullptr;
+DetectionSequence sequence;
+ProximityPolicy proximity(proximity_config::kTriggerDistanceCm,
+                          proximity_config::kReleaseDistanceCm);
+
+bool safePin(int pin) {
+  if (pin < 0 || !GPIO_IS_VALID_OUTPUT_GPIO(pin) || pin == 0 || pin == 3 ||
+      pin == 19 || pin == 20 || (pin >= 26 && pin <= 37) || pin == 45 || pin == 46) return false;
+  const int cameraPins[] = {camera_pins::kPwdn, camera_pins::kReset, camera_pins::kXclk,
+                           camera_pins::kSda, camera_pins::kScl, camera_pins::kD0,
+                           camera_pins::kD1, camera_pins::kD2, camera_pins::kD3,
+                           camera_pins::kD4, camera_pins::kD5, camera_pins::kD6,
+                           camera_pins::kD7, camera_pins::kVsync, camera_pins::kHref,
+                           camera_pins::kPclk};
+  for (int cameraPin : cameraPins) if (pin == cameraPin) return false;
+  return true;
+}
+
+bool sensorPinsValid() {
+  const int pins[] = {proximity_config::kTriggerPin, proximity_config::kEchoPin,
+                      proximity_config::kBuzzerPin, proximity_config::kRgbLedPin};
+  for (unsigned i = 0; i < 4; ++i) {
+    if (!safePin(pins[i])) return false;
+    for (unsigned j = 0; j < i; ++j) if (pins[i] == pins[j]) return false;
+  }
+  return proximity_config::kTriggerDistanceCm > 0 &&
+         proximity_config::kReleaseDistanceCm > proximity_config::kTriggerDistanceCm &&
+         proximity_config::kSampleIntervalMs >= 60;
+}
+
+void setBuzzer(bool enabled) {
+  if (enabled == buzzerOn) return;
+  buzzerOn = enabled;
+  if (proximity_config::kActiveBuzzer) {
+    digitalWrite(proximity_config::kBuzzerPin,
+                 enabled == proximity_config::kActiveHigh ? HIGH : LOW);
+  } else if (enabled) {
+    tone(proximity_config::kBuzzerPin, 2000);
+  } else {
+    noTone(proximity_config::kBuzzerPin);
+  }
+}
+
+void setLight(bool red) {
+  if (red == lightRed) return;
+  lightRed = red;
+  rgbLedWrite(proximity_config::kRgbLedPin, red ? 32 : 0, red ? 0 : 32, 0);
+}
+
+float readDistanceCm() {
+  digitalWrite(proximity_config::kTriggerPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(proximity_config::kTriggerPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(proximity_config::kTriggerPin, LOW);
+  const unsigned long pulse = pulseIn(proximity_config::kEchoPin, HIGH, 30000);
+  return pulse == 0 ? 0.0f : pulse * 0.0343f / 2.0f;
+}
 
 bool configured() {
   return strlen(wifi_camera_config::kWifiSsid) > 0 &&
@@ -95,58 +159,22 @@ void home() {
   server.send(200, "text/html; charset=utf-8",
               "<!doctype html><meta name=viewport content='width=device-width'>"
               "<title>Cekrir camera</title><h1>Cekrir camera</h1>"
-              "<p><a href='/capture.jpg'>Take a picture</a></p>");
-}
-
-void capture() {
-  if (!authorize()) return;
-  if (!cameraReady) {
-    server.send(503, "text/plain", "Camera is unavailable");
-    return;
-  }
-  camera_fb_t* frame = esp_camera_fb_get();
-  if (!frame) {
-    server.send(503, "text/plain", "Camera capture failed");
-    return;
-  }
-  if (frame->format != PIXFORMAT_JPEG || !frame->buf || frame->len == 0) {
-    esp_camera_fb_return(frame);
-    server.send(500, "text/plain", "Camera did not return a JPEG");
-    return;
-  }
-
-  const size_t frameSize = frame->len;
-  server.sendHeader("Cache-Control", "no-store");
-  server.setContentLength(frameSize);
-  server.send(200, "image/jpeg", "");
-  WiFiClient client = server.client();
-  size_t sent = 0;
-  uint32_t lastProgress = millis();
-  while (sent < frameSize && client.connected() && millis() - lastProgress < kSendTimeoutMs) {
-    const size_t written = client.write(frame->buf + sent, frameSize - sent);
-    if (written) {
-      sent += written;
-      lastProgress = millis();
-    } else {
-      delay(10);
-    }
-  }
-  esp_camera_fb_return(frame);
-  if (sent != frameSize) Serial.println("Picture transfer was interrupted.");
+              "<p>Pictures are captured when the proximity sensor detects an object.</p>");
 }
 
 void health() {
   if (!authorize()) return;
   server.sendHeader("Cache-Control", "no-store");
-  server.send(cameraReady ? 200 : 503, "application/json",
-              cameraReady ? "{\"camera\":\"ready\"}" : "{\"camera\":\"unavailable\"}");
+  String result = String("{\"camera\":\"") + (cameraReady ? "ready" : "unavailable") +
+                  "\",\"sensor\":\"" + (sensorReady ? "configured" : "unconfigured") + "\"}";
+  server.send(cameraReady && sensorReady ? 200 : 503, "application/json", result);
 }
 
-void uploadFrame() {
-  if (!cameraReady || !strlen(wifi_camera_config::kBackendUrl)) return;
-  camera_fb_t* frame = esp_camera_fb_get();
-  if (!frame) {
-    Serial.println("Backend upload: camera capture failed.");
+void uploadFrame(camera_fb_t* frame) {
+  if (!frame) return;
+  if (WiFi.status() != WL_CONNECTED || !strlen(wifi_camera_config::kBackendUrl)) {
+    Serial.println("Picture not uploaded: Wi-Fi or backend URL unavailable.");
+    esp_camera_fb_return(frame);
     return;
   }
   if (frame->format != PIXFORMAT_JPEG || !frame->buf || frame->len == 0) {
@@ -179,18 +207,26 @@ void setup() {
   Serial.begin(115200);
   delay(1500);
   Serial.printf("Wi-Fi camera: %s\n", camera_pins::kName);
-#ifdef CEKRIR_VIDEO_MODE
-  Serial.println("Mode: video frames (320x240).");
-#else
-  Serial.println("Mode: one picture per second (640x480).");
-#endif
+  Serial.println("Mode: one picture per proximity detection.");
   if (!configured()) {
     Serial.println("ERROR: Set Wi-Fi and camera password in wifi_camera_config.h.");
     return;
   }
   cameraReady = startCamera();
+  sensorReady = sensorPinsValid();
+  if (sensorReady) {
+    pinMode(proximity_config::kTriggerPin, OUTPUT);
+    digitalWrite(proximity_config::kTriggerPin, LOW);
+    pinMode(proximity_config::kEchoPin, INPUT);
+    pinMode(proximity_config::kBuzzerPin, OUTPUT);
+    digitalWrite(proximity_config::kBuzzerPin,
+                 proximity_config::kActiveBuzzer && !proximity_config::kActiveHigh ? HIGH : LOW);
+    rgbLedWrite(proximity_config::kRgbLedPin, 0, 32, 0);
+    Serial.println("Proximity sensor ready.");
+  } else {
+    Serial.println("ERROR: Set distinct safe proximity, buzzer and LED pins in proximity_config.h.");
+  }
   server.on("/", HTTP_GET, home);
-  server.on("/capture.jpg", HTTP_GET, capture);
   server.on("/health", HTTP_GET, health);
   server.onNotFound([]() {
     if (authorize()) server.send(404, "text/plain", "Not found");
@@ -210,6 +246,34 @@ void loop() {
     delay(1000);
     return;
   }
+  uint32_t now = millis();
+  if (sequence.active()) {
+    setLight(sequence.red(now));
+    setBuzzer(sequence.beep(now));
+    if (sequence.finishIfDue(now)) {
+      setBuzzer(false);
+      setLight(false);
+      uploadFrame(pendingFrame);
+      pendingFrame = nullptr;
+    }
+    delay(5);
+    return;
+  }
+
+  if (sensorReady && now - lastSensorSample >= proximity_config::kSampleIntervalMs) {
+    lastSensorSample = now;
+    const float distance = readDistanceCm();
+    if (proximity.update(distance)) {
+      Serial.printf("Object detected at %.1f cm. Capturing picture.\n", distance);
+      now = millis();
+      sequence.start(now);
+      setLight(true);
+      setBuzzer(true);
+      pendingFrame = cameraReady ? esp_camera_fb_get() : nullptr;
+      if (!pendingFrame) Serial.println("Camera capture failed or camera unavailable.");
+      return;
+    }
+  }
   if (WiFi.status() == WL_CONNECTED) {
     if (!serverReady) {
       server.begin();
@@ -224,10 +288,6 @@ void loop() {
       serverReady = true;
     }
     server.handleClient();
-    if (millis() - lastUpload >= kUploadIntervalMs) {
-      lastUpload = millis();
-      uploadFrame();
-    }
   } else {
     if (serverReady) {
       server.stop();

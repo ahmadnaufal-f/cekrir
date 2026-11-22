@@ -1,0 +1,22 @@
+info:
+  name: List CCTV cameras
+  type: http
+  seq: 10
+http:
+  method: GET
+  url: "{{baseUrl}}/api/v1/locations/{{locationId}}/cctv"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("Camera credentials are not returned", function () {
+          expect(res.status).to.equal(200);
+          expect(res.body).to.be.an("array");
+          res.body.forEach(function (camera) {
+            expect(camera).not.to.have.property("password");
+            expect(camera).not.to.have.property("stream_url");
+          });
+        });

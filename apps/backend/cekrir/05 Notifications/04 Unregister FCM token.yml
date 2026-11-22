@@ -1,0 +1,25 @@
+info:
+  name: Unregister FCM token
+  type: http
+  seq: 4
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/notifications/fcm/unregister"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+  body:
+    type: json
+    data: |-
+      {"token": "{{fcmToken}}"}
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("Push registration is removed", function () {
+          expect(res.status).to.equal(200);
+          expect(res.body).to.have.property("detail");
+        });
+docs:
+  content: Removes the signed-in user's registration for this token and stops notifications to it.
+  type: text/markdown

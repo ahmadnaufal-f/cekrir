@@ -1,0 +1,11 @@
+info:
+  name: Remove ESP
+  type: http
+  seq: 8
+
+http:
+  method: DELETE
+  url: "{{baseUrl}}/api/v1/locations/{{locationId}}/esp"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"

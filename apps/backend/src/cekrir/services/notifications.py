@@ -1,30 +1,37 @@
 import asyncio
-import logging
 
 from fastapi import WebSocket
 from redis import Redis
-from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from cekrir.config import Settings
 from cekrir.db.repository import ShipmentRepository
 from cekrir.schemas import NotificationRead
 from cekrir.services.auth import authenticate_token
-
-logger = logging.getLogger(__name__)
-NOTIFICATION_CHANNEL = "cekrir:notifications"
+from cekrir.services.email_notifications import EmailNotificationPublisher
+from cekrir.services.frontend_notifications import (
+    NOTIFICATION_CHANNEL,
+    FrontendNotificationPublisher,
+)
+from cekrir.services.push_notifications import PushNotificationPublisher
 
 
 class NotificationPublisher:
-    def __init__(self, client: Redis):
-        self.client = client
+    def __init__(self, client: Redis, settings: Settings | None = None, session_factory=None):
+        self.frontend = FrontendNotificationPublisher(client)
+        self.email = EmailNotificationPublisher(settings, session_factory)
+        self.push = (
+            PushNotificationPublisher(settings, session_factory)
+            if settings and session_factory
+            else None
+        )
 
     def publish(self, notification: NotificationRead) -> None:
-        try:
-            self.client.publish(NOTIFICATION_CHANNEL, notification.model_dump_json())
-        except RedisError:
-            # The database row is durable; a transient Redis failure must not lose it.
-            logger.warning("Could not publish live notification event")
+        self.frontend.publish(notification)
+        self.email.publish(notification)
+        if self.push:
+            self.push.publish(notification)
 
 
 class NotificationAuthenticationRequired(Exception):

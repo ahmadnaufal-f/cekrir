@@ -112,5 +112,6 @@ def ensure_bootstrap_admin(session_factory: sessionmaker[Session], settings: Set
                     ),
                     role_record=repository.role_by_code("admin"),
                     email_verified_at=datetime.now(UTC),
+                    is_active=True,
                 )
             )

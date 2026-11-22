@@ -4,6 +4,7 @@ from cekrir.db.repository import ShipmentRepository
 from cekrir.schemas import (
     NotificationRead,
     ShipmentRead,
+    TrackingSnapshot,
 )
 from cekrir.services.notifications import NotificationPublisher
 from cekrir.services.tracking import TrackingProvider
@@ -24,12 +25,15 @@ def register_shipment(
         existing_read = ShipmentRead.model_validate(existing)
         session.rollback()
         if isinstance(payload, DetectionInput):
-            shipment = repository.record_detection(existing_id, payload)
-            return shipment, False, None
+            shipment, notification = repository.record_detection(existing_id, payload)
+            return shipment, False, notification
         return existing_read, False, None
 
     # End the read transaction before making the upstream network request.
     session.rollback()
+    if isinstance(payload, DetectionInput):
+        snapshot = TrackingSnapshot(status="delivered", summary="Package detected at location")
+        return repository.register(payload, snapshot, "device")
     snapshot = provider.lookup(payload.resi_number, payload.courier)
     return repository.register(payload, snapshot, provider.name)
 

@@ -1,0 +1,26 @@
+info:
+  name: "List locations"
+  type: http
+  seq: 17
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/v1/locations"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("Each location includes its ESP onboarding status", function () {
+          expect(res.status).to.equal(200);
+          expect(res.body).to.be.an("array");
+          res.body.forEach(function (location) {
+            expect(location).to.have.property("esp_device_id");
+            expect(location).to.have.property("onboarding_complete").that.is.a("boolean");
+            expect(location.esp_device_id === null || typeof location.esp_device_id === "string").to.equal(true);
+          });
+        });
+

@@ -1,0 +1,9 @@
+info:
+  name: "Verification page"
+  type: http
+  seq: 6
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/v1/auth/verify-email?token={{verificationToken}}"
+

@@ -1,0 +1,78 @@
+from unittest.mock import Mock, patch
+from uuid import uuid4
+
+import pytest
+
+from cekrir.config import Settings
+from cekrir.services.accounts import InvalidVerificationToken, confirm_account_email
+from cekrir.services.email import EmailUnavailable, send_email
+from cekrir.services.email_verification import new_verification_token, send_verification_email
+
+
+def resend_settings():
+    return Settings(
+        _env_file=None,
+        email_provider="resend",
+        resend_api_key="re_test_key",
+        resend_from="Cekrir <mail@example.test>",
+        verification_url="https://example.test/api/v1/auth/verify-email",
+    )
+
+
+def test_verification_is_sent_via_resend():
+    token = new_verification_token()
+    client = Mock()
+    client.request.return_value = (b'{"id":"email-1"}', 200, {"content-type": "application/json"})
+    with patch("cekrir.services.email.resend.RequestsClient", return_value=client):
+        send_verification_email(resend_settings(), "user@example.test", token)
+    kwargs = client.request.call_args.kwargs
+    assert kwargs["json"]["to"] == ["user@example.test"]
+    assert token in kwargs["json"]["text"]
+    assert kwargs["headers"]["Authorization"] == "Bearer re_test_key"
+    assert kwargs["headers"]["Idempotency-Key"].startswith("verification/")
+    assert token not in kwargs["headers"]["Idempotency-Key"]
+    assert kwargs["url"] == "https://api.resend.com/emails"
+
+
+def test_resend_failure_is_reported_without_exposing_provider_response(caplog):
+    client = Mock()
+    client.request.return_value = (
+        b'{"name":"validation_error","message":"private provider detail"}',
+        403,
+        {"content-type": "application/json"},
+    )
+    with patch("cekrir.services.email.resend.RequestsClient", return_value=client):
+        with pytest.raises(EmailUnavailable, match="Email could not be sent"):
+            send_email(resend_settings(), "user@example.test", "Subject", "Message")
+    assert "status=403" in caplog.text
+    assert "private provider detail" not in caplog.text
+    assert "user@example.test" not in caplog.text
+    assert "re_test_key" not in caplog.text
+
+
+def test_resend_requires_a_sender_and_api_key():
+    settings = Settings(_env_file=None, email_provider="resend")
+    with pytest.raises(EmailUnavailable, match="not configured"):
+        send_email(settings, "user@example.test", "Subject", "Message")
+
+
+def test_welcome_email_sent_only_after_successful_verification():
+    user_id = uuid4()
+    session = Mock()
+    session.get.return_value = Mock(email="member@example.test", full_name="Member")
+    with (
+        patch("cekrir.services.accounts.verify_email_user_id", return_value=user_id),
+        patch("cekrir.services.accounts.send_email") as send,
+    ):
+        confirm_account_email(session, "token", resend_settings())
+    session.commit.assert_called_once()
+    assert send.call_args.args[1] == "member@example.test"
+    assert send.call_args.kwargs["idempotency_key"] == f"welcome/{user_id}"
+
+    with (
+        patch("cekrir.services.accounts.verify_email_user_id", return_value=None),
+        patch("cekrir.services.accounts.send_email") as send,
+        pytest.raises(InvalidVerificationToken),
+    ):
+        confirm_account_email(session, "token", resend_settings())
+    send.assert_not_called()

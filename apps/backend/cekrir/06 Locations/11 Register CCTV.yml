@@ -1,0 +1,27 @@
+info:
+  name: Register CCTV camera
+  type: http
+  seq: 11
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/locations/{{locationId}}/cctv"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+  body:
+    type: json
+    data: |-
+      {"name": "Front camera", "stream_url": "{{cctvStreamUrl}}", "username": "{{cctvUsername}}", "password": "{{cctvPassword}}"}
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("Camera is registered without exposing credentials", function () {
+          expect(res.status).to.equal(201);
+          expect(res.body).to.have.property("id");
+          expect(res.body).not.to.have.property("password");
+          expect(res.body).not.to.have.property("stream_url");
+        });
+docs:
+  content: Creates a real CCTV record. Configure CEKRIR_CCTV_ENCRYPTION_KEY on the server and keep the stream URL and credentials private. This does not start the camera stream.
+  type: text/markdown

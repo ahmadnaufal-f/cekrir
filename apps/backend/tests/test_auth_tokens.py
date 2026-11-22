@@ -4,13 +4,13 @@ from uuid import uuid4
 
 import jwt
 import pytest
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from jwt import InvalidTokenError
 
 from cekrir.config import Settings
 from cekrir.db.session import get_session
-from cekrir.middleware import RolePermissionMiddleware
+from cekrir.middleware import RequirePermission, RolePermissionMiddleware
 from cekrir.routers.auth import router
 from cekrir.services.auth import decode_token, issue_token
 
@@ -135,7 +135,7 @@ def test_refresh_token_cannot_authorize_protected_route(settings, user):
     app.state.session_factory = FakeSession
     app.add_middleware(RolePermissionMiddleware)
 
-    @app.get("/api/v1/shipments")
+    @app.get("/api/v1/shipments", dependencies=[Depends(RequirePermission("shipments:read"))])
     def shipments():
         return []
 
@@ -171,7 +171,7 @@ def test_permissions_are_loaded_from_database_for_each_request(settings, user):
     app.state.session_factory = FakeSession
     app.add_middleware(RolePermissionMiddleware)
 
-    @app.get("/api/v1/shipments")
+    @app.get("/api/v1/shipments", dependencies=[Depends(RequirePermission("shipments:read"))])
     def shipments():
         return []
 

@@ -16,14 +16,14 @@ Oxlint 1.93.0 uses the [recommended configuration workflow](https://oxc.rs/docs/
 
 Oxlint checks Vue script blocks. Keep `vue-tsc --noEmit` for Vue template and TypeScript verification; type-aware Oxlint is an optional separate dependency/mode and is not enabled by this setup.
 
-| Command                    | Purpose                                                                |
-| -------------------------- | ---------------------------------------------------------------------- |
-| `pnpm run lint`            | Oxlint, including Vue scripts and tests; fail on warnings              |
-| `pnpm run lint:fix`        | Apply Oxlint's safe fixes                                              |
-| `pnpm run format:check`    | Check formatting with Oxfmt                                            |
-| `pnpm run format:frontend` | Format frontend source and HTML with Oxfmt                             |
-| `pnpm run format`          | Format Python via Ruff and supported files via Oxfmt                   |
-| `pnpm run check:frontend`  | Oxlint plus Vue/TypeScript checking, without backend/database setup    |
+| Command                    | Purpose                                                                   |
+| -------------------------- | ------------------------------------------------------------------------- |
+| `pnpm run lint`            | Oxlint, including Vue scripts and tests; fail on warnings                 |
+| `pnpm run lint:fix`        | Apply Oxlint's safe fixes                                                 |
+| `pnpm run format:check`    | Check formatting with Oxfmt                                               |
+| `pnpm run format:frontend` | Format frontend source and HTML with Oxfmt                                |
+| `pnpm run format`          | Format Python via Ruff and supported files via Oxfmt                      |
+| `pnpm run check:frontend`  | Oxlint plus Vue/TypeScript checking, without backend/database setup       |
 | `pnpm run check`           | Formatting, Oxlint, Alembic schema check, Ruff, and Vue/TypeScript checks |
 
 The install-script allowlist uses pnpm 11's `allowBuilds` setting for the remaining native dependencies. Unlisted dependency build scripts retain pnpm 11's defaults. Native generated projects and build outputs are excluded from format/lint checks.

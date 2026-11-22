@@ -12,16 +12,17 @@ Two board profiles are provided; select the one that matches the actual module:
 | ------------------------------ | ------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
 | `xiao_esp32s3_sense` (default) | Seeed XIAO ESP32S3 **Sense**, including its camera expansion board | Convenient USB programming and PSRAM; a useful starting point for evaluation |
 | `ai_thinker_esp32cam`          | AI Thinker ESP32-CAM with OV2640 and PSRAM                         | Usually needs a compatible USB serial programmer or ESP32-CAM-MB             |
-| `esp32_s3_cam`                 | Common dual-USB ESP32-S3 CAM N16R8                                | Candidate pinout; compare against the actual board before using              |
+| `esp32_s3_cam`                 | Common dual-USB ESP32-S3 CAM N16R8                                 | Candidate pinout; compare against the actual board before using              |
 
 An ESP32/S3 chip name alone does not define a camera pinout. Other camera boards need a separate pin mapping and PlatformIO environment. Verify the exact model, sensor, PSRAM, power supply, programming interface, and lens focus distance with the vendor. Test a sample with real labels before buying a batch: focus, lighting, motion blur, barcode size, and camera distance determine whether scanning works. The default capture size is 800×600; higher resolution cannot fix an out-of-focus label.
 
 ## Wi-Fi camera on Windows
 
-The `esp32_s3_cam_wifi_camera` firmware sends pictures to a Python camera server on the local network, roughly once a second, and also supports requesting a picture directly from the ESP32. The board does not need to stay connected to the computer.
+The `esp32_s3_cam_wifi_camera` firmware captures a picture when an object is detected within 10 cm and sends it to a Python camera server on the local network. It beeps once, shows red for three seconds, beeps twice, then uploads the captured picture. The LED is green in standby. The board does not need to stay connected to the computer.
 
 1. Edit `include/wifi_camera_config.h`: set `kWifiSsid` and `kWifiPassword` to your 2.4 GHz Wi-Fi details. Keep the generated `kCameraPassword`. If the file does not exist, copy `include/wifi_camera_config.example.h` to that name and set a strong camera password too. This local file is ignored by Git; keep it private. Credentials are also stored in the flashed firmware.
-2. Connect the ESP32 to the PC by USB. Double-click `upload_wifi_camera.bat` in the `apps/esp32` folder to build and upload the Wi-Fi camera firmware. It uses `COM10` by default; edit the `PORT` line in the file if needed, or run `upload_wifi_camera.bat COM3` in Command Prompt to use another port. Uploading replaces the firmware currently on the board.
+2. Copy `include/proximity_config.example.h` to `include/proximity_config.h`. Set `kEchoPin` to a verified free GPIO distinct from the buzzer, trigger and LED pins. The example uses the test settings TRIG 41, buzzer 14 and RGB LED 48; verify these against the wiring and board. The ECHO pin starts at -1, which disables detection until it is configured. The HC-SR04's 5 V ECHO output needs a voltage divider or level shifter before it reaches the ESP32. Adjust the distance and buzzer type if needed.
+3. Connect the ESP32 to the PC by USB. Double-click `upload_wifi_camera.bat` in the `apps/esp32` folder to build and upload the Wi-Fi camera firmware. It uses `COM10` by default; edit the `PORT` line in the file if needed, or run `upload_wifi_camera.bat COM3` in Command Prompt to use another port. Uploading replaces the firmware currently on the board.
 
    Alternatively, from the repository root in Command Prompt:
 
@@ -30,9 +31,9 @@ The `esp32_s3_cam_wifi_camera` firmware sends pictures to a Python camera server
    ```
 
    If Command Prompt is already in `apps\esp32`, use `--project-dir .` instead of `--project-dir apps/esp32`. Replace `COM10` if the board uses a different port.
-3. The board joins Wi-Fi after it starts. You can disconnect the USB cable from the PC and connect it to a suitable power adapter. Wait for it to start, and connect your PC to the same Wi-Fi network.
-4. Open `http://cekrir-camera.local/` in a browser. If the name does not work, use the camera's IP address instead; the address during setup was `http://192.168.0.122/`, but it can change after restarting or reconnecting.
-5. When asked to sign in, use `camera` as the username and the `kCameraPassword` value from your local config file as the password. Click **Take a picture**. Refresh the picture page to request another picture.
+
+4. The board joins Wi-Fi after it starts. You can disconnect the USB cable from the PC and connect it to a suitable power adapter. Wait for it to start, and connect your PC to the same Wi-Fi network.
+5. Open `http://cekrir-camera.local/` in a browser. If the name does not work, use the camera's IP address instead. Sign in with the camera username and password. The page describes the sensor-triggered behavior; it does not request a picture manually.
 
 ### Send pictures to the Python server
 
@@ -41,13 +42,11 @@ The `esp32_s3_cam_wifi_camera` firmware sends pictures to a Python camera server
 3. Power on the ESP32 and wait for it to join Wi-Fi. On the server PC, open `http://localhost:8001/camera`. Sign in with the same camera username and password. The page refreshes the picture every second. The direct image endpoint is `http://localhost:8001/camera/latest.jpg`; the ESP32 uploads to `POST /camera/frame`.
 4. Press `Ctrl+C` in the server window to stop it. The server keeps only the latest picture in memory and clears it when stopped. If uploads stop, the last picture remains visible until the server restarts or receives a new picture.
 
-The picture firmware captures at 640 × 480 and attempts an upload every second. If no picture arrives, check that the PC and ESP32 can reach each other on the same local network, the URL contains the PC's current IP address, and the PC firewall allows incoming connections on port 8001. Try pressing the board's reset button. The serial monitor reports `Backend upload OK` after the first successful picture and periodically thereafter, or an error if an upload fails. Uploads retry when the server is unavailable; slow or failed connections may make the interval longer than one second. The standalone camera server uses port 8001 and is separate from the main backend API.
+The picture firmware captures at 640 × 480 once per detection. It rearms after the object moves away; it does not keep taking pictures while the object remains in front of the sensor. If no picture arrives, check the sensor pin settings, the Wi-Fi connection, the PC address, and the firewall on port 8001. The serial monitor reports the detection and upload result. Frames are not queued or retried if Wi-Fi or the server is unavailable. The standalone camera server uses port 8001 and is separate from the main backend API.
 
 ### Live video
 
-For a smoother live view, connect the ESP32 by USB and double-click `upload_wifi_video.bat`. It builds and uploads the `esp32_s3_cam_wifi_video` environment, replacing the current firmware. This uses the same Wi-Fi settings and backend URL as the picture firmware. To return to one picture per second, upload using `upload_wifi_camera.bat`.
-
-Start `apps/backend/run_camera.bat`, then open `http://localhost:8001/camera/video` and sign in with the same camera username and password. If the server was already running before you updated the code, stop it with `Ctrl+C` and start it again to load the new endpoint. The ESP32 sends individual JPEG frames as quickly as it can, up to about 10 per second, at 320 × 240 resolution. The backend combines received frames into an MJPEG stream at `GET /camera/stream`. Actual speed depends on Wi-Fi, capture and server response times; there is no audio or recording. If the ESP32 stops sending, the browser can continue showing its last frame.
+The video build uses the same sensor-triggered firmware at 320 × 240 resolution. It no longer provides continuous live video. The standalone server's video page may continue showing the latest received picture between detections.
 
 To find the current IP address, reconnect the board to the PC and use this command in Command Prompt, then press the board's reset button if no startup messages appear:
 
@@ -196,3 +195,37 @@ curl 'http://127.0.0.1:8000/api/v1/detections/frame?courier=jne&camera_id=esp32-
 ```
 
 The compact response contains `detected_count`, `ambiguous`, and `detections` (resi number, shipment ID, and whether it was newly created). Successful frames return HTTP 200, including blank/ambiguous frames. Errors use 401 for an invalid configured key, 413 for excessive body size, 415 for the wrong content type, 422 for invalid metadata/images, and 502 for a tracking provider failure. Existing API deduplication prevents repeated frames from creating duplicate shipments or notifications.
+
+# Buzzer test
+
+`src/buzzer_test.cpp` beeps for 200 ms every two seconds. It is a separate
+firmware from the camera program. It starts with `kBuzzerPin = -1`, so it does
+not drive a pin until you edit it. Identify a free GPIO on your exact board
+first; camera pins, boot pins, USB and flash/PSRAM pins must not be used. The
+code rejects several known conflicts but cannot verify your specific board.
+
+The test assumes an active buzzer controlled by a HIGH signal. Set
+`kActiveBuzzer` to `false` for a passive buzzer (KY-006 modules are commonly
+passive), or change `kActiveHigh` if your active module requires LOW. Confirm
+the module's pin markings, drive voltage and current before connecting it;
+never connect 5 V to an ESP32 GPIO. If the buzzer requires more current than
+the GPIO can safely supply, use a suitable driver circuit.
+
+After configuring the pin and wiring, connect the board over USB and run
+`upload_buzzer_test.bat` (defaults to COM10, or pass a COM port as its first
+argument). Uploading replaces the board's current firmware. Re-upload the
+camera firmware when you want to use the camera again. Unplug power before
+changing any wiring.
+
+# Ultrasonic sensor test
+
+`src/proximity_test.cpp` prints the HC-SR04 distance over serial every half
+second and reports objects within 30 cm. Set `kTriggerPin` and `kEchoPin` to
+two verified free GPIOs first; both default to -1. The pin check excludes
+known conflicts, but the exact board schematic must still be checked.
+
+The sensor's 5 V ECHO signal needs a voltage divider or level shifter before
+the ESP32 input. Never connect it directly to the ESP32 GPIO. With the board
+powered off, use the confirmed sensor wiring and common ground. Then run
+`upload_proximity_test.bat`, and use the serial monitor at 115200 baud. The
+upload replaces the buzzer or camera firmware currently on the board.
