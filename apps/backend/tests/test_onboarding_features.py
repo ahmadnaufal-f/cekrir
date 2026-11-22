@@ -114,7 +114,8 @@ def test_login_provision_device_and_register_fcm(client, database_url):
     refreshed = client.post("/api/v1/auth/refresh", json={"refresh_token": login["refresh_token"]})
     assert refreshed.status_code == 200
     assert (refreshed.json()["location_id"], refreshed.json()["esp_device_id"]) == (
-        location_id, login["esp_device_id"]
+        location_id,
+        login["esp_device_id"],
     )
     listed = client.get("/api/v1/locations", headers=headers).json()
     matching_location = next(item for item in listed if item["id"] == location_id)
@@ -203,13 +204,15 @@ def test_login_provision_device_and_register_fcm(client, database_url):
         json={"email": "seed-member@example.test", "password": "isolated-test-member-password"},
     ).json()
     assert (member_again["location_id"], member_again["esp_device_id"]) == (
-        location_id, login["esp_device_id"]
+        location_id,
+        login["esp_device_id"],
     )
     member_refresh = client.post(
         "/api/v1/auth/refresh", json={"refresh_token": member_again["refresh_token"]}
     ).json()
     assert (member_refresh["location_id"], member_refresh["esp_device_id"]) == (
-        location_id, login["esp_device_id"]
+        location_id,
+        login["esp_device_id"],
     )
     assert (
         client.post(

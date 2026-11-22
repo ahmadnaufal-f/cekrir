@@ -19,12 +19,25 @@ function cString(value: string): string {
 
 export function generateEspConfig(input: EspFirmwareSettings): string {
   const apiUrl = new URL(input.apiBaseUrl)
-  if (apiUrl.protocol !== 'https:' || apiUrl.username || apiUrl.password || apiUrl.search || apiUrl.hash ||
-      !apiUrl.pathname.replace(/\/$/, '').endsWith('/api/v1'))
+  if (
+    apiUrl.protocol !== 'https:' ||
+    apiUrl.username ||
+    apiUrl.password ||
+    apiUrl.search ||
+    apiUrl.hash ||
+    !apiUrl.pathname.replace(/\/$/, '').endsWith('/api/v1')
+  )
     throw new Error('The API URL must be HTTPS and end in /api/v1.')
-  if (!input.deviceId || !input.deviceKey || !input.wifiSsid || !input.rootCa.includes('BEGIN CERTIFICATE') ||
-      !/^[a-z0-9_-]{2,32}$/.test(input.courier))
-    throw new Error('Complete the device, Wi-Fi, certificate, and courier details.')
+  if (
+    !input.deviceId ||
+    !input.deviceKey ||
+    !input.wifiSsid ||
+    !input.rootCa.includes('BEGIN CERTIFICATE') ||
+    !/^[a-z0-9_-]{2,32}$/.test(input.courier)
+  )
+    throw new Error(
+      'Complete the device, Wi-Fi, certificate, and courier details.',
+    )
   const text = (value: string) => `"${cString(value)}"`
   return `#pragma once
 #include <cstdint>

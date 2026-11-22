@@ -8,11 +8,11 @@ The frontend now implements household screens with explicit development mocks. A
 
 Three apps, one repository:
 
-| App             | Stack                                      | Purpose                                                             |
-| --------------- | ------------------------------------------ | ------------------------------------------------------------------- |
+| App             | Stack                                                         | Purpose                                                                |
+| --------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `apps/backend`  | Python 3.12+, FastAPI, SQLAlchemy, Alembic, PostgreSQL, Redis | Authenticated detection, tracking, persistence, live notification feed |
-| `apps/frontend` | Vue 3, TypeScript, Vite, Capacitor         | Household delivery UI; Android acceptance target, iOS unverified    |
-| `apps/esp32`    | Arduino C++, PlatformIO                    | Camera firmware that sends JPEG frames to the barcode detection API |
+| `apps/frontend` | Vue 3, TypeScript, Vite, Capacitor                            | Household delivery UI; Android acceptance target, iOS unverified       |
+| `apps/esp32`    | Arduino C++, PlatformIO                                       | Camera firmware that sends JPEG frames to the barcode detection API    |
 
 The default tracking provider is an explicitly labeled **offline demo**. It never calls a courier API. The HTTP provider and camera worker can be enabled separately. Shipment and notification routes use JWT authentication; camera submissions can use the optional ingestion key. Live notification events use Redis Pub/Sub, while PostgreSQL remains the durable notification store.
 
@@ -86,24 +86,24 @@ See the firmware README for flashing, a trusted LAN development setup, board sel
 
 Run these from the repository root:
 
-| Command                                                     | Purpose                                                   |
-| ----------------------------------------------------------- | --------------------------------------------------------- |
-| `pnpm run dev`                                              | Run FastAPI and Vite                                      |
-| `pnpm run dev:backend`                                      | Run FastAPI only                                          |
-| `pnpm run dev:frontend`                                     | Run Vite only                                             |
-| `pnpm run check`                                            | Oxfmt, Oxlint, Alembic schema check, Python lint, Vue/TypeScript checks |
-| `pnpm test`                                                 | API integration tests and frontend API tests              |
-| `pnpm run build`                                            | Type check and build the frontend                         |
-| `pnpm run format`                                           | Format Python and web/docs/config files                   |
+| Command                                                     | Purpose                                                                          |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `pnpm run dev`                                              | Run FastAPI and Vite                                                             |
+| `pnpm run dev:backend`                                      | Run FastAPI only                                                                 |
+| `pnpm run dev:frontend`                                     | Run Vite only                                                                    |
+| `pnpm run check`                                            | Oxfmt, Oxlint, Alembic schema check, Python lint, Vue/TypeScript checks          |
+| `pnpm test`                                                 | API integration tests and frontend API tests                                     |
+| `pnpm run build`                                            | Type check and build the frontend                                                |
+| `pnpm run format`                                           | Format Python and web/docs/config files                                          |
 | `pnpm run db:up`                                            | Start the VM Compose PostgreSQL and Redis services; requires `apps/backend/.env` |
-| `pnpm run db:down`                                          | Stop the VM Compose services; keep persisted data         |
-| `pnpm run db:deploy`                                        | Apply committed Alembic migrations                       |
-| `pnpm run db:migrate -- -m "change_name"`                  | Generate an Alembic migration for review                  |
-| `pnpm run firmware:build`                                   | Cross-compile the default ESP32S3 camera profile          |
-| `pnpm run firmware:build --environment ai_thinker_esp32cam` | Cross-compile the AI Thinker profile                      |
-| `pnpm run firmware:test`                                    | Run firmware policy tests on the host                     |
-| `pnpm run firmware:upload --environment xiao_esp32s3_sense` | Flash a connected device                                  |
-| `pnpm run firmware:monitor`                                 | Open the serial monitor at 115200 baud                    |
+| `pnpm run db:down`                                          | Stop the VM Compose services; keep persisted data                                |
+| `pnpm run db:deploy`                                        | Apply committed Alembic migrations                                               |
+| `pnpm run db:migrate -- -m "change_name"`                   | Generate an Alembic migration for review                                         |
+| `pnpm run firmware:build`                                   | Cross-compile the default ESP32S3 camera profile                                 |
+| `pnpm run firmware:build --environment ai_thinker_esp32cam` | Cross-compile the AI Thinker profile                                             |
+| `pnpm run firmware:test`                                    | Run firmware policy tests on the host                                            |
+| `pnpm run firmware:upload --environment xiao_esp32s3_sense` | Flash a connected device                                                         |
+| `pnpm run firmware:monitor`                                 | Open the serial monitor at 115200 baud                                           |
 
 `pnpm test` applies Alembic migrations to `TEST_DATABASE_URL` and runs the API tests against that dedicated PostgreSQL database. Create the test database separately; the VM Compose setup does not create or expose one. Tests clear its shipment/notification tables; they require a database name ending in `_test` and reject the application database. Frontend tests do not need PostgreSQL.
 

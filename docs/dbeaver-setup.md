@@ -7,8 +7,8 @@ The PostgreSQL container listens on port 5432. Add a VM-only port mapping so DBe
 On the VM, open `apps/backend/compose.yaml` and add these lines under the `db` service:
 
 ```yaml
-    ports:
-      - "127.0.0.1:15432:5432"
+ports:
+  - '127.0.0.1:15432:5432'
 ```
 
 Then run these commands from `apps/backend`:

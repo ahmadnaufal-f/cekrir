@@ -18,6 +18,7 @@ docker compose --env-file .env up --build -d --force-recreate
    ```
 
    In Windows Command Prompt, use `%USERPROFILE%` instead of `$USERPROFILE`. The board profile is for the common dual-USB ESP32-S3 CAM; verify the pin map for the actual board. This command replaces its firmware.
+
 5. After upload, the board can run from a power adapter. It connects to Wi-Fi and periodically sends JPEG frames to `POST /api/v1/devices/{device_id}/frames?courier=jne`, using `X-Device-Key`. The API validates the key and checks frames for a barcode. `onboarding_complete` changes after the first authenticated request. The generated firmware is periodic; it does not yet use the proximity sensor.
 
 This is a configuration file for an existing PlatformIO project, not a browser-built binary. A trusted root certificate is necessary for HTTPS verification, and the ESP needs a working clock via network time. Rotation requires rebuilding and uploading the new configuration. The older shared ingestion key routes remain available for legacy devices; that key does not identify an individual device.
@@ -46,7 +47,7 @@ The native push bridge currently supports Android. Browser and iOS push registra
 Set `CEKRIR_BINDERBYTE_API_KEY` in the backend `.env` and recreate the API container. Call `POST /api/v1/tracking/binderbyte` with an access token and, for example:
 
 ```json
-{"resi_number":"YOUR_TRACKING_NUMBER","courier":"jne"}
+{ "resi_number": "YOUR_TRACKING_NUMBER", "courier": "jne" }
 ```
 
 For couriers requiring it, include `phone_last_five` as a five-digit string. The endpoint returns BinderByte's summary, detail and history and makes a live provider request, which can use your provider quota. It returns 503 if BinderByte is unavailable or the key is missing. It does not perform screenshot recognition.

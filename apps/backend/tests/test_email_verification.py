@@ -130,7 +130,9 @@ def test_register_response_has_unassigned_location_and_device():
         response = TestClient(app).post(
             "/api/v1/auth/register",
             json={
-                "email": "person@example.test", "full_name": "Person", "password": "securepass123"
+                "email": "person@example.test",
+                "full_name": "Person",
+                "password": "securepass123",
             },
         )
     assert response.status_code == 201

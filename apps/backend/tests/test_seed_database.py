@@ -71,9 +71,12 @@ def test_seed_creates_accounts_and_location_idempotently(database_url):
                             },
                         )
                     nested.rollback()
-                assert connection.execute(
-                    select(User.id).where(User.email == f"new-admin-{suffix}@example.test")
-                ).first() is None
+                assert (
+                    connection.execute(
+                        select(User.id).where(User.email == f"new-admin-{suffix}@example.test")
+                    ).first()
+                    is None
+                )
             finally:
                 transaction.rollback()
     finally:

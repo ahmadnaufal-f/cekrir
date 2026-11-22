@@ -12,7 +12,7 @@ Two board profiles are provided; select the one that matches the actual module:
 | ------------------------------ | ------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
 | `xiao_esp32s3_sense` (default) | Seeed XIAO ESP32S3 **Sense**, including its camera expansion board | Convenient USB programming and PSRAM; a useful starting point for evaluation |
 | `ai_thinker_esp32cam`          | AI Thinker ESP32-CAM with OV2640 and PSRAM                         | Usually needs a compatible USB serial programmer or ESP32-CAM-MB             |
-| `esp32_s3_cam`                 | Common dual-USB ESP32-S3 CAM N16R8                                | Candidate pinout; compare against the actual board before using              |
+| `esp32_s3_cam`                 | Common dual-USB ESP32-S3 CAM N16R8                                 | Candidate pinout; compare against the actual board before using              |
 
 An ESP32/S3 chip name alone does not define a camera pinout. Other camera boards need a separate pin mapping and PlatformIO environment. Verify the exact model, sensor, PSRAM, power supply, programming interface, and lens focus distance with the vendor. Test a sample with real labels before buying a batch: focus, lighting, motion blur, barcode size, and camera distance determine whether scanning works. The default capture size is 800×600; higher resolution cannot fix an out-of-focus label.
 
@@ -31,6 +31,7 @@ The `esp32_s3_cam_wifi_camera` firmware captures a picture when an object is det
    ```
 
    If Command Prompt is already in `apps\esp32`, use `--project-dir .` instead of `--project-dir apps/esp32`. Replace `COM10` if the board uses a different port.
+
 4. The board joins Wi-Fi after it starts. You can disconnect the USB cable from the PC and connect it to a suitable power adapter. Wait for it to start, and connect your PC to the same Wi-Fi network.
 5. Open `http://cekrir-camera.local/` in a browser. If the name does not work, use the camera's IP address instead. Sign in with the camera username and password. The page describes the sensor-triggered behavior; it does not request a picture manually.
 
@@ -194,6 +195,7 @@ curl 'http://127.0.0.1:8000/api/v1/detections/frame?courier=jne&camera_id=esp32-
 ```
 
 The compact response contains `detected_count`, `ambiguous`, and `detections` (resi number, shipment ID, and whether it was newly created). Successful frames return HTTP 200, including blank/ambiguous frames. Errors use 401 for an invalid configured key, 413 for excessive body size, 415 for the wrong content type, 422 for invalid metadata/images, and 502 for a tracking provider failure. Existing API deduplication prevents repeated frames from creating duplicate shipments or notifications.
+
 # Buzzer test
 
 `src/buzzer_test.cpp` beeps for 200 ms every two seconds. It is a separate

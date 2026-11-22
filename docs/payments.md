@@ -9,7 +9,7 @@ The backend stores QRIS payment **drafts**. It does not create QR codes, charge 
 Authenticated members and admins can create a draft with `POST /api/v1/payments`. Supply a unique, client-generated `Idempotency-Key` header (1–128 visible ASCII characters) and JSON:
 
 ```json
-{"reference":"order-123", "amount":10000, "currency":"IDR"}
+{ "reference": "order-123", "amount": 10000, "currency": "IDR" }
 ```
 
 `amount` is an integer number of rupiah between 1 and 10,000,000. `currency` defaults to IDR. The first request returns 201 with a draft; a retry by the same user with the same key and identical normalized fields returns 200 with the same draft. Reusing that key with different details returns 409. Keys are scoped to the authenticated user and kept for the lifetime of the record. `GET /api/v1/payments/{id}` returns only the caller's draft. A unique PostgreSQL index ensures concurrent requests cannot create more than one draft per user and key.
