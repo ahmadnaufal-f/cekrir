@@ -49,6 +49,16 @@ def list_shipments(session: Session, limit: int, offset: int) -> list[ShipmentRe
     return ShipmentRepository(session).list_shipments(limit, offset)
 
 
+def get_shipment(session: Session, shipment_id: str) -> ShipmentRead:
+    model = ShipmentRepository(session).get_shipment(shipment_id)
+    if model is None:
+        session.rollback()
+        raise ShipmentNotFound("Shipment not found")
+    shipment = ShipmentRead.model_validate(model)
+    session.rollback()
+    return shipment
+
+
 def submit_shipment(
     session: Session,
     payload: ResiInput,

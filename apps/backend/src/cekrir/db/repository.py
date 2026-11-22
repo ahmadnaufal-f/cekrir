@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -80,6 +80,28 @@ class ShipmentRepository:
         return ShipmentRead.model_validate(shipment), (
             NotificationRead.model_validate(notification) if notification else None
         )
+
+    def claim_photo(self, shipment_id: UUID) -> bool:
+        """Allow only one scan to queue the first delivery photo for a shipment."""
+        with self.session.begin():
+            claimed = self.session.scalar(
+                update(Shipment)
+                .where(Shipment.id == shipment_id, Shipment.photo_status == "not_requested")
+                .values(photo_status="pending")
+                .returning(Shipment.id)
+            )
+        return claimed is not None
+
+    def finish_photo(self, shipment_id: UUID, *, ready: bool) -> None:
+        with self.session.begin():
+            self.session.execute(
+                update(Shipment)
+                .where(Shipment.id == shipment_id, Shipment.photo_status == "pending")
+                .values(
+                    photo_status="ready" if ready else "unavailable",
+                    photo_captured_at=datetime.now(UTC) if ready else None,
+                )
+            )
 
     def register(
         self, payload: ResiInput, snapshot: TrackingSnapshot, provider: str

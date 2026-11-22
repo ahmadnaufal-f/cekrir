@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 ShipmentStatus = Literal["pending", "in_transit", "delivered", "exception"]
 
@@ -51,6 +51,15 @@ class ShipmentRead(TrackingSnapshot):
     created_at: datetime
     checked_at: datetime
     last_detected_at: datetime | None
+    photo_status: Literal["not_requested", "pending", "ready", "unavailable"]
+    photo_captured_at: datetime | None
+
+    @computed_field
+    @property
+    def photo_url(self) -> str | None:
+        if self.photo_status == "ready":
+            return f"/api/v1/shipments/{self.id}/photo"
+        return None
 
 
 class DetectionResult(BaseModel):
