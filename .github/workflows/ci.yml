@@ -44,6 +44,9 @@ jobs:
           version: '0.13.6'
       - run: pnpm install --frozen-lockfile
       - run: uv sync --project apps/backend --frozen
+      - run: pnpm run db:test:deploy
       - run: pnpm run check
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
       - run: pnpm test
       - run: pnpm run build

@@ -47,6 +47,7 @@ class EspDevice(Base):
 
 class CctvCamera(Base):
     __tablename__ = "cctv_cameras"
+    __table_args__ = (Index("ix_cctv_cameras_location_id", "location_id"),)
     id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True),
         primary_key=True,
@@ -57,7 +58,6 @@ class CctvCamera(Base):
         PgUUID(as_uuid=True),
         ForeignKey("locations.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     stream_url_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
@@ -67,6 +67,7 @@ class CctvCamera(Base):
 
 class FcmDevice(Base):
     __tablename__ = "fcm_devices"
+    __table_args__ = (Index("ix_fcm_devices_user_id", "user_id"),)
     id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True),
         primary_key=True,
@@ -77,7 +78,6 @@ class FcmDevice(Base):
         PgUUID(as_uuid=True),
         ForeignKey("cekrir_user.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     token: Mapped[str] = mapped_column(Text, nullable=False)
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
