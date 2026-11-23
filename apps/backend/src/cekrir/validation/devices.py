@@ -21,15 +21,17 @@ class CctvCreate(BaseModel):
         try:
             parsed = urlsplit(value)
             if (
-                parsed.scheme not in {"rtmp", "rtmps"}
+                parsed.scheme not in {"rtsp", "rtmp", "rtmps"}
                 or not parsed.hostname
                 or parsed.username is not None
                 or parsed.password is not None
             ):
-                raise ValueError("Use an RTMP or RTMPS URL without embedded credentials")
+                raise ValueError
             _ = parsed.port
         except ValueError as exc:
-            raise ValueError("Use a valid RTMP or RTMPS URL without embedded credentials") from exc
+            raise ValueError(
+                "Use a valid RTSP, RTMP, or RTMPS URL without embedded credentials"
+            ) from exc
         return value
 
 

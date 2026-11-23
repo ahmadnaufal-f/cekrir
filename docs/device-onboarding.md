@@ -31,7 +31,7 @@ Set `CEKRIR_CCTV_ENCRYPTION_KEY` in `apps/backend/.env` to a Fernet key. Generat
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-Store and back up the key securely. Keep using the same key: changing or losing it makes previously saved camera credentials unreadable. With an admin access token, call `POST /api/v1/locations/{location_id}/cctv` with `name`, an `rtmp://` or `rtmps://` `stream_url`, `username`, and `password`. Keep credentials out of the URL. The backend encrypts the URL and credentials and returns only the camera ID, location ID and name. This registers the camera; it does not start a stream reader. Multiple cameras can belong to a location.
+Store and back up the key securely. Changing or losing it makes previously saved camera credentials unreadable. Cekrir's camera form sends the ONVIF IP address as an `rtsp://` URL, with `admin` and the ONVIF password as separate fields. With an admin access token, call `POST /api/v1/locations/{location_id}/cctv` with `name`, `stream_url`, `username`, and `password`. The API accepts `rtsp://`, `rtmp://`, and `rtmps://` URLs. Keep credentials out of the URL. The backend encrypts the URL and credentials and returns only the camera ID, location ID and name. Multiple cameras can belong to a location. Tuya cloud captures use the `TUYA_CCTV_DEVICE_ID` configured on the backend.
 
 ## Firebase notifications
 

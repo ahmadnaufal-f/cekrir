@@ -38,6 +38,12 @@ const canRegister = computed(
     !!props.devices &&
     (props.kind === 'bardi' || registrationState.value === 'empty'),
 )
+const showRegister = computed(() => {
+  if (!canRegister.value) return false
+  return props.kind === 'bardi'
+    ? copy.value.steps[activeStep.value]?.id === 'register-camera'
+    : activeStep.value === copy.value.steps.length - 1
+})
 const subtitle = computed(() => {
   if (!props.devices) return deviceGuideCopy.common.registrationUnavailable
   if (props.kind === 'esp32' && registrationState.value === 'registered')
@@ -92,7 +98,7 @@ watch(
         :title-id="`${kind}-setup-title`"
       >
         <p>{{ subtitle }}</p>
-        <p class="device-setup-screen__disclaimer">
+        <p v-if="kind === 'esp32'" class="device-setup-screen__disclaimer">
           {{ deviceGuideCopy.common.illustrationDisclaimer }}
         </p>
       </PageHeader>
@@ -115,7 +121,7 @@ watch(
       </div>
 
       <div
-        v-if="canRegister && activeStep === copy.steps.length - 1"
+        v-if="showRegister"
         class="device-setup-screen__actions content-inset"
       >
         <button
@@ -129,6 +135,7 @@ watch(
       </div>
 
       <DeviceSetupGuide
+        v-if="kind === 'esp32'"
         :services="services"
         :user="user"
         :kind="kind"

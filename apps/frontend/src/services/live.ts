@@ -177,7 +177,7 @@ export function createLiveServices(): AppServices {
     if (!connection?.url || !connection.username || !connection.password)
       throw new ServiceError(
         'validation',
-        'RTMP URL, username, and password are required.',
+        'Alamat kamera, nama pengguna, dan kata sandi wajib diisi.',
         422,
       )
     await request(`/locations/${encodeURIComponent(locationId())}/cctv`, {

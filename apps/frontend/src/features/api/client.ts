@@ -272,7 +272,7 @@ export function createApiClient(options: ClientOptions = {}): ApiServices {
         if (!connection?.url || !connection.username || !connection.password)
           throw new ServiceError(
             'validation',
-            'RTMP URL, username, and password are required.',
+            'Alamat kamera, nama pengguna, dan kata sandi wajib diisi.',
             422,
           )
         await authorized(

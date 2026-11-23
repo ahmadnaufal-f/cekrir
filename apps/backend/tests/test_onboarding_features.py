@@ -43,11 +43,12 @@ def test_binderbyte_sanitizes_errors_and_passes_parameters():
     connection.close.assert_called()
 
 
-def test_cctv_encrypts_credentials_and_never_returns_them():
+@pytest.mark.parametrize("stream_url", ["rtsp://192.168.1.23", "rtmps://camera.test/live"])
+def test_cctv_encrypts_credentials_and_never_returns_them(stream_url):
     key = Fernet.generate_key()
     settings = Settings(_env_file=None, cctv_encryption_key=key.decode())
     payload = CctvCreate(
-        name="Front", stream_url="rtmps://camera.test/live", username="camuser", password="private"
+        name="Front", stream_url=stream_url, username="camuser", password="private"
     )
     session = Mock()
 
@@ -61,13 +62,15 @@ def test_cctv_encrypts_credentials_and_never_returns_them():
     assert isinstance(camera, CctvCamera)
     assert "private" not in camera.password_encrypted
     assert Fernet(key).decrypt(camera.password_encrypted.encode()) == b"private"
+    assert Fernet(key).decrypt(camera.stream_url_encrypted.encode()).decode() == stream_url
     assert "password" not in result and "stream_url" not in result and "username" not in result
 
 
-def test_cctv_rejects_credentials_in_url():
+@pytest.mark.parametrize("scheme", ["rtsp", "rtmp"])
+def test_cctv_rejects_credentials_in_url(scheme):
     with pytest.raises(ValueError):
         CctvCreate(
-            name="Front", stream_url="rtmp://user:pass@host/live", username="u", password="p"
+            name="Front", stream_url=f"{scheme}://user:pass@host/live", username="u", password="p"
         )
 
 
