@@ -594,6 +594,7 @@ export function createMockHarness(
         const camera: CameraSummary = {
           id: `camera-demo-new-${++cameraSequence}`,
           name,
+          ...(input.tuyaDeviceId && { tuyaDeviceId: input.tuyaDeviceId }),
           configurationState,
           verificationState: 'not_tested',
         }
@@ -613,15 +614,21 @@ export function createMockHarness(
         if (input.connection && !input.connection.url.trim())
           throw fieldError('url')
         injectFailure('camera-update')
+        const metadata = {
+          name,
+          ...(input.tuyaDeviceId !== undefined && {
+            tuyaDeviceId: input.tuyaDeviceId,
+          }),
+        }
         // Keep the saved state for a rename. Replacing connection details requires verification again.
         inventory.cameras[index] = input.connection
           ? {
               ...camera,
-              name,
+              ...metadata,
               configurationState: 'configured',
               verificationState: 'not_tested',
             }
-          : { ...camera, name }
+          : { ...camera, ...metadata }
         return cloneInventory(inventory)
       },
       async removeCamera(id: string): Promise<DeviceInventory> {

@@ -49,6 +49,7 @@ export interface DeliveryDetail extends DeliverySummary {
 export interface CameraSummary {
   id: string
   name: string
+  tuyaDeviceId?: string | null
   configurationState: 'incomplete' | 'configured'
   verificationState: 'not_tested' | 'passed' | 'failed'
 }
@@ -74,6 +75,7 @@ export interface MemberInput {
 }
 export interface CameraInput {
   name: string
+  tuyaDeviceId?: string | null
   connection?: { url: string; username?: string; password?: string }
 }
 export interface DeviceRegistration {

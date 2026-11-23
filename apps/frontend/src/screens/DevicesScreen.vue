@@ -55,6 +55,9 @@ const isAdmin = computed(() => props.user.role === 'admin')
 const selectedCameraId = computed(
   () => inventory.value?.selectedDeliveryCameraId ?? null,
 )
+function needsTuyaLink(camera: CameraSummary): boolean {
+  return props.services?.mode === 'live' && camera.tuyaDeviceId === null
+}
 const esp32Description = computed(() =>
   inventory.value?.esp32 ? copy.esp32ManageDescription : copy.esp32Description,
 )
@@ -228,22 +231,26 @@ async function closeDeviceDialog() {
       .getElementById(`device-tabs-${props.category}`)
       ?.focus({ preventScroll: true })
 }
-async function selectCamera(cameraId: string) {
+async function selectCamera(camera: CameraSummary) {
   const services = props.services
   if (
     !services ||
     !isAdmin.value ||
     selecting.value ||
     dialog.value ||
-    !inventory.value?.cameras.some((camera) => camera.id === cameraId)
+    !inventory.value?.cameras.some((entry) => entry.id === camera.id)
   )
     return
+  if (needsTuyaLink(camera)) {
+    openCameraManagement('edit-camera', camera)
+    return
+  }
   const request = generation
   selecting.value = true
   errorMessage.value = ''
   noticeMessage.value = ''
   try {
-    const result = await services.devices.selectCamera(cameraId)
+    const result = await services.devices.selectCamera(camera.id)
     if (isCurrent(request)) inventory.value = result
   } catch (cause) {
     if (!isCurrent(request)) return
@@ -437,10 +444,14 @@ onUnmounted(() => {
                       class="button button--quiet camera-select"
                       type="button"
                       :disabled="selecting"
-                      @click="selectCamera(camera.id)"
+                      @click="selectCamera(camera)"
                     >
                       <AppIcon name="camera" />{{
-                        selecting ? copy.selectingCamera : copy.selectCamera
+                        selecting
+                          ? copy.selectingCamera
+                          : needsTuyaLink(camera)
+                            ? copy.linkTuyaCamera
+                            : copy.selectCamera
                       }}
                     </button>
                   </template>

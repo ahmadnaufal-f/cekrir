@@ -31,6 +31,7 @@ const emit = defineEmits<{
 }>()
 
 const copy = adminCopy.devices
+const rtspPrefix = 'rtsp://'
 const validationCopy = {
   cameraNameRequired: 'Nama kamera wajib diisi.',
 } as const
@@ -42,7 +43,13 @@ const noticeMessage = shallowRef('')
 const esp32FieldError = shallowRef('')
 const cameraFieldErrors = shallowRef<Record<string, string>>({})
 const esp32Name = shallowRef('')
-const cameraForm = reactive({ name: '', url: '', username: '', password: '' })
+const cameraForm = reactive({
+  name: '',
+  address: '',
+  password: '',
+  tuyaDeviceId: '',
+})
+const cameraPasswordVisible = shallowRef(false)
 const credential = shallowRef<string | null>(null)
 const credentialVisible = shallowRef(false)
 const credentialNotice = shallowRef('')
@@ -56,13 +63,11 @@ const dialogDescription = computed(() => {
   if (props.kind === 'esp32') return copy.esp32Description
   return props.cameraToEdit
     ? copy.cameraEditDescription
-    : copy.camerasDescription
+    : copy.cameraRegistrationDescription
 })
 const nameField = useTemplateRef<HTMLInputElement>('nameField')
 const completionHeading =
   useTemplateRef<HTMLHeadingElement>('completionHeading')
-const connectionDetails =
-  useTemplateRef<HTMLDetailsElement>('connectionDetails')
 
 let requestGeneration = 0
 let activeMutationGeneration: number | null = null
@@ -97,6 +102,7 @@ function clearSensitiveState(): void {
   credentialVisible.value = false
   credentialNotice.value = ''
   cameraForm.password = ''
+  cameraPasswordVisible.value = false
 }
 
 function resetDialogState(): void {
@@ -108,8 +114,8 @@ function resetDialogState(): void {
   cameraFieldErrors.value = {}
   esp32Name.value = ''
   cameraForm.name = props.cameraToEdit?.name ?? ''
-  cameraForm.url = ''
-  cameraForm.username = ''
+  cameraForm.address = ''
+  cameraForm.tuyaDeviceId = props.cameraToEdit?.tuyaDeviceId ?? ''
   clearSensitiveState()
 }
 
@@ -192,16 +198,31 @@ async function registerEsp32(): Promise<void> {
   }
 }
 
-function cameraFieldError(
-  field: 'name' | 'url' | 'username' | 'password',
-): string {
+function cameraFieldError(field: 'name' | 'url' | 'password'): string {
   if (field === 'name') return cameraFieldErrors.value.name || ''
-  return errorForField(
-    cameraFieldErrors.value,
-    `connection.${field}`,
-    `connection_${field}`,
-    field,
+  return (
+    errorForField(
+      cameraFieldErrors.value,
+      `connection.${field}`,
+      `connection_${field}`,
+      field,
+    ) || (field === 'url' ? cameraFieldErrors.value.stream_url || '' : '')
   )
+}
+
+function cameraStreamUrl(address: string): string | null {
+  const host =
+    address.includes(':') && !address.startsWith('[') ? `[${address}]` : address
+  if (!/^(?:[\d.]+|\[[\da-f:.]+\])$/i.test(host)) return null
+
+  try {
+    const { hostname } = new URL(`http://${host}`)
+    // Require dotted decimal for IPv4. URL also accepts shorthand and octal.
+    if (host.startsWith('[') || hostname === host) return `${rtspPrefix}${host}`
+  } catch {
+    return null
+  }
+  return null
 }
 
 async function saveCamera(): Promise<void> {
@@ -217,21 +238,27 @@ async function saveCamera(): Promise<void> {
   }
 
   const input: CameraInput = { name }
-  const url = cameraForm.url.trim()
-  const username = cameraForm.username.trim()
   const camera = props.cameraToEdit
-  if (camera && !url && (username || cameraForm.password)) {
-    cameraFieldErrors.value = { url: copy.cameraEditUrlRequired }
-    return
-  }
-  if (url) {
-    input.connection = {
-      url,
-      ...(username ? { username } : {}),
-      ...(cameraForm.password ? { password: cameraForm.password } : {}),
+  const tuyaDeviceId = cameraForm.tuyaDeviceId.trim()
+  if (tuyaDeviceId !== (camera?.tuyaDeviceId ?? ''))
+    input.tuyaDeviceId = tuyaDeviceId || null
+  const address = cameraForm.address.trim()
+  const password = cameraForm.password
+  if (!camera || address || password) {
+    const url = cameraStreamUrl(address)
+    if (!url || !password) {
+      cameraFieldErrors.value = {
+        ...(!url && {
+          url: address ? copy.connectionUrlInvalid : copy.connectionUrlRequired,
+        }),
+        ...(!password && { password: copy.connectionPasswordRequired }),
+      }
+      return
     }
+    input.connection = { url, username: 'admin', password }
   }
   cameraForm.password = ''
+  cameraPasswordVisible.value = false
 
   const generation = requestGeneration
   activeMutationGeneration = generation
@@ -247,22 +274,10 @@ async function saveCamera(): Promise<void> {
     closeDialog()
   } catch (cause) {
     if (!isCurrent(generation)) return
-    if (cause instanceof ServiceError && cause.status === 422) {
+    if (cause instanceof ServiceError && cause.status === 422)
       cameraFieldErrors.value = cause.fieldErrors
-      if (
-        Object.keys(cause.fieldErrors).some(
-          (field) =>
-            field === 'connection' ||
-            field.startsWith('connection.') ||
-            field.startsWith('connection_') ||
-            ['url', 'username', 'password'].includes(field),
-        )
-      ) {
-        await nextTick()
-        if (!isCurrent(generation)) return
-        if (connectionDetails.value) connectionDetails.value.open = true
-      }
-    }
+    if (cause instanceof ServiceError && cause.status === 409)
+      cameraFieldErrors.value = { tuya_device_id: copy.tuyaDeviceUnavailable }
     errorMessage.value = camera ? copy.cameraEditFailed : copy.cameraFailed
     reportUnauthorized(cause, generation)
   } finally {
@@ -500,85 +515,107 @@ onUnmounted(() => {
           {{ cameraFieldError('name') }}
         </span>
       </label>
-      <details ref="connectionDetails" class="registration-details">
-        <summary>{{ copy.connectionDetails }}</summary>
+      <p v-if="cameraFieldErrors.connection" class="registration-field__error">
+        {{ cameraFieldErrors.connection }}
+      </p>
+      <div class="registration-field">
+        <label for="camera-address">{{ copy.connectionUrl }}</label>
+        <div class="registration-address">
+          <span aria-hidden="true">{{ rtspPrefix }}</span>
+          <input
+            id="camera-address"
+            v-model.trim="cameraForm.address"
+            :required="!props.cameraToEdit"
+            :placeholder="copy.connectionUrlPlaceholder"
+            autocomplete="off"
+            autocapitalize="none"
+            spellcheck="false"
+            :aria-invalid="!!cameraFieldError('url')"
+            :aria-describedby="
+              cameraFieldError('url') ? 'camera-url-error' : undefined
+            "
+          />
+        </div>
         <span
-          v-if="cameraFieldErrors.connection"
+          v-if="cameraFieldError('url')"
+          id="camera-url-error"
           class="registration-field__error"
         >
-          {{ cameraFieldErrors.connection }}
+          {{ cameraFieldError('url') }}
         </span>
-        <div class="registration-details__fields">
-          <label class="registration-field">
-            <span>{{ copy.connectionUrl }}</span>
-            <input
-              v-model.trim="cameraForm.url"
-              type="url"
-              :placeholder="copy.connectionUrlPlaceholder"
-              autocomplete="off"
-              :aria-invalid="!!cameraFieldError('url')"
-              :aria-describedby="
-                cameraFieldError('url') ? 'camera-url-error' : undefined
-              "
-            />
-            <span
-              v-if="cameraFieldError('url')"
-              id="camera-url-error"
-              class="registration-field__error"
-            >
-              {{ cameraFieldError('url') }}
-            </span>
-          </label>
-          <label class="registration-field">
-            <span>{{ copy.connectionUsername }}</span>
-            <input
-              v-model.trim="cameraForm.username"
-              autocomplete="off"
-              :aria-invalid="!!cameraFieldError('username')"
-              :aria-describedby="
-                cameraFieldError('username')
-                  ? 'camera-username-error'
-                  : undefined
-              "
-            />
-            <span
-              v-if="cameraFieldError('username')"
-              id="camera-username-error"
-              class="registration-field__error"
-            >
-              {{ cameraFieldError('username') }}
-            </span>
-          </label>
-          <label class="registration-field">
-            <span>{{ copy.connectionPassword }}</span>
-            <input
-              v-model="cameraForm.password"
-              type="password"
-              autocomplete="off"
-              :aria-invalid="!!cameraFieldError('password')"
-              :aria-describedby="
-                cameraFieldError('password')
-                  ? 'camera-password-error'
-                  : undefined
-              "
-            />
-            <span
-              v-if="cameraFieldError('password')"
-              id="camera-password-error"
-              class="registration-field__error"
-            >
-              {{ cameraFieldError('password') }}
-            </span>
-          </label>
-          <p class="registration-help">
-            {{
-              props.cameraToEdit
-                ? copy.cameraEditConnectionHelp
-                : copy.connectionHelp
-            }}
-          </p>
+      </div>
+      <div class="registration-field">
+        <label for="camera-password">{{ copy.connectionPassword }}</label>
+        <div class="registration-password">
+          <input
+            id="camera-password"
+            v-model="cameraForm.password"
+            :type="cameraPasswordVisible ? 'text' : 'password'"
+            :required="!props.cameraToEdit"
+            autocomplete="new-password"
+            autocapitalize="none"
+            spellcheck="false"
+            :aria-invalid="!!cameraFieldError('password')"
+            :aria-describedby="
+              cameraFieldError('password')
+                ? 'camera-password-error camera-password-help'
+                : 'camera-password-help'
+            "
+          />
+          <button
+            class="registration-password__toggle"
+            type="button"
+            :aria-label="
+              cameraPasswordVisible
+                ? copy.hideCameraPassword
+                : copy.showCameraPassword
+            "
+            :disabled="pending"
+            @click="cameraPasswordVisible = !cameraPasswordVisible"
+          >
+            <AppIcon :name="cameraPasswordVisible ? 'eyeOff' : 'eye'" />
+          </button>
         </div>
-      </details>
+        <span
+          v-if="cameraFieldError('password')"
+          id="camera-password-error"
+          class="registration-field__error"
+        >
+          {{ cameraFieldError('password') }}
+        </span>
+        <p id="camera-password-help" class="registration-help">
+          {{ copy.connectionHelp }}
+        </p>
+      </div>
+      <p v-if="props.cameraToEdit" class="registration-help">
+        {{ copy.cameraEditConnectionHelp }}
+      </p>
+      <label class="registration-field">
+        <span>{{ copy.tuyaDeviceId }}</span>
+        <input
+          v-model.trim="cameraForm.tuyaDeviceId"
+          maxlength="100"
+          autocomplete="off"
+          autocapitalize="none"
+          spellcheck="false"
+          :aria-invalid="!!cameraFieldErrors.tuya_device_id"
+          :aria-describedby="
+            cameraFieldErrors.tuya_device_id
+              ? 'tuya-device-error tuya-device-help'
+              : 'tuya-device-help'
+          "
+        />
+        <span
+          v-if="cameraFieldErrors.tuya_device_id"
+          id="tuya-device-error"
+          class="registration-field__error"
+        >
+          {{ cameraFieldErrors.tuya_device_id }}
+        </span>
+        <span id="tuya-device-help" class="registration-help">
+          {{ copy.tuyaDeviceHelp }}
+        </span>
+      </label>
       <button
         class="registration-button registration-button--primary"
         type="submit"
@@ -702,34 +739,52 @@ onUnmounted(() => {
   opacity: 0.58;
 }
 
-.registration-details {
-  margin: 0;
+.registration-address {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.registration-password {
+  position: relative;
+}
+
+.registration-password input {
+  padding-inline-end: 50px;
+}
+
+.registration-password__toggle {
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-end: 2px;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
   color: #435d4c;
-  font-size: 0.875rem;
 }
 
-.registration-details summary {
-  min-height: 44px;
-  padding: 10px 0;
-  cursor: pointer;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+.registration-password__toggle:hover:not(:disabled) {
+  background: #eef2e8;
 }
 
-.registration-details summary:focus-visible,
+.registration-password__toggle:focus-visible,
 .registration-completion__title:focus-visible {
   outline: 3px solid #b88736;
   outline-offset: 3px;
 }
 
-.registration-details__fields {
-  display: grid;
-  gap: 16px;
-  padding-top: 9px;
+.registration-help {
+  color: #53675a;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.5;
 }
 
-.registration-help,
 .registration-completion__intro {
   color: #53675a;
   font-size: 0.9375rem;

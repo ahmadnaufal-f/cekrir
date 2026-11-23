@@ -67,15 +67,24 @@ export const adminCopy = {
     camerasDescription:
       'Tambahkan beberapa kamera. Pilih satu kamera sebagai kamera pengiriman.',
     camerasEmpty: 'Belum ada kamera BARDI yang terdaftar.',
+    cameraRegistrationDescription:
+      'Gunakan alamat IP dan kata sandi dari pengaturan ONVIF di Tuya.',
     cameraName: 'Nama kamera',
     cameraNamePlaceholder: 'Contoh: Teras',
-    connectionDetails: 'Detail koneksi opsional',
-    connectionUrl: 'Alamat RTSP',
-    connectionUrlPlaceholder: 'rtsp://…',
-    connectionUsername: 'Nama pengguna',
-    connectionPassword: 'Kata sandi kamera',
-    connectionHelp:
-      'Informasi koneksi hanya dikirim saat menyimpan dan tidak akan ditampilkan kembali.',
+    connectionUrl: 'Alamat IP kamera',
+    connectionUrlPlaceholder: '192.168.1.23',
+    connectionUrlRequired: 'Alamat IP kamera wajib diisi.',
+    connectionUrlInvalid: 'Masukkan alamat IP dari pengaturan ONVIF.',
+    connectionPassword: 'Kata sandi ONVIF',
+    connectionPasswordRequired: 'Kata sandi ONVIF wajib diisi.',
+    showCameraPassword: 'Tampilkan kata sandi',
+    hideCameraPassword: 'Sembunyikan kata sandi',
+    connectionHelp: 'Kata sandi dienkripsi saat disimpan.',
+    tuyaDeviceId: 'ID perangkat Tuya',
+    tuyaDeviceHelp:
+      'Salin Virtual ID dari Device Information di Tuya untuk mengaktifkan foto pengiriman.',
+    tuyaDeviceUnavailable:
+      'Pastikan ID perangkat Tuya tersedia untuk lokasi ini dan belum terhubung ke kamera lain.',
     addCamera: 'Tambahkan kamera',
     savingCamera: 'Menyimpan kamera…',
     cameraFailed: 'Kamera belum dapat disimpan. Periksa data dan coba lagi.',
@@ -85,8 +94,7 @@ export const adminCopy = {
     cameraEditDescription:
       'Ubah nama kamera atau masukkan detail koneksi baru.',
     cameraEditConnectionHelp:
-      'Isi alamat RTSP untuk mengganti detail koneksi. Kosongkan semua kolom koneksi untuk mempertahankan pengaturan yang tersimpan.',
-    cameraEditUrlRequired: 'Isi alamat RTSP untuk mengganti detail koneksi.',
+      'Isi alamat IP dan kata sandi untuk mengganti koneksi, atau kosongkan keduanya untuk memakai pengaturan yang tersimpan.',
     removeCameraTitle: 'Hapus kamera',
     removeCameraDescription: 'Kamera akan dihapus dari daftar perangkat.',
     removeDeliveryCameraDescription:
@@ -96,9 +104,10 @@ export const adminCopy = {
       'Kamera pengiriman dihapus. Pilih kamera lain untuk pengiriman.',
     cameraRemoveFailed: 'Kamera belum dapat dihapus. Coba lagi.',
     selectCamera: 'Jadikan kamera pengiriman',
+    linkTuyaCamera: 'Tautkan perangkat Tuya',
     selectingCamera: 'Memperbarui pilihan…',
     selectionFailed:
-      'Pilihan kamera belum berubah. Kamera pengiriman sebelumnya tetap digunakan; coba lagi.',
+      'Pilihan kamera belum dapat dikonfirmasi. Muat ulang daftar dan coba lagi.',
     selectedCamera: 'Kamera pengiriman',
     cameraIncomplete: 'Konfigurasi koneksi belum lengkap',
     cameraConfigured: 'Konfigurasi tersimpan · koneksi belum diverifikasi',

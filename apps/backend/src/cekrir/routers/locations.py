@@ -9,7 +9,7 @@ from cekrir.dependencies import get_user_id
 from cekrir.middleware import RequirePermission
 from cekrir.schemas import LocationRead
 from cekrir.services import devices, location_management
-from cekrir.validation.devices import CctvCreate
+from cekrir.validation.devices import CctvCreate, CctvRead, CctvUpdate
 from cekrir.validation.locations import LocationCreate
 
 router = APIRouter(prefix="/api/v1/locations", tags=["locations"])
@@ -35,6 +35,7 @@ def provision_esp(
 @router.post(
     "/{location_id}/cctv",
     status_code=201,
+    response_model=CctvRead,
     dependencies=[Depends(RequirePermission("locations:manage"))],
 )
 def create_cctv(
@@ -48,11 +49,17 @@ def create_cctv(
         return devices.add_cctv(session, request.app.state.settings, admin_id, location_id, payload)
     except location_management.LocationResourceNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except devices.TuyaCameraNotAvailable as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except devices.EncryptionNotConfigured as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-@router.get("/{location_id}/cctv", dependencies=[Depends(RequirePermission("locations:manage"))])
+@router.get(
+    "/{location_id}/cctv",
+    response_model=list[CctvRead],
+    dependencies=[Depends(RequirePermission("locations:manage"))],
+)
 def get_cctv(
     location_id: UUID,
     admin_id: UUID = Depends(get_user_id),
@@ -62,6 +69,53 @@ def get_cctv(
         return devices.list_cctv(session, admin_id, location_id)
     except location_management.LocationResourceNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.patch(
+    "/{location_id}/cctv/{camera_id}",
+    response_model=CctvRead,
+    dependencies=[Depends(RequirePermission("locations:manage"))],
+)
+def update_cctv(
+    location_id: UUID,
+    camera_id: UUID,
+    payload: CctvUpdate,
+    request: Request,
+    admin_id: UUID = Depends(get_user_id),
+    session: Session = Depends(get_session),
+):
+    try:
+        return devices.update_cctv(
+            session, request.app.state.settings, admin_id, location_id, camera_id, payload
+        )
+    except (devices.DeviceNotFound, location_management.LocationResourceNotFound) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except devices.TuyaCameraNotAvailable as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except devices.EncryptionNotConfigured as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.put(
+    "/{location_id}/cctv/{camera_id}/delivery",
+    response_model=CctvRead,
+    dependencies=[Depends(RequirePermission("locations:manage"))],
+)
+def select_delivery_camera(
+    location_id: UUID,
+    camera_id: UUID,
+    request: Request,
+    admin_id: UUID = Depends(get_user_id),
+    session: Session = Depends(get_session),
+):
+    try:
+        return devices.select_delivery_camera(
+            session, request.app.state.settings, admin_id, location_id, camera_id
+        )
+    except (devices.DeviceNotFound, location_management.LocationResourceNotFound) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except devices.TuyaCameraNotAvailable as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get(

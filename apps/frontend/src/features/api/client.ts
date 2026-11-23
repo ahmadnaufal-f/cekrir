@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core'
+import { cameraInventory, type CctvRecord } from '../../lib/cctv'
 import { ServiceError } from '../../services/contracts'
 import type { CameraInput, DeviceInventory } from '../../types/app'
 import type {
@@ -222,19 +223,14 @@ export function createApiClient(options: ClientOptions = {}): ApiServices {
         'Lokasi belum tersedia.',
         404,
       )
-    const cameras = await authorized<Array<{ id: string; name: string }>>(
+    const cameras = await authorized<CctvRecord[]>(
       `/locations/${encodeURIComponent(id)}/cctv`,
     )
     return {
       esp32: location.esp_device_id
         ? { id: location.esp_device_id, name: 'ESP32' }
         : null,
-      cameras: cameras.map((camera) => ({
-        ...camera,
-        configurationState: 'configured',
-        verificationState: 'not_tested',
-      })),
-      selectedDeliveryCameraId: null,
+      ...cameraInventory(cameras),
     }
   }
   const installations = new Map<string, string>()
@@ -272,13 +268,14 @@ export function createApiClient(options: ClientOptions = {}): ApiServices {
         if (!connection?.url || !connection.username || !connection.password)
           throw new ServiceError(
             'validation',
-            'RTMP URL, username, and password are required.',
+            'Alamat kamera, nama pengguna, dan kata sandi wajib diisi.',
             422,
           )
         await authorized(
           `/locations/${encodeURIComponent(locationId())}/cctv`,
           post({
             name: input.name,
+            tuya_device_id: input.tuyaDeviceId,
             stream_url: connection.url,
             username: connection.username,
             password: connection.password,
@@ -288,9 +285,32 @@ export function createApiClient(options: ClientOptions = {}): ApiServices {
       },
       renameEsp32: unavailable,
       removeEsp32: unavailable,
-      updateCamera: unavailable,
+      async updateCamera(id, input) {
+        await authorized(
+          `/locations/${encodeURIComponent(locationId())}/cctv/${encodeURIComponent(id)}`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({
+              name: input.name,
+              tuya_device_id: input.tuyaDeviceId,
+              connection: input.connection && {
+                stream_url: input.connection.url,
+                username: input.connection.username,
+                password: input.connection.password,
+              },
+            }),
+          },
+        )
+        return inventory()
+      },
       removeCamera: unavailable,
-      selectCamera: unavailable,
+      async selectCamera(id) {
+        await authorized(
+          `/locations/${encodeURIComponent(locationId())}/cctv/${encodeURIComponent(id)}/delivery`,
+          { method: 'PUT' },
+        )
+        return inventory()
+      },
     },
     push: {
       async upsert(registration) {

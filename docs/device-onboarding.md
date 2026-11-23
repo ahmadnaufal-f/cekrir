@@ -31,7 +31,19 @@ Set `CEKRIR_CCTV_ENCRYPTION_KEY` in `apps/backend/.env` to a Fernet key. Generat
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-Store and back up the key securely. Keep using the same key: changing or losing it makes previously saved camera credentials unreadable. With an admin access token, call `POST /api/v1/locations/{location_id}/cctv` with `name`, an `rtmp://` or `rtmps://` `stream_url`, `username`, and `password`. Keep credentials out of the URL. The backend encrypts the URL and credentials and returns only the camera ID, location ID and name. This registers the camera; it does not start a stream reader. Multiple cameras can belong to a location.
+Store and back up the key securely. Changing or losing it makes previously saved camera credentials unreadable. Cekrir's camera form sends the ONVIF IP address as an `rtsp://` URL, with `admin` and the ONVIF password as separate fields. The API also accepts `rtmp://` and `rtmps://` URLs. Keep credentials out of the URL. The backend encrypts the URL and credentials and returns only camera metadata.
+
+For delivery photos, configure `TUYA_API_KEY` and `TUYA_API_ENDPOINT` on the backend. The key must have access to the assigned cameras. Set `TUYA_LOCATION_DEVICES` to a JSON object keyed by Cekrir location ID. Each value lists the Tuya devices authorized for that location. A device ID can belong to one location.
+
+```dotenv
+TUYA_LOCATION_DEVICES={"00000000-0000-0000-0000-000000000001":["example-front-camera","example-side-camera"]}
+```
+
+In Tuya, open the camera's settings and copy the **Virtual ID** under **Device Information**. Enter it as **ID perangkat Tuya** when registering or editing the camera in Cekrir. In **Perangkat → Kamera**, tap **Jadikan kamera pengiriman**. The location can save multiple cameras and select one. New scans for that location use the selected camera. Changing the selection takes effect on subsequent scans.
+
+See [Tuya's device ID instructions](https://developer.tuya.com/en/miniapp/faq/panel#how-can-i-get-the-device-id-deviceid).
+
+The optional `TUYA_CCTV_DEVICE_ID` keeps legacy single-camera deployments working when `TUYA_LOCATION_DEVICES` is empty. Once location assignments are configured, a scan queues a photo only when its location has an authorized delivery camera selected. Run the backend migrations before using location assignments.
 
 ## Firebase notifications
 

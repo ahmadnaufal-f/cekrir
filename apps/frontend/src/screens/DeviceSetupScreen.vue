@@ -33,10 +33,12 @@ const registrationState = shallowRef<
   'loading' | 'empty' | 'registered' | 'error'
 >('loading')
 const retryInventory = shallowRef(0)
-const canRegister = computed(
+const showRegister = computed(
   () =>
+    props.kind === 'esp32' &&
     !!props.devices &&
-    (props.kind === 'bardi' || registrationState.value === 'empty'),
+    registrationState.value === 'empty' &&
+    activeStep.value === copy.value.steps.length - 1,
 )
 const subtitle = computed(() => {
   if (!props.devices) return deviceGuideCopy.common.registrationUnavailable
@@ -92,7 +94,7 @@ watch(
         :title-id="`${kind}-setup-title`"
       >
         <p>{{ subtitle }}</p>
-        <p class="device-setup-screen__disclaimer">
+        <p v-if="kind === 'esp32'" class="device-setup-screen__disclaimer">
           {{ deviceGuideCopy.common.illustrationDisclaimer }}
         </p>
       </PageHeader>
@@ -115,7 +117,7 @@ watch(
       </div>
 
       <div
-        v-if="canRegister && activeStep === copy.steps.length - 1"
+        v-if="showRegister"
         class="device-setup-screen__actions content-inset"
       >
         <button
@@ -124,11 +126,12 @@ watch(
           @click="emit('register')"
         >
           <AppIcon name="plus" />
-          {{ copy.registerAction }}
+          {{ adminCopy.devices.registerDevice }}
         </button>
       </div>
 
       <DeviceSetupGuide
+        v-if="kind === 'esp32'"
         :services="services"
         :user="user"
         :kind="kind"

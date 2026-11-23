@@ -3,9 +3,13 @@ import esp32Register from '../assets/device-setup/esp32-register.svg'
 import esp32Credential from '../assets/device-setup/esp32-credential.svg'
 import esp32ManualConfig from '../assets/device-setup/esp32-manual-config.svg'
 import esp32HardwareCheck from '../assets/device-setup/esp32-hardware-check.svg'
-import bardiPrepareCamera from '../assets/device-setup/bardi-prepare-camera.svg'
+import tuyaDownloadQr from '../assets/device-setup/tuya-download-qr.png'
+import tuyaAddDevice from '../assets/device-setup/tuya-add-device.png'
+import tuyaOnvifMenu from '../assets/device-setup/tuya-onvif-menu.png'
+import tuyaOnvifSettings from '../assets/device-setup/tuya-onvif-settings.png'
 import bardiRegisterCamera from '../assets/device-setup/bardi-register-camera.svg'
 import bardiSelectCamera from '../assets/device-setup/bardi-select-camera.svg'
+import courierCameraPosition from '../assets/device-setup/courier-camera-position.png'
 
 const esp32Steps: readonly DeviceGuideStep[] = [
   {
@@ -44,30 +48,65 @@ const esp32Steps: readonly DeviceGuideStep[] = [
   },
 ]
 
-const bardiSteps: readonly DeviceGuideStep[] = [
+const tuyaCameraSteps: readonly DeviceGuideStep[] = [
   {
-    id: 'prepare-camera',
-    title: 'Siapkan kamera dan jaringan',
+    id: 'install-tuya',
+    title: 'Instal aplikasi Tuya',
     description:
-      'Gunakan kamera BARDI yang memang Anda miliki dan panduan untuk modelnya. Periksa alamat RTSP serta data masuk dari sumber milik Anda; aplikasi tidak menetapkan nilai bawaan.',
-    image: bardiPrepareCamera,
-    imageAlt:
-      'Ilustrasi kamera dan jaringan lokasi di samping panduan perangkat.',
+      'Pindai kode QR atau buka Google Play untuk menginstal Tuya. Daftarkan kamera di Tuya agar bisa terhubung ke layanan web Tuya. Aplikasi BARDI tidak mendukung koneksi ini.',
+    image: tuyaDownloadQr,
+    imageAlt: 'Kode QR untuk membuka aplikasi Tuya di Google Play.',
+    download: {
+      href: 'https://play.google.com/store/apps/details?id=com.tuya.smart',
+      label: 'Buka Tuya di Google Play',
+    },
+  },
+  {
+    id: 'pair-camera',
+    title: 'Tambahkan kamera di Tuya',
+    description:
+      'Di halaman utama Tuya, ketuk tombol + di kanan atas, lalu pilih Add Device. Ikuti petunjuk di aplikasi sampai kamera muncul di daftar perangkat.',
+    image: tuyaAddDevice,
+    imageAlt: 'Tombol tambah di kanan atas mengarah ke pilihan Add Device.',
+  },
+  {
+    id: 'open-onvif',
+    title: 'Buka pengaturan ONVIF',
+    description:
+      'Buka kamera yang sudah ditambahkan. Masuk ke pengaturan kamera, lalu ketuk Onvif di bagian Advanced Settings.',
+    image: tuyaOnvifMenu,
+    imageAlt: 'Pilihan Onvif di bagian Advanced Settings.',
+  },
+  {
+    id: 'configure-onvif',
+    title: 'Aktifkan ONVIF dan atur kata sandi',
+    description:
+      'Nyalakan Onvif Switch dan catat IP address yang ditampilkan. Ketuk Set a New Password atau Reset Password, lalu buat dan simpan kata sandi ONVIF untuk langkah berikutnya.',
+    image: tuyaOnvifSettings,
+    imageAlt: 'Onvif Switch aktif, diikuti IP address dan Reset Password.',
   },
   {
     id: 'register-camera',
-    title: 'Daftarkan nama dan koneksi opsional',
+    title: 'Daftarkan kamera di Cekrir',
     description:
-      'Masukkan nama kamera. Jika konfigurasi RTSP diperlukan, alamat dan data masuk bersifat opsional, dikirim saat disimpan, lalu tidak ditampilkan kembali.',
+      'Kembali ke Cekrir. Buka Perangkat, pilih tab Kamera, lalu ketuk Daftarkan perangkat. Masukkan nama kamera, alamat IP, dan kata sandi ONVIF. Untuk foto pengiriman, isi juga Virtual ID dari Device Information di Tuya.',
     image: bardiRegisterCamera,
     imageAlt:
       'Formulir pendaftaran kamera dengan kolom koneksi dan simbol kamera.',
   },
   {
+    id: 'check-courier-view',
+    title: 'Periksa area kedatangan kurir',
+    description:
+      'Arahkan kamera ke tempat kurir biasanya berdiri saat mengantar paket. Cek tampilan langsung di Tuya dan pastikan kurir terlihat jelas dari posisi tersebut.',
+    image: courierCameraPosition,
+    imageAlt: 'Kamera mengarah ke tempat kurir berdiri di pintu masuk.',
+  },
+  {
     id: 'select-camera',
     title: 'Pilih satu kamera pengiriman',
     description:
-      'Setelah kamera terdaftar, pilih satu sebagai kamera untuk foto paket. Pendaftaran atau konfigurasi tersimpan tidak membuktikan kamera sudah tersambung.',
+      'Di tab Kamera, cari kamera yang paling jelas menghadap area penerimaan paket, lalu ketuk Jadikan kamera pengiriman.',
     image: bardiSelectCamera,
     imageAlt:
       'Tiga kamera terdaftar dengan satu kamera ditandai sebagai pilihan.',
@@ -80,7 +119,6 @@ interface DeviceSetupCopy {
   registeredSubtitle?: string
   statusNote: string
   steps: readonly DeviceGuideStep[]
-  registerAction: string
   sourceLink?: string
   guideLink: string
 }
@@ -103,7 +141,7 @@ export const deviceGuideCopy = {
     adminOnly: 'Panduan perangkat hanya tersedia untuk admin lokasi ini.',
     illustrationDisclaimer: 'Ilustrasi alur penyiapan.',
     registrationUnavailable:
-      'Pendaftaran perangkat dan pengaturan kamera belum tersedia di mode live.',
+      'Pendaftaran perangkat dan pengaturan kamera belum tersedia.',
     loading: 'Memuat referensi…',
     loadingFailed: 'Referensi belum dapat dimuat.',
     retry: 'Coba lagi',
@@ -119,19 +157,16 @@ export const deviceGuideCopy = {
     statusNote:
       'Firmware masih berupa scaffold. Konfigurasi dan koneksi perangkat belum diverifikasi; aplikasi tidak mengonfigurasi atau mem-flash firmware. Penggunaan kredensial pada firmware masih menunggu kesepakatan integrasi.',
     steps: esp32Steps,
-    registerAction: 'Daftarkan perangkat',
     sourceLink: 'Lihat sumber firmware',
     guideLink: 'Baca panduan ESP32',
   },
   bardi: {
-    title: 'Panduan penyiapan kamera BARDI',
-    subtitle:
-      'Siapkan kamera, simpan konfigurasi, lalu pilih kamera pengiriman.',
+    title: 'Panduan penyiapan kamera dengan Tuya',
+    subtitle: 'Hubungkan kamera di Tuya, lalu daftarkan di Cekrir.',
     statusNote:
-      'Pengujian lokal pada unit milik sendiri mencakup login ONVIF/PTZ, pemutaran RTSP/TCP di VLC, dan satu gambar JPEG melalui FFmpeg. Panduan lengkap, pengambilan berulang, dan verifikasi backend masih menunggu. Pendaftaran atau konfigurasi tersimpan tidak membuktikan koneksi kamera.',
-    steps: bardiSteps,
-    registerAction: 'Daftarkan perangkat',
-    guideLink: 'Buka referensi BARDI',
+      'Foto pengiriman menggunakan kamera yang dipilih di tab Kamera.',
+    steps: tuyaCameraSteps,
+    guideLink: 'Buka referensi kamera',
   },
 } satisfies Record<DeviceCategory, DeviceSetupCopy> & {
   common: DeviceGuideCommonCopy

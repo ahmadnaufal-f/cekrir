@@ -18,4 +18,5 @@ export interface DeviceGuideStep {
   description: string
   image: string
   imageAlt: string
+  download?: { href: string; label: string }
 }

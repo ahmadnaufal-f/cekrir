@@ -1,4 +1,5 @@
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
@@ -36,18 +37,21 @@ async def ingest_device_frame(
     metadata: Annotated[CourierInput, Query()],
     request: Request,
     background_tasks: BackgroundTasks,
-    device_id: str = Depends(verified_esp),
+    device: tuple[str, UUID] = Depends(verified_esp),
     frame: bytes = Depends(jpeg_frame),
     session: Session = Depends(get_session),
     provider: TrackingProvider = Depends(get_provider),
     publisher: NotificationPublisher = Depends(get_publisher),
 ):
+    device_id, location_id = device
     try:
         result = await run_in_threadpool(
             detections.ingest_esp_frame, frame, device_id, metadata, session, provider, publisher
         )
         for detection in result.detections:
-            schedule_photo(session, detection.shipment_id, request, background_tasks)
+            schedule_photo(
+                session, detection.shipment_id, request, background_tasks, location_id=location_id
+            )
         return result
     except InvalidCameraFrame as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -67,7 +71,9 @@ def ingest_detection(
     publisher: NotificationPublisher = Depends(get_publisher),
 ):
     result = detections.ingest_detection(session, payload, provider, publisher)
-    if schedule_photo(session, result.shipment.id, request, background_tasks):
+    if schedule_photo(
+        session, result.shipment.id, request, background_tasks, source_id=payload.camera_id
+    ):
         result.shipment.photo_status = "pending"
     return result
 
@@ -97,7 +103,13 @@ async def ingest_camera_frame(
             detections.ingest_frame, frame, metadata, session, provider, publisher
         )
         for detection in result.detections:
-            schedule_photo(session, detection.shipment_id, request, background_tasks)
+            schedule_photo(
+                session,
+                detection.shipment_id,
+                request,
+                background_tasks,
+                source_id=metadata.camera_id,
+            )
         return result
     except InvalidCameraFrame as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

@@ -34,6 +34,47 @@ afterEach(() => {
 })
 
 describe('API session transport', () => {
+  it('links and selects a delivery camera at the signed-in location', async () => {
+    const location = { id: 'location-1', esp_device_id: 'esp-1' }
+    const camera = {
+      id: 'camera-1',
+      name: 'Porch',
+      tuya_device_id: 'porch-tuya',
+      is_delivery_camera: false,
+    }
+    const selectedCamera = { ...camera, is_delivery_camera: true }
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(json({ ...tokens(), location_id: location.id }))
+      .mockResolvedValueOnce(json(camera))
+      .mockResolvedValueOnce(json([location]))
+      .mockResolvedValueOnce(json([camera]))
+      .mockResolvedValueOnce(json(selectedCamera))
+      .mockResolvedValueOnce(json([location]))
+      .mockResolvedValueOnce(json([selectedCamera]))
+    const client = createApiClient({ fetch })
+
+    await client.auth.login(credentials)
+    await client.devices!.updateCamera(camera.id, {
+      name: camera.name,
+      tuyaDeviceId: camera.tuya_device_id,
+    })
+    const [editUrl, edit] = fetch.mock.calls[1]!
+    expect(editUrl).toContain('/locations/location-1/cctv/camera-1')
+    expect(edit.method).toBe('PATCH')
+    expect(JSON.parse(String(edit.body))).toEqual({
+      name: 'Porch',
+      tuya_device_id: 'porch-tuya',
+    })
+
+    const inventory = await client.devices!.selectCamera(camera.id)
+    expect(fetch.mock.calls[4]?.[0]).toContain(
+      '/locations/location-1/cctv/camera-1/delivery',
+    )
+    expect(fetch.mock.calls[4]?.[1]?.method).toBe('PUT')
+    expect(inventory.selectedDeliveryCameraId).toBe(camera.id)
+  })
+
   it('uses the signed-in location for ESP provisioning and FCM registration', async () => {
     const fetch = vi
       .fn()

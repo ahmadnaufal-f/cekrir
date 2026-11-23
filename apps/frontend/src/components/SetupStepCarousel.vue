@@ -69,7 +69,13 @@ function goTo(index: number): void {
 }
 
 function handleViewportKeydown(event: KeyboardEvent): void {
-  if (event.altKey || event.ctrlKey || event.metaKey) return
+  if (
+    event.target !== event.currentTarget ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey
+  )
+    return
 
   if (event.key === 'ArrowRight') {
     event.preventDefault()
@@ -178,17 +184,30 @@ onBeforeUnmount(() => {
         :aria-hidden="index !== activeIndex"
         :inert="index !== activeIndex"
       >
-        <figure class="setup-step__illustration">
+        <figure
+          class="setup-step__illustration"
+          :class="{ 'setup-step__illustration--qr': step.download }"
+        >
           <img
             :src="step.image"
             :alt="step.imageAlt"
-            width="800"
-            height="500"
+            :width="step.download ? 320 : 800"
+            :height="step.download ? 320 : 500"
           />
         </figure>
         <div class="setup-step__copy">
           <h2>{{ step.title }}</h2>
           <p>{{ step.description }}</p>
+          <a
+            v-if="step.download"
+            class="setup-step__download"
+            :href="step.download.href"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {{ step.download.label }}
+            <AppIcon name="external" />
+          </a>
         </div>
       </article>
     </div>
@@ -324,6 +343,17 @@ onBeforeUnmount(() => {
   object-fit: cover;
 }
 
+.setup-step__illustration--qr {
+  display: grid;
+  place-items: center;
+}
+
+.setup-step__illustration--qr img {
+  width: min(58%, 196px);
+  height: auto;
+  image-rendering: pixelated;
+}
+
 .setup-step__copy {
   max-width: 52ch;
 }
@@ -343,6 +373,18 @@ onBeforeUnmount(() => {
   color: #53675a;
   font-size: 0.9375rem;
   line-height: 1.75;
+}
+
+.setup-step__download {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  color: #234e41;
+  font-size: 0.875rem;
+  font-weight: 650;
+  text-underline-offset: 3px;
 }
 
 .setup-step-carousel__controls {

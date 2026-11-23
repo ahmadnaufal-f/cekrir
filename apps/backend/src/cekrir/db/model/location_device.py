@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import ForeignKey, Index, String, Text, text
+from sqlalchemy import ForeignKey, Index, String, Text, UniqueConstraint, false, text
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -47,6 +47,16 @@ class EspDevice(Base):
 
 class CctvCamera(Base):
     __tablename__ = "cctv_cameras"
+    __table_args__ = (
+        Index("ix_cctv_cameras_location_id", "location_id"),
+        UniqueConstraint("tuya_device_id", name="cctv_cameras_tuya_device_id_key"),
+        Index(
+            "ix_cctv_cameras_delivery_location",
+            "location_id",
+            unique=True,
+            postgresql_where=text("is_delivery_camera"),
+        ),
+    )
     id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True),
         primary_key=True,
@@ -57,16 +67,18 @@ class CctvCamera(Base):
         PgUUID(as_uuid=True),
         ForeignKey("locations.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     stream_url_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     username_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     password_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    tuya_device_id: Mapped[str | None] = mapped_column(String(100))
+    is_delivery_camera: Mapped[bool] = mapped_column(server_default=false())
 
 
 class FcmDevice(Base):
     __tablename__ = "fcm_devices"
+    __table_args__ = (Index("ix_fcm_devices_user_id", "user_id"),)
     id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True),
         primary_key=True,
@@ -77,7 +89,6 @@ class FcmDevice(Base):
         PgUUID(as_uuid=True),
         ForeignKey("cekrir_user.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     token: Mapped[str] = mapped_column(Text, nullable=False)
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
