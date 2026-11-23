@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Connect a Tuya camera · Cekrir</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: system-ui, sans-serif;
+        color: #233d37;
+        background: #f2f5ee;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: clamp(24px, 6vw, 64px) clamp(16px, 4vw, 36px);
+      }
+      header {
+        margin-bottom: 24px;
+      }
+      .brand {
+        font-size: 0.875rem;
+        font-weight: 750;
+        color: #385b4c;
+      }
+      h1 {
+        margin: 10px 0 8px;
+        font-size: clamp(2rem, 6vw, 3.25rem);
+        letter-spacing: -0.045em;
+        line-height: 1.05;
+      }
+      h2 {
+        margin: 0 0 10px;
+        font-size: 1.25rem;
+        letter-spacing: -0.02em;
+      }
+      p {
+        margin: 0;
+        line-height: 1.55;
+        color: #435d50;
+      }
+      .panels {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        align-items: start;
+      }
+      section {
+        padding: clamp(18px, 4vw, 26px);
+        border: 1px solid #d3dfd2;
+        border-radius: 12px;
+        background: #fffefa;
+      }
+      a {
+        color: #174f3b;
+        text-underline-offset: 3px;
+        font-weight: 650;
+      }
+      label {
+        display: block;
+        font-size: 0.925rem;
+        font-weight: 650;
+      }
+      form,
+      .file {
+        display: grid;
+        gap: 14px;
+        margin-top: 18px;
+      }
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+      input,
+      button {
+        font: inherit;
+      }
+      input {
+        max-width: 100%;
+      }
+      input[type='text'] {
+        width: 100%;
+        min-height: 44px;
+        padding: 9px 11px;
+        border: 1px solid #aebeb0;
+        border-radius: 6px;
+        background: #fff;
+        color: inherit;
+      }
+      input[type='file'] {
+        font-size: 0.875rem;
+      }
+      input::file-selector-button,
+      button {
+        padding: 8px 13px;
+        min-height: 44px;
+        border-radius: 6px;
+        border: 1px solid #234e41;
+        font-weight: 650;
+        cursor: pointer;
+      }
+      button {
+        background: #234e41;
+        color: white;
+      }
+      .secondary,
+      input::file-selector-button {
+        background: #eef3eb;
+        color: #234e41;
+      }
+      button:disabled {
+        background: #eff1ec;
+        color: #53675a;
+        border-color: #c7d1c5;
+        cursor: default;
+      }
+      :focus-visible {
+        outline: 3px solid #94631d;
+        outline-offset: 2px;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .status {
+        min-height: 1.55em;
+        overflow-wrap: anywhere;
+      }
+      #camera-status {
+        margin-top: 14px;
+      }
+      .status[data-error='true'] {
+        color: #873026;
+      }
+      .qr {
+        display: block;
+        margin: 18px auto 0;
+        max-height: 410px;
+        max-width: 100%;
+        border: 1px solid #d3dfd2;
+        border-radius: 8px;
+      }
+      .qr[hidden] {
+        display: none;
+      }
+      @media (max-width: 640px) {
+        .panels {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="brand">Cekrir · Local pilot</p>
+        <h1>Connect a Tuya camera</h1>
+        <p>
+          Scan a Cloud Project QR code and check whether the project can access
+          your camera.
+        </p>
+      </header>
+      <div class="panels">
+        <section aria-labelledby="scan-title">
+          <h2 id="scan-title">Scan the Tuya QR code</h2>
+          <p>
+            In the
+            <a
+              href="https://platform.tuya.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Tuya console</a
+            >, open your Cloud Project. Go to
+            <strong
+              >Devices → Link App Account → Add App Account → Tuya App Account
+              Authorization</strong
+            >.
+          </p>
+          <div class="file">
+            <label for="qr-file">Choose an image of the QR code</label>
+            <input
+              id="qr-file"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+            />
+            <p>
+              Scan the code in Tuya or Smart Life, then finish linking the
+              account in the console.
+            </p>
+            <p id="qr-status" class="status" role="status"></p>
+          </div>
+          <img
+            id="qr-image"
+            class="qr"
+            alt="Tuya account authorization QR code"
+            hidden
+          />
+        </section>
+        <section aria-labelledby="verify-title">
+          <h2 id="verify-title">Verify the linked camera</h2>
+          <p>
+            Copy the UID from the linked account in the console. In Tuya, find
+            the camera’s Virtual ID under <strong>Device Information</strong>.
+          </p>
+          <form id="camera-form" method="post">
+            <div class="field">
+              <label for="uid">Linked account UID</label>
+              <input
+                id="uid"
+                name="uid"
+                type="text"
+                maxlength="100"
+                required
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </div>
+            <div class="field">
+              <label for="device">Camera Virtual ID</label>
+              <input
+                id="device"
+                name="device_id"
+                type="text"
+                maxlength="100"
+                required
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </div>
+            <div class="actions">
+              <button id="verify" type="submit">Verify camera</button>
+              <button id="capture" class="secondary" type="button" disabled>
+                Request snapshot
+              </button>
+            </div>
+          </form>
+          <p id="camera-status" class="status" role="status"></p>
+        </section>
+      </div>
+    </main>
+    <script>
+      const qrFile = document.getElementById('qr-file')
+      const qrImage = document.getElementById('qr-image')
+      const qrStatus = document.getElementById('qr-status')
+      let qrUrl
+      qrFile.addEventListener('change', () => {
+        if (qrUrl) URL.revokeObjectURL(qrUrl)
+        const file = qrFile.files[0]
+        qrUrl = file && URL.createObjectURL(file)
+        qrImage.hidden = true
+        qrStatus.textContent = ''
+        if (qrUrl) qrImage.src = qrUrl
+        else qrImage.removeAttribute('src')
+      })
+      qrImage.addEventListener('load', () => {
+        qrImage.hidden = false
+      })
+      qrImage.addEventListener('error', () => {
+        qrStatus.textContent = 'Choose a readable PNG, JPEG, or WebP image.'
+        qrStatus.dataset.error = 'true'
+      })
+
+      const form = document.getElementById('camera-form')
+      const status = document.getElementById('camera-status')
+      const verify = document.getElementById('verify')
+      const capture = document.getElementById('capture')
+      const uid = document.getElementById('uid')
+      const device = document.getElementById('device')
+      let cameraVerified = false
+      let pending = false
+
+      function message(text, error = false) {
+        status.textContent = text
+        status.dataset.error = String(error)
+      }
+
+      function updateControls() {
+        verify.disabled = uid.disabled = device.disabled = pending
+        capture.disabled = pending || !cameraVerified
+        form.setAttribute('aria-busy', String(pending))
+      }
+
+      form.addEventListener('input', () => {
+        cameraVerified = false
+        message('')
+        updateControls()
+      })
+
+      async function requestCamera(action) {
+        if (pending || (action === 'capture' && !cameraVerified)) return
+        const link = { uid: uid.value.trim(), device_id: device.value.trim() }
+        const checking = action === 'verify'
+        pending = true
+        cameraVerified = false
+        updateControls()
+        message(
+          checking ? 'Checking project access…' : 'Requesting a snapshot…',
+        )
+        try {
+          const response = await fetch(`/api/${action}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(link),
+          })
+          const result = await response.json()
+          if (!response.ok) {
+            message(
+              typeof result.detail === 'string'
+                ? result.detail
+                : 'Check both IDs and try again.',
+              true,
+            )
+            return
+          }
+          cameraVerified = true
+          if (checking) {
+            const availability =
+              result.online === true
+                ? ' Online.'
+                : result.online === false
+                  ? ' Offline.'
+                  : ''
+            message(`Camera verified. ${result.name}.${availability}`)
+          } else {
+            message(
+              `Tuya accepted command ${result.command_id}. Check Message Service for the captured JPEG.`,
+            )
+          }
+        } catch {
+          message(
+            'The local POC could not complete the request. Try again.',
+            true,
+          )
+        } finally {
+          pending = false
+          updateControls()
+        }
+      }
+
+      form.addEventListener('submit', (event) => {
+        event.preventDefault()
+        void requestCamera('verify')
+      })
+      capture.addEventListener('click', () => void requestCamera('capture'))
+    </script>
+  </body>
+</html>

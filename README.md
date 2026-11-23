@@ -75,6 +75,8 @@ The scan response is independent of capture: it reports `photo_status: "pending"
 
 JPEGs are saved under `CEKRIR_CCTV_PHOTO_DIR` (default `data/cctv-photos/`, ignored by Git). Mount that directory on persistent storage for a deployed backend. The current capture task runs inside the API process; a process crash can leave a photo marked `pending`, so a durable worker is needed before relying on this flow for high availability.
 
+The [Tuya QR account-linking POC](docs/tuya-qr-link-poc.md) tests Cloud Project access to a camera paired to a separate Tuya account.
+
 ## ESP32 camera scanner
 
 The [ESP32 app](apps/esp32/README.md) includes PlatformIO profiles for **Seeed XIAO ESP32S3 Sense** and **AI Thinker ESP32-CAM**. Start with a camera-equipped board with PSRAM and evaluate its optics with actual shipping labels before buying a batch.
