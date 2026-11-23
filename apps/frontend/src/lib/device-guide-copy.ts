@@ -106,7 +106,7 @@ const tuyaCameraSteps: readonly DeviceGuideStep[] = [
     id: 'select-camera',
     title: 'Pilih satu kamera pengiriman',
     description:
-      'Jika ada beberapa kamera terdaftar, pilih kamera yang menghadap area penerimaan paket. Di mode demo, buka tab Kamera dan ketuk Jadikan kamera pengiriman pada kamera tersebut. Di mode live, kamera pengiriman masih diatur di server.',
+      'Jika ada beberapa kamera terdaftar, pilih kamera yang paling jelas menghadap area penerimaan paket. Minta pengelola Cekrir menetapkan kamera tersebut sebagai kamera pengiriman.',
     image: bardiSelectCamera,
     imageAlt:
       'Tiga kamera terdaftar dengan satu kamera ditandai sebagai pilihan.',
@@ -142,7 +142,7 @@ export const deviceGuideCopy = {
     adminOnly: 'Panduan perangkat hanya tersedia untuk admin lokasi ini.',
     illustrationDisclaimer: 'Ilustrasi alur penyiapan.',
     registrationUnavailable:
-      'Pendaftaran perangkat dan pengaturan kamera belum tersedia di mode live.',
+      'Pendaftaran perangkat dan pengaturan kamera belum tersedia.',
     loading: 'Memuat referensi…',
     loadingFailed: 'Referensi belum dapat dimuat.',
     retry: 'Coba lagi',
@@ -166,7 +166,7 @@ export const deviceGuideCopy = {
     title: 'Panduan penyiapan kamera dengan Tuya',
     subtitle: 'Hubungkan kamera di Tuya, lalu daftarkan di Cekrir.',
     statusNote:
-      'Foto pengiriman di mode live menggunakan perangkat Tuya yang dikonfigurasi di server Cekrir.',
+      'Foto pengiriman menggunakan kamera Tuya yang ditetapkan oleh pengelola Cekrir.',
     steps: tuyaCameraSteps,
     registerAction: 'Daftarkan perangkat',
     guideLink: 'Buka referensi kamera',
