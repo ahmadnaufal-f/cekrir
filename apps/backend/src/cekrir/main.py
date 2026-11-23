@@ -63,7 +63,6 @@ def create_app(
         TuyaCapture(
             settings.tuya_api_key.get_secret_value(),
             str(settings.tuya_api_endpoint),
-            settings.tuya_cctv_device_id,
         )
         if settings.tuya_api_key
         else None

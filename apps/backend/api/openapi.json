@@ -469,6 +469,103 @@
         ]
       }
     },
+    "/api/v1/shipments/{shipment_id}": {
+      "get": {
+        "tags": [
+          "shipments"
+        ],
+        "summary": "Get Shipment",
+        "operationId": "get_shipment_api_v1_shipments__shipment_id__get",
+        "parameters": [
+          {
+            "name": "shipment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Shipment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShipmentRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/shipments/{shipment_id}/photo": {
+      "get": {
+        "tags": [
+          "shipments"
+        ],
+        "summary": "Get Shipment Photo",
+        "operationId": "get_shipment_photo_api_v1_shipments__shipment_id__photo_get",
+        "parameters": [
+          {
+            "name": "shipment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Shipment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/v1/shipments/{shipment_id}/refresh": {
       "post": {
         "tags": [
@@ -1174,7 +1271,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CctvRead"
+                }
               }
             }
           },
@@ -1218,7 +1317,139 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CctvRead"
+                  },
+                  "title": "Response Get Cctv Api V1 Locations  Location Id  Cctv Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/locations/{location_id}/cctv/{camera_id}": {
+      "patch": {
+        "tags": [
+          "locations"
+        ],
+        "summary": "Update Cctv",
+        "operationId": "update_cctv_api_v1_locations__location_id__cctv__camera_id__patch",
+        "parameters": [
+          {
+            "name": "location_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Location Id"
+            }
+          },
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CctvUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CctvRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/locations/{location_id}/cctv/{camera_id}/delivery": {
+      "put": {
+        "tags": [
+          "locations"
+        ],
+        "summary": "Select Delivery Camera",
+        "operationId": "select_delivery_camera_api_v1_locations__location_id__cctv__camera_id__delivery_put",
+        "parameters": [
+          {
+            "name": "location_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Location Id"
+            }
+          },
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CctvRead"
+                }
               }
             }
           },
@@ -1702,14 +1933,8 @@
         "type": "object",
         "title": "CameraFrameResult"
       },
-      "CctvCreate": {
+      "CctvConnection": {
         "properties": {
-          "name": {
-            "type": "string",
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Name"
-          },
           "stream_url": {
             "type": "string",
             "maxLength": 2048,
@@ -1735,12 +1960,149 @@
         },
         "type": "object",
         "required": [
-          "name",
           "stream_url",
           "username",
           "password"
         ],
+        "title": "CctvConnection"
+      },
+      "CctvCreate": {
+        "properties": {
+          "stream_url": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Stream Url"
+          },
+          "username": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "format": "password",
+            "title": "Username",
+            "writeOnly": true
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "format": "password",
+            "title": "Password",
+            "writeOnly": true
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "tuya_device_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 5,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tuya Device Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stream_url",
+          "username",
+          "password",
+          "name"
+        ],
         "title": "CctvCreate"
+      },
+      "CctvRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "location_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Location Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "tuya_device_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 5,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tuya Device Id"
+          },
+          "is_delivery_camera": {
+            "type": "boolean",
+            "title": "Is Delivery Camera"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "location_id",
+          "name",
+          "tuya_device_id",
+          "is_delivery_camera"
+        ],
+        "title": "CctvRead"
+      },
+      "CctvUpdate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "tuya_device_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 5,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tuya Device Id"
+          },
+          "connection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CctvConnection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CctvUpdate"
       },
       "CredentialsInput": {
         "properties": {
@@ -2286,6 +2648,40 @@
               }
             ],
             "title": "Last Detected At"
+          },
+          "photo_status": {
+            "type": "string",
+            "enum": [
+              "not_requested",
+              "pending",
+              "ready",
+              "unavailable"
+            ],
+            "title": "Photo Status"
+          },
+          "photo_captured_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Captured At"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url",
+            "readOnly": true
           }
         },
         "type": "object",
@@ -2300,7 +2696,10 @@
           "provider",
           "created_at",
           "checked_at",
-          "last_detected_at"
+          "last_detected_at",
+          "photo_status",
+          "photo_captured_at",
+          "photo_url"
         ],
         "title": "ShipmentRead"
       },

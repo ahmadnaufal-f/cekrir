@@ -40,8 +40,10 @@ Except for health and the public authentication endpoints, send `Authorization: 
 | GET | `/api/v1/locations` | `locations:manage` | Lists owned locations, each with `esp_device_id`, `onboarding_complete`, and `camera_ids`. |
 | POST | `/api/v1/locations` | `locations:manage` | JSON `name`; creates a location owned by the admin. Onboarding is incomplete until an ESP is assigned. |
 | POST | `/api/v1/locations/{location_id}/esp/credentials` | `locations:manage` | Rotates the ESP key and returns `device_id` and `device_key` once. Previously issued keys stop working. |
-| POST | `/api/v1/locations/{location_id}/cctv` | `locations:manage` | JSON `name`, `stream_url`, `username`, `password`; encrypts the connection details and returns the camera ID and name. |
-| GET | `/api/v1/locations/{location_id}/cctv` | `locations:manage` | Lists the location's CCTV cameras without returning their connection details. |
+| POST | `/api/v1/locations/{location_id}/cctv` | `locations:manage` | Registers a camera with encrypted `stream_url`, `username`, and `password`. Accepts `name` and an optional authorized `tuya_device_id`. |
+| GET | `/api/v1/locations/{location_id}/cctv` | `locations:manage` | Lists camera metadata, including `tuya_device_id` and `is_delivery_camera`. |
+| PATCH | `/api/v1/locations/{location_id}/cctv/{camera_id}` | `locations:manage` | Updates `name` and any supplied `tuya_device_id` or `connection`. An explicit `null` device ID clears the Tuya link and selection. |
+| PUT | `/api/v1/locations/{location_id}/cctv/{camera_id}/delivery` | `locations:manage` | Selects a linked camera as the location's only delivery camera. Returns 409 when the camera has no Tuya link authorized for the location. |
 | PUT | `/api/v1/locations/{location_id}/esp/{device_id}` | `locations:manage` | Assigns an ESP identifier to an owned location. Idempotent for the same assignment; returns 409 if either the location or ESP is already assigned elsewhere. |
 | DELETE | `/api/v1/locations/{location_id}/esp` | `locations:manage` | Removes the ESP assignment, making onboarding incomplete until another ESP is assigned. |
 | PUT | `/api/v1/locations/{location_id}/members/{user_id}` | `locations:manage` | Assigns a user to an admin-owned location; repeats are safe. |

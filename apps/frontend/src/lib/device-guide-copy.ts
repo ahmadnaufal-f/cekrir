@@ -89,7 +89,7 @@ const tuyaCameraSteps: readonly DeviceGuideStep[] = [
     id: 'register-camera',
     title: 'Daftarkan kamera di Cekrir',
     description:
-      'Kembali ke Cekrir. Buka Perangkat, pilih tab Kamera, lalu ketuk Daftarkan perangkat. Masukkan nama kamera, alamat IP, dan kata sandi ONVIF yang tadi Anda catat.',
+      'Kembali ke Cekrir. Buka Perangkat, pilih tab Kamera, lalu ketuk Daftarkan perangkat. Masukkan nama kamera, alamat IP, dan kata sandi ONVIF. Untuk foto pengiriman, isi juga Virtual ID dari Device Information di Tuya.',
     image: bardiRegisterCamera,
     imageAlt:
       'Formulir pendaftaran kamera dengan kolom koneksi dan simbol kamera.',
@@ -106,7 +106,7 @@ const tuyaCameraSteps: readonly DeviceGuideStep[] = [
     id: 'select-camera',
     title: 'Pilih satu kamera pengiriman',
     description:
-      'Jika ada beberapa kamera terdaftar, pilih kamera yang paling jelas menghadap area penerimaan paket. Minta pengelola Cekrir menetapkan kamera tersebut sebagai kamera pengiriman.',
+      'Di tab Kamera, cari kamera yang paling jelas menghadap area penerimaan paket, lalu ketuk Jadikan kamera pengiriman.',
     image: bardiSelectCamera,
     imageAlt:
       'Tiga kamera terdaftar dengan satu kamera ditandai sebagai pilihan.',
@@ -164,7 +164,7 @@ export const deviceGuideCopy = {
     title: 'Panduan penyiapan kamera dengan Tuya',
     subtitle: 'Hubungkan kamera di Tuya, lalu daftarkan di Cekrir.',
     statusNote:
-      'Foto pengiriman menggunakan kamera Tuya yang ditetapkan oleh pengelola Cekrir.',
+      'Foto pengiriman menggunakan kamera yang dipilih di tab Kamera.',
     steps: tuyaCameraSteps,
     guideLink: 'Buka referensi kamera',
   },

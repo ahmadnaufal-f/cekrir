@@ -24,6 +24,24 @@ from cekrir.schemas import (
 from cekrir.validation.shipments import DetectionInput, ResiInput
 
 
+def detection_location_id(session: Session, source_id: str) -> UUID | None:
+    location_id = session.scalar(
+        select(EspDevice.location_id).where(EspDevice.device_id == source_id)
+    )
+    if location_id is not None:
+        return location_id
+    location_id = session.scalar(
+        select(CameraDevice.location_id).where(CameraDevice.camera_id == source_id)
+    )
+    if location_id is not None:
+        return location_id
+    try:
+        camera_id = UUID(source_id)
+    except ValueError:
+        return None
+    return session.scalar(select(CctvCamera.location_id).where(CctvCamera.id == camera_id))
+
+
 class ShipmentRepository:
     def __init__(self, session: Session):
         self.session = session
@@ -81,15 +99,14 @@ class ShipmentRepository:
             NotificationRead.model_validate(notification) if notification else None
         )
 
-    def claim_photo(self, shipment_id: UUID) -> bool:
+    def claim_photo(self, shipment_id: UUID, location_id: UUID | None) -> bool:
         """Allow only one scan to queue the first delivery photo for a shipment."""
-        with self.session.begin():
-            claimed = self.session.scalar(
-                update(Shipment)
-                .where(Shipment.id == shipment_id, Shipment.photo_status == "not_requested")
-                .values(photo_status="pending")
-                .returning(Shipment.id)
-            )
+        claimed = self.session.scalar(
+            update(Shipment)
+            .where(Shipment.id == shipment_id, Shipment.photo_status == "not_requested")
+            .values(photo_status="pending", photo_location_id=location_id)
+            .returning(Shipment.id)
+        )
         return claimed is not None
 
     def finish_photo(self, shipment_id: UUID, *, ready: bool) -> None:
@@ -193,29 +210,13 @@ class ShipmentRepository:
         )
 
     def _notify(self, shipment: Shipment, title: str, *, arrived: bool = False) -> Notification:
-        location_id = None
-        if shipment.camera_id:
-            location_id = self.session.scalar(
-                select(EspDevice.location_id).where(EspDevice.device_id == shipment.camera_id)
-            )
-            if location_id is None:
-                location_id = self.session.scalar(
-                    select(CameraDevice.location_id).where(
-                        CameraDevice.camera_id == shipment.camera_id
-                    )
-                )
-            if location_id is None:
-                try:
-                    camera_uuid = UUID(shipment.camera_id)
-                except ValueError:
-                    camera_uuid = None
-                if camera_uuid:
-                    location_id = self.session.scalar(
-                        select(CctvCamera.location_id).where(CctvCamera.id == camera_uuid)
-                    )
         notification = Notification(
             shipment_id=shipment.id,
-            location_id=location_id,
+            location_id=(
+                detection_location_id(self.session, shipment.camera_id)
+                if shipment.camera_id
+                else None
+            ),
             title=title,
             message=(
                 f"{shipment.courier.upper()} | {shipment.resi_number}: "

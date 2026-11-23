@@ -89,6 +89,7 @@ class Shipment(Base):
     photo_captured_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True, precision=3)
     )
+    photo_location_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True))
     notifications: Mapped[list[Notification]] = relationship(
         "Notification", back_populates="shipment", cascade="all, delete-orphan"
     )

@@ -12,7 +12,7 @@ from cekrir.db.model import CctvCamera
 from cekrir.schemas import NotificationRead
 from cekrir.services import binderbyte, devices
 from cekrir.services.push_notifications import PushNotificationPublisher
-from cekrir.validation.devices import CctvCreate
+from cekrir.validation.devices import CctvCreate, CctvRead
 from cekrir.validation.tracking import BinderByteInput
 
 
@@ -63,7 +63,14 @@ def test_cctv_encrypts_credentials_and_never_returns_them(stream_url):
     assert "private" not in camera.password_encrypted
     assert Fernet(key).decrypt(camera.password_encrypted.encode()) == b"private"
     assert Fernet(key).decrypt(camera.stream_url_encrypted.encode()).decode() == stream_url
-    assert "password" not in result and "stream_url" not in result and "username" not in result
+    result.is_delivery_camera = False
+    assert set(CctvRead.model_validate(result).model_dump()) == {
+        "id",
+        "location_id",
+        "name",
+        "tuya_device_id",
+        "is_delivery_camera",
+    }
 
 
 @pytest.mark.parametrize("scheme", ["rtsp", "rtmp"])

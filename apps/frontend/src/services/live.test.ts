@@ -215,10 +215,7 @@ describe('live service selection', () => {
       () => services.deliveries.photo('opaque-delivery-id'),
       () => services.devices.renameEsp32('opaque-esp32-id', 'Pintu'),
       () => services.devices.removeEsp32('opaque-esp32-id'),
-      () =>
-        services.devices.updateCamera('opaque-camera-id', { name: 'Porch' }),
       () => services.devices.removeCamera('opaque-camera-id'),
-      () => services.devices.selectCamera('opaque-camera-id'),
       () => services.members.list(),
       () =>
         services.members.create({

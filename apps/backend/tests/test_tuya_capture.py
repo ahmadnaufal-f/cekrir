@@ -55,8 +55,8 @@ def test_tuya_capture_accepts_url_before_ready_and_keeps_key_off_media_request(m
     )
     monkeypatch.setattr(tuya_capture.time, "sleep", lambda _: None)
 
-    capture = tuya_capture.TuyaCapture("sk-test", "https://api.example.test", "camera-123")
-    assert capture.capture_jpeg() == content
+    capture = tuya_capture.TuyaCapture("sk-test", "https://api.example.test")
+    assert capture.capture_jpeg("camera-123") == content
     assert len(calls) == 3
     assert all(call.headers.get("authorization") == "Bearer sk-test" for call in calls[:2])
     assert "authorization" not in calls[2].headers
@@ -83,4 +83,4 @@ def test_tuya_capture_rejects_non_jpeg_media(monkeypatch):
     )
     monkeypatch.setattr(tuya_capture.time, "sleep", lambda _: None)
     with pytest.raises(tuya_capture.TuyaCaptureError, match="invalid JPEG"):
-        tuya_capture.TuyaCapture("sk-test", "https://api.test", "camera-123").capture_jpeg()
+        tuya_capture.TuyaCapture("sk-test", "https://api.test").capture_jpeg("camera-123")

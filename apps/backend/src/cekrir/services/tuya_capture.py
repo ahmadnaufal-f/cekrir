@@ -19,14 +19,13 @@ MAX_IMAGE_PIXELS = 20_000_000
 
 
 class TuyaCapture:
-    def __init__(self, api_key: str, endpoint: str, device_id: str):
+    def __init__(self, api_key: str, endpoint: str):
         self.api_key = api_key
         self.endpoint = endpoint.rstrip("/")
-        self.device_id = device_id
 
-    def capture_jpeg(self) -> bytes:
+    def capture_jpeg(self, device_id: str) -> bytes:
         """Allocate one snapshot, resolve its temporary URL, and download a valid JPEG."""
-        path = f"/v1.0/end-user/ipc/{self.device_id}/capture"
+        path = f"/v1.0/end-user/ipc/{device_id}/capture"
         with httpx.Client(
             timeout=httpx.Timeout(10.0, connect=5.0),
             follow_redirects=False,
@@ -37,7 +36,7 @@ class TuyaCapture:
                 f"{path}/allocate",
                 {
                     "capture_json": json.dumps(
-                        {"device_id": self.device_id, "capture_type": "PIC", "pic_count": 1}
+                        {"device_id": device_id, "capture_type": "PIC", "pic_count": 1}
                     )
                 },
             )
@@ -47,7 +46,7 @@ class TuyaCapture:
                 raise TuyaCaptureError("Tuya did not allocate an image slot")
 
             resolve = {
-                "device_id": self.device_id,
+                "device_id": device_id,
                 "capture_type": "PIC",
                 "bucket": bucket,
                 "image_object_key": image_key,

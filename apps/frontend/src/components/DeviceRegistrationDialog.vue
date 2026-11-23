@@ -43,7 +43,12 @@ const noticeMessage = shallowRef('')
 const esp32FieldError = shallowRef('')
 const cameraFieldErrors = shallowRef<Record<string, string>>({})
 const esp32Name = shallowRef('')
-const cameraForm = reactive({ name: '', address: '', password: '' })
+const cameraForm = reactive({
+  name: '',
+  address: '',
+  password: '',
+  tuyaDeviceId: '',
+})
 const cameraPasswordVisible = shallowRef(false)
 const credential = shallowRef<string | null>(null)
 const credentialVisible = shallowRef(false)
@@ -110,6 +115,7 @@ function resetDialogState(): void {
   esp32Name.value = ''
   cameraForm.name = props.cameraToEdit?.name ?? ''
   cameraForm.address = ''
+  cameraForm.tuyaDeviceId = props.cameraToEdit?.tuyaDeviceId ?? ''
   clearSensitiveState()
 }
 
@@ -233,6 +239,9 @@ async function saveCamera(): Promise<void> {
 
   const input: CameraInput = { name }
   const camera = props.cameraToEdit
+  const tuyaDeviceId = cameraForm.tuyaDeviceId.trim()
+  if (tuyaDeviceId !== (camera?.tuyaDeviceId ?? ''))
+    input.tuyaDeviceId = tuyaDeviceId || null
   const address = cameraForm.address.trim()
   const password = cameraForm.password
   if (!camera || address || password) {
@@ -267,6 +276,8 @@ async function saveCamera(): Promise<void> {
     if (!isCurrent(generation)) return
     if (cause instanceof ServiceError && cause.status === 422)
       cameraFieldErrors.value = cause.fieldErrors
+    if (cause instanceof ServiceError && cause.status === 409)
+      cameraFieldErrors.value = { tuya_device_id: copy.tuyaDeviceUnavailable }
     errorMessage.value = camera ? copy.cameraEditFailed : copy.cameraFailed
     reportUnauthorized(cause, generation)
   } finally {
@@ -579,6 +590,32 @@ onUnmounted(() => {
       <p v-if="props.cameraToEdit" class="registration-help">
         {{ copy.cameraEditConnectionHelp }}
       </p>
+      <label class="registration-field">
+        <span>{{ copy.tuyaDeviceId }}</span>
+        <input
+          v-model.trim="cameraForm.tuyaDeviceId"
+          maxlength="100"
+          autocomplete="off"
+          autocapitalize="none"
+          spellcheck="false"
+          :aria-invalid="!!cameraFieldErrors.tuya_device_id"
+          :aria-describedby="
+            cameraFieldErrors.tuya_device_id
+              ? 'tuya-device-error tuya-device-help'
+              : 'tuya-device-help'
+          "
+        />
+        <span
+          v-if="cameraFieldErrors.tuya_device_id"
+          id="tuya-device-error"
+          class="registration-field__error"
+        >
+          {{ cameraFieldErrors.tuya_device_id }}
+        </span>
+        <span id="tuya-device-help" class="registration-help">
+          {{ copy.tuyaDeviceHelp }}
+        </span>
+      </label>
       <button
         class="registration-button registration-button--primary"
         type="submit"

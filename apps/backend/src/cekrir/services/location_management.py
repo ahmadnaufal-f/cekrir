@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -66,13 +66,30 @@ def create_location(session: Session, admin_id: UUID, payload: LocationCreate) -
     }
 
 
-def _owned_location(session: Session, location_id: UUID, admin_id: UUID) -> Location:
-    location = session.scalar(
-        select(Location).where(Location.id == location_id, Location.admin_user_id == admin_id)
-    )
+def _owned_location(
+    session: Session, location_id: UUID, admin_id: UUID, *, for_update: bool = False
+) -> Location:
+    query = select(Location).where(Location.id == location_id, Location.admin_user_id == admin_id)
+    location = session.scalar(query.with_for_update() if for_update else query)
     if location is None:
         raise LocationResourceNotFound("Location not found")
     return location
+
+
+def can_access_location(session: Session, location_id: UUID, user_id: UUID) -> bool:
+    member = (
+        select(LocationMember.user_id)
+        .where(LocationMember.location_id == Location.id, LocationMember.user_id == user_id)
+        .exists()
+    )
+    return (
+        session.scalar(
+            select(Location.id).where(
+                Location.id == location_id, or_(Location.admin_user_id == user_id, member)
+            )
+        )
+        is not None
+    )
 
 
 def add_member(session: Session, location_id: UUID, admin_id: UUID, user_id: UUID) -> None:

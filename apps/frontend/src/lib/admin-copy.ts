@@ -80,6 +80,11 @@ export const adminCopy = {
     showCameraPassword: 'Tampilkan kata sandi',
     hideCameraPassword: 'Sembunyikan kata sandi',
     connectionHelp: 'Kata sandi dienkripsi saat disimpan.',
+    tuyaDeviceId: 'ID perangkat Tuya',
+    tuyaDeviceHelp:
+      'Salin Virtual ID dari Device Information di Tuya untuk mengaktifkan foto pengiriman.',
+    tuyaDeviceUnavailable:
+      'Pastikan ID perangkat Tuya tersedia untuk lokasi ini dan belum terhubung ke kamera lain.',
     addCamera: 'Tambahkan kamera',
     savingCamera: 'Menyimpan kamera…',
     cameraFailed: 'Kamera belum dapat disimpan. Periksa data dan coba lagi.',
@@ -99,9 +104,10 @@ export const adminCopy = {
       'Kamera pengiriman dihapus. Pilih kamera lain untuk pengiriman.',
     cameraRemoveFailed: 'Kamera belum dapat dihapus. Coba lagi.',
     selectCamera: 'Jadikan kamera pengiriman',
+    linkTuyaCamera: 'Tautkan perangkat Tuya',
     selectingCamera: 'Memperbarui pilihan…',
     selectionFailed:
-      'Pilihan kamera belum berubah. Kamera pengiriman sebelumnya tetap digunakan; coba lagi.',
+      'Pilihan kamera belum dapat dikonfirmasi. Muat ulang daftar dan coba lagi.',
     selectedCamera: 'Kamera pengiriman',
     cameraIncomplete: 'Konfigurasi koneksi belum lengkap',
     cameraConfigured: 'Konfigurasi tersimpan · koneksi belum diverifikasi',
