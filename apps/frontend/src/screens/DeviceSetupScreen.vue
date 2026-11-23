@@ -33,17 +33,13 @@ const registrationState = shallowRef<
   'loading' | 'empty' | 'registered' | 'error'
 >('loading')
 const retryInventory = shallowRef(0)
-const canRegister = computed(
+const showRegister = computed(
   () =>
+    props.kind === 'esp32' &&
     !!props.devices &&
-    (props.kind === 'bardi' || registrationState.value === 'empty'),
+    registrationState.value === 'empty' &&
+    activeStep.value === copy.value.steps.length - 1,
 )
-const showRegister = computed(() => {
-  if (!canRegister.value) return false
-  return props.kind === 'bardi'
-    ? copy.value.steps[activeStep.value]?.id === 'register-camera'
-    : activeStep.value === copy.value.steps.length - 1
-})
 const subtitle = computed(() => {
   if (!props.devices) return deviceGuideCopy.common.registrationUnavailable
   if (props.kind === 'esp32' && registrationState.value === 'registered')
@@ -130,7 +126,7 @@ watch(
           @click="emit('register')"
         >
           <AppIcon name="plus" />
-          {{ copy.registerAction }}
+          {{ adminCopy.devices.registerDevice }}
         </button>
       </div>
 

@@ -119,7 +119,6 @@ interface DeviceSetupCopy {
   registeredSubtitle?: string
   statusNote: string
   steps: readonly DeviceGuideStep[]
-  registerAction: string
   sourceLink?: string
   guideLink: string
 }
@@ -158,7 +157,6 @@ export const deviceGuideCopy = {
     statusNote:
       'Firmware masih berupa scaffold. Konfigurasi dan koneksi perangkat belum diverifikasi; aplikasi tidak mengonfigurasi atau mem-flash firmware. Penggunaan kredensial pada firmware masih menunggu kesepakatan integrasi.',
     steps: esp32Steps,
-    registerAction: 'Daftarkan perangkat',
     sourceLink: 'Lihat sumber firmware',
     guideLink: 'Baca panduan ESP32',
   },
@@ -168,7 +166,6 @@ export const deviceGuideCopy = {
     statusNote:
       'Foto pengiriman menggunakan kamera Tuya yang ditetapkan oleh pengelola Cekrir.',
     steps: tuyaCameraSteps,
-    registerAction: 'Daftarkan perangkat',
     guideLink: 'Buka referensi kamera',
   },
 } satisfies Record<DeviceCategory, DeviceSetupCopy> & {
