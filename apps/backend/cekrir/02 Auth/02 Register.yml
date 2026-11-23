@@ -1,5 +1,5 @@
 info:
-  name: "Register"
+  name: Register
   type: http
   seq: 3
 
@@ -10,8 +10,13 @@ http:
     type: json
     data: |-
       {
-        "email": "{{newEmail}}",
-        "full_name": "Test User",
-        "password": "{{newPassword}}"
+        "email": "vincentiuasaar.work@gmail.com",
+        "full_name": "not valiaad",
+        "password": "aaaaaaaaaaaaaa"
       }
 
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

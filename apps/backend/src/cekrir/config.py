@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     tracking_api_key: SecretStr | None = None
     ingest_api_key: SecretStr | None = None
     binderbyte_api_key: SecretStr | None = None
+    # TODO: Configure the courier for automatic BinderByte detection lookups.
+    binderbyte_detection_courier: str = ""
     cctv_encryption_key: SecretStr | None = None
     firebase_credentials_file: str | None = None
     cctv_rtsp_url: str | None = None

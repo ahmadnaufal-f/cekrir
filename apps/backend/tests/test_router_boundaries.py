@@ -1,4 +1,5 @@
 from unittest.mock import Mock, patch
+from uuid import uuid4
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -11,10 +12,10 @@ from cekrir.routers.auth import router as auth_router
 from cekrir.routers.detections import camera_router
 from cekrir.routers.payments import router as payments_router
 from cekrir.routers.shipments import router as shipments_router
-from cekrir.schemas import CameraFrameResult
-from cekrir.services.detections import ingest_frame
+from cekrir.schemas import CameraFrameResult, FrameDetection
+from cekrir.services.detections import ingest_esp_frame, ingest_frame
 from cekrir.services.payments import IdempotencyConflict
-from cekrir.validation.shipments import CameraFrameInput
+from cekrir.validation.shipments import CameraCourierInput, CameraFrameInput
 
 
 def client_for(router):
@@ -77,11 +78,28 @@ def test_frame_service_does_not_register_ambiguous_codes():
     publisher = Mock()
     with (
         patch("cekrir.services.detections.decode_frame", return_value=["ABC123", "DEF456"]),
-        patch("cekrir.services.detections.submit_shipment") as submit,
+        patch("cekrir.services.detections.register_shipment") as submit,
     ):
         result = ingest_frame(b"jpeg", metadata, Mock(), Mock(), publisher)
     assert result.ambiguous and result.detected_count == 0
     submit.assert_not_called()
+
+
+def test_esp_frame_limits_tracking_response_to_status():
+    frame = CameraFrameResult(
+        detected_count=1,
+        detections=[
+            FrameDetection(
+                resi_number="ABC123",
+                shipment_id=uuid4(),
+                created=True,
+                tracking={"summary": {"status": "DELIVERED"}, "detail": {"address": "private"}},
+            )
+        ],
+    )
+    with patch("cekrir.services.detections.ingest_frame", return_value=frame):
+        result = ingest_esp_frame(b"jpeg", "device", CameraCourierInput(), Mock(), Mock(), Mock())
+    assert result.detections[0].tracking == {"summary": {"status": "DELIVERED"}}
 
 
 def test_registration_validation_runs_before_service():

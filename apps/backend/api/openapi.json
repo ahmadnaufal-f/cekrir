@@ -586,12 +586,19 @@
           {
             "name": "courier",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 2,
-              "maxLength": 32,
-              "pattern": "^[a-z0-9_-]+$",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 32,
+                  "pattern": "^[a-z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Courier"
             }
           },
@@ -664,12 +671,19 @@
           {
             "name": "courier",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 2,
-              "maxLength": 32,
-              "pattern": "^[a-z0-9_-]+$",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 32,
+                  "pattern": "^[a-z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Courier"
             }
           },
@@ -1803,6 +1817,18 @@
           },
           "shipment": {
             "$ref": "#/components/schemas/ShipmentRead"
+          },
+          "tracking": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking"
           }
         },
         "type": "object",
@@ -1889,19 +1915,37 @@
             "title": "Resi Number"
           },
           "shipment_id": {
-            "type": "string",
-            "format": "uuid",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Shipment Id"
           },
           "created": {
             "type": "boolean",
             "title": "Created"
+          },
+          "tracking": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking"
           }
         },
         "type": "object",
         "required": [
           "resi_number",
-          "shipment_id",
           "created"
         ],
         "title": "FrameDetection"

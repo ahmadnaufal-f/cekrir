@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <esp_camera.h>
+#include <esp_camera_af.h>
 
 #include "camera_pins.h"
 
@@ -7,6 +8,7 @@ namespace {
 constexpr uint32_t kCheckIntervalMs = 3000;
 uint32_t lastCheck = 0;
 bool cameraReady = false;
+bool autofocusReady = false;
 
 bool startCamera() {
   if (!psramFound()) {
@@ -35,8 +37,8 @@ bool startCamera() {
   camera.pin_reset = camera_pins::kReset;
   camera.xclk_freq_hz = 20000000;
   camera.pixel_format = PIXFORMAT_JPEG;
-  camera.frame_size = FRAMESIZE_SVGA;
-  camera.jpeg_quality = 12;
+  camera.frame_size = FRAMESIZE_QXGA;  // 1600 x 1200 when supported by the sensor.
+  camera.jpeg_quality = 3;             // Lower values produce higher JPEG quality.
   camera.fb_count = 1;
   camera.fb_location = CAMERA_FB_IN_PSRAM;
   camera.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
@@ -48,11 +50,58 @@ bool startCamera() {
     return false;
   }
   sensor_t* sensor = esp_camera_sensor_get();
-  if (sensor) Serial.printf("Camera sensor PID: 0x%04x\n", sensor->id.PID);
+  if (sensor) {
+    Serial.printf("Camera sensor PID: 0x%04x\n", sensor->id.PID);
+    if (sensor->id.PID == OV3660_PID) {
+      Serial.println("Sensor: OV3660. Espressif's autofocus helper supports OV5640, not OV3660.");
+    } else if (sensor->id.PID == OV5640_PID) {
+      Serial.println("Sensor: OV5640. An autofocus-capable lens and an AF-enabled driver are required.");
+    }
+    // The board's diagnostic images showed mirrored labels.
+    if (sensor->set_hmirror && sensor->set_hmirror(sensor, 1) != 0) {
+      Serial.println("Could not change horizontal mirror setting.");
+    }
+    if (esp_camera_af_is_supported(sensor)) {
+      esp_camera_af_config_t af = {};
+      // Focus on demand, after the label is in the intended scan position.
+      af.mode = ESP_CAMERA_AF_MODE_MANUAL;
+      af.timeout_ms = 3000;
+      autofocusReady = esp_camera_af_init(sensor, &af) == ESP_OK;
+      Serial.println(autofocusReady ? "Autofocus ready." : "Autofocus initialization failed.");
+    } else {
+#if !defined(CONFIG_CAMERA_AF_SUPPORT) || !CONFIG_CAMERA_AF_SUPPORT
+      Serial.println("Autofocus is disabled in the installed prebuilt camera driver.");
+#else
+      Serial.println("Autofocus is not supported by this sensor/driver combination.");
+#endif
+    }
+  }
   return true;
 }
 
 void capture(bool sendImage) {
+  if (sendImage) {
+    Serial.println("Place the barcode about 15 cm from the camera and hold it still.");
+    if (!autofocusReady) Serial.println("Autofocus is unavailable on this camera.");
+  }
+  if (sendImage && autofocusReady) {
+    sensor_t* sensor = esp_camera_sensor_get();
+    if (sensor && esp_camera_af_trigger(sensor) == ESP_OK) {
+      esp_camera_af_status_t status = {};
+      if (esp_camera_af_wait(sensor, 3000, &status) != ESP_OK || !status.focused) {
+        Serial.println("Autofocus did not confirm focus; capturing anyway.");
+      } else {
+        Serial.println("Autofocus confirmed focus.");
+      }
+    } else {
+      Serial.println("Could not start autofocus; capturing anyway.");
+    }
+  }
+  // Discard a queued frame so the requested picture is captured after focusing.
+  if (sendImage) {
+    camera_fb_t* previous = esp_camera_fb_get();
+    if (previous) esp_camera_fb_return(previous);
+  }
   camera_fb_t* frame = esp_camera_fb_get();
   if (!frame) {
     Serial.println("ERROR: Camera capture failed.");
