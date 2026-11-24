@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core'
 import { ServiceError } from '../../services/contracts'
+import type { ScreenshotAnalysis } from '../../types/api'
 import type { CameraInput, DeviceInventory } from '../../types/app'
 import type {
   ApiServices,
@@ -21,6 +22,27 @@ const messages: Record<number, string> = {
   502: 'Layanan pelacakan tidak tersedia. Coba lagi nanti.',
   503: 'Layanan email tidak tersedia. Akun mungkin sudah dibuat; coba kirim ulang verifikasi atau masuk.',
 }
+const screenshotErrors: Record<number, string> = {
+  413: 'Ukuran tangkapan layar melebihi 5 MiB. Pilih gambar yang lebih kecil.',
+  415: 'Pilih tangkapan layar dalam format PNG, JPEG, atau WebP.',
+  422: 'Gambar tidak dapat dibaca. Pilih tangkapan layar lain.',
+  502: 'Hasil pembacaan gambar tidak dapat diproses. Silakan coba lagi.',
+  503: 'Pembacaan gambar sedang tidak tersedia. Coba lagi atau isi detail secara manual.',
+  504: 'Waktu pembacaan gambar habis. Silakan coba lagi.',
+}
+
+function isScreenshotAnalysis(value: unknown): value is ScreenshotAnalysis {
+  if (!value || typeof value !== 'object') return false
+  const result = value as Partial<ScreenshotAnalysis>
+  return (
+    [result.resi_number, result.courier_service, result.sender_name].every(
+      (field) => field === null || typeof field === 'string',
+    ) &&
+    Array.isArray(result.product_names) &&
+    result.product_names.every((name) => typeof name === 'string')
+  )
+}
+
 export function apiError(status: number, body: unknown): ServiceError {
   const fields: Record<string, string> = {}
   const detail =
@@ -89,6 +111,7 @@ export function createApiClient(options: ClientOptions = {}): ApiServices {
     path: string,
     init: RequestInit = {},
     token?: string,
+    timeoutMs = 15000,
   ): Promise<T> {
     if (!path.startsWith('/') || path.startsWith('//') || path.includes('://'))
       throw new ServiceError('configuration', 'Alamat API tidak valid.')
@@ -109,7 +132,7 @@ export function createApiClient(options: ClientOptions = {}): ApiServices {
         headers,
         signal: AbortSignal.any([
           controller.signal,
-          AbortSignal.timeout(15000),
+          AbortSignal.timeout(timeoutMs),
           ...(init.signal ? [init.signal] : []),
         ]),
       })
@@ -158,13 +181,17 @@ export function createApiClient(options: ClientOptions = {}): ApiServices {
       if (refreshWork === work) refreshWork = null
     }
   }
-  async function authorized<T>(path: string, init?: RequestInit): Promise<T> {
+  async function authorized<T>(
+    path: string,
+    init?: RequestInit,
+    timeoutMs?: number,
+  ): Promise<T> {
     const version = generation
     if (!pair) throw apiError(401, null)
     if (now() >= expiresAt - 30000) await refresh()
     const sentToken = pair?.access_token
     try {
-      const result = await raw<T>(path, init, sentToken)
+      const result = await raw<T>(path, init, sentToken, timeoutMs)
       if (version !== generation)
         throw new ServiceError('cancelled', 'Permintaan dibatalkan.')
       return result
@@ -175,7 +202,7 @@ export function createApiClient(options: ClientOptions = {}): ApiServices {
       // Another request may already have renewed the rejected token.
       if (pair?.access_token === sentToken) await refresh()
       try {
-        const result = await raw<T>(path, init, pair?.access_token)
+        const result = await raw<T>(path, init, pair?.access_token, timeoutMs)
         if (version !== generation)
           throw new ServiceError('cancelled', 'Permintaan dibatalkan.')
         return result
@@ -384,6 +411,34 @@ export function createApiClient(options: ClientOptions = {}): ApiServices {
         )
         cache.set(item.id, item)
         return item
+      },
+      async analyzeScreenshot(image, signal) {
+        try {
+          const result = await authorized<unknown>(
+            '/shipments/analyze-screenshot',
+            {
+              method: 'POST',
+              body: image,
+              headers: { 'Content-Type': image.type },
+              cache: 'no-store',
+              signal,
+            },
+            35000,
+          )
+          if (!isScreenshotAnalysis(result)) throw apiError(502, null)
+          return result
+        } catch (cause) {
+          if (cause instanceof ServiceError && cause.status) {
+            const message = screenshotErrors[cause.status]
+            if (message)
+              throw new ServiceError(
+                'screenshot_analysis',
+                message,
+                cause.status,
+              )
+          }
+          throw cause
+        }
       },
       async refresh(id) {
         const item = await authorized<Shipment>(

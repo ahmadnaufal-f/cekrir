@@ -30,6 +30,13 @@ export interface ResiInput {
   courier: string
 }
 
+export interface ScreenshotAnalysis {
+  resi_number: string | null
+  courier_service: string | null
+  sender_name: string | null
+  product_names: string[]
+}
+
 export interface PackageNotification {
   id: string
   shipment_id: string

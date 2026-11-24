@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import AppIcon from '../components/AppIcon.vue'
 import BackButton from '../components/BackButton.vue'
 import DeliveryCard from '../components/DeliveryCard.vue'
 import DeliveryCardSkeleton from '../components/DeliveryCardSkeleton.vue'
@@ -16,6 +17,7 @@ import { getCalendarDate } from '../lib/delivery-date'
 import { normalizeDeliverySearch } from '../lib/delivery-search'
 import { errorMessage, formatTime } from '../lib/strings'
 import { ServiceError } from '../services/contracts'
+import AddPackageDialog from './AddPackageDialog.vue'
 const props = defineProps<{
   services: ApiServices
   user: User
@@ -32,6 +34,7 @@ const historyLoading = ref(false)
 const historyError = ref('')
 const mutation = ref(false)
 const error = ref('')
+const addingPackage = ref(false)
 const next = ref<number | null>(null)
 const displayPageSize = 20
 const visibleLimit = ref(displayPageSize)
@@ -194,6 +197,12 @@ watch(
   },
   { immediate: true },
 )
+watch(
+  () => [props.id, props.user.id],
+  () => {
+    addingPackage.value = false
+  },
+)
 onUnmounted(() => {
   version++
   controller?.abort()
@@ -211,6 +220,14 @@ onUnmounted(() => {
         title-id="shipments-title"
       >
         <template #actions>
+          <button
+            v-if="!id"
+            class="button button--primary"
+            type="button"
+            @click="addingPackage = true"
+          >
+            <AppIcon name="plus" /> Tambah paket
+          </button>
           <RefreshButton :loading="busy" :disabled="busy" @click="refresh" />
         </template>
         <p v-if="id">
@@ -222,6 +239,12 @@ onUnmounted(() => {
           >
         </p>
       </PageHeader>
+      <AddPackageDialog
+        v-if="!id && addingPackage"
+        :analyze-screenshot="services.shipments.analyzeScreenshot"
+        :mock="services.mode === 'mock'"
+        @close="addingPackage = false"
+      />
       <p v-if="error" class="banner banner--error shipment-notice" role="alert">
         {{ error }}
         <button class="text-button" @click="load(true)">Coba lagi</button>

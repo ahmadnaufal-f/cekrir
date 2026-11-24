@@ -54,7 +54,7 @@ export function createApiMock({ simulateDetection = false } = {}): ApiServices {
     fetch: async (input, init) => {
       const url = new URL(String(input))
       const path = url.pathname.replace('/api/v1', '')
-      const body = init?.body ? JSON.parse(String(init.body)) : {}
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
       const response = (value: unknown, status = 200) =>
         new Response(JSON.stringify(value), {
           status,
@@ -96,6 +96,13 @@ export function createApiMock({ simulateDetection = false } = {}): ApiServices {
         return match ? response(pair(match)) : response({}, 401)
       }
       if (!user) return response({}, 401)
+      if (path === '/shipments/analyze-screenshot' && init?.method === 'POST')
+        return response({
+          resi_number: '000Demo123',
+          courier_service: 'SPX Express',
+          sender_name: 'Toko Contoh',
+          product_names: ['Kotak penyimpanan'],
+        })
       if (path === '/shipments' && init?.method === 'POST') {
         const existing = shipments.find(
           (value) =>

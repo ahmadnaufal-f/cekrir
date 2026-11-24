@@ -316,6 +316,73 @@
         ]
       }
     },
+    "/api/v1/shipments/analyze-screenshot": {
+      "post": {
+        "tags": [
+          "shipments"
+        ],
+        "summary": "Analyze Screenshot",
+        "operationId": "analyze_screenshot_api_v1_shipments_analyze_screenshot_post",
+        "requestBody": {
+          "content": {
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenshotAnalysis"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Screenshot exceeds 5 MiB"
+          },
+          "415": {
+            "description": "Unsupported screenshot type"
+          },
+          "422": {
+            "description": "Invalid screenshot image"
+          },
+          "502": {
+            "description": "Invalid screenshot analysis response"
+          },
+          "503": {
+            "description": "Screenshot analysis unavailable"
+          },
+          "504": {
+            "description": "Screenshot analysis timed out"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/v1/tracking/binderbyte": {
       "post": {
         "tags": [
@@ -2202,6 +2269,59 @@
           "role"
         ],
         "title": "RoleUpdate"
+      },
+      "ScreenshotAnalysis": {
+        "properties": {
+          "resi_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resi Number"
+          },
+          "courier_service": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Courier Service"
+          },
+          "sender_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Name"
+          },
+          "product_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Product Names"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "resi_number",
+          "courier_service",
+          "sender_name",
+          "product_names"
+        ],
+        "title": "ScreenshotAnalysis"
       },
       "ShipmentRead": {
         "properties": {

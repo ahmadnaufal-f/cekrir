@@ -8,14 +8,51 @@ from cekrir.db.session import get_session
 from cekrir.dependencies import get_provider, get_publisher
 from cekrir.middleware import RequirePermission
 from cekrir.schemas import ShipmentRead
-from cekrir.services import binderbyte, shipments
+from cekrir.services import binderbyte, screenshot_analysis, shipments
 from cekrir.services.cctv_photos import photo_path
 from cekrir.services.notifications import NotificationPublisher
 from cekrir.services.tracking import TrackingProvider
+from cekrir.validation.screenshots import SCREENSHOT_FORMATS, read_screenshot
 from cekrir.validation.shipments import ResiInput
 from cekrir.validation.tracking import BinderByteInput
 
 router = APIRouter(prefix="/api/v1", tags=["shipments"])
+
+
+@router.post(
+    "/shipments/analyze-screenshot",
+    response_model=screenshot_analysis.ScreenshotAnalysis,
+    dependencies=[Depends(RequirePermission("shipments:create"))],
+    responses={
+        413: {"description": "Screenshot exceeds 5 MiB"},
+        415: {"description": "Unsupported screenshot type"},
+        422: {"description": "Invalid screenshot image"},
+        502: {"description": "Invalid screenshot analysis response"},
+        503: {"description": "Screenshot analysis unavailable"},
+        504: {"description": "Screenshot analysis timed out"},
+    },
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                media_type: {"schema": {"type": "string", "format": "binary"}}
+                for media_type in SCREENSHOT_FORMATS
+            },
+        }
+    },
+)
+async def analyze_screenshot(request: Request, response: Response):
+    image, media_type = await read_screenshot(request)
+    try:
+        result = await screenshot_analysis.analyze(request.app.state.settings, image, media_type)
+    except screenshot_analysis.AnalysisUnavailable as exc:
+        raise HTTPException(503, "Screenshot analysis unavailable") from exc
+    except screenshot_analysis.AnalysisTimeout as exc:
+        raise HTTPException(504, "Screenshot analysis timed out") from exc
+    except screenshot_analysis.InvalidAnalysis as exc:
+        raise HTTPException(502, "Invalid screenshot analysis response") from exc
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
 
 
 @router.post("/tracking/binderbyte", dependencies=[Depends(RequirePermission("shipments:read"))])

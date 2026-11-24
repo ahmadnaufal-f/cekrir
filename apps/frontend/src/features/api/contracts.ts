@@ -1,4 +1,9 @@
-import type { Shipment, PackageNotification, ResiInput } from '../../types/api'
+import type {
+  Shipment,
+  PackageNotification,
+  ResiInput,
+  ScreenshotAnalysis,
+} from '../../types/api'
 import type { AppServices } from '../../services/contracts'
 export type { Shipment, PackageNotification, ResiInput }
 export interface User {
@@ -55,6 +60,10 @@ export interface ApiServices {
       reload?: boolean,
     ): Promise<Shipment | null>
     create(input: ResiInput): Promise<Shipment>
+    analyzeScreenshot(
+      image: File,
+      signal?: AbortSignal,
+    ): Promise<ScreenshotAnalysis>
     refresh(id: string): Promise<Shipment>
   }
   notifications: {

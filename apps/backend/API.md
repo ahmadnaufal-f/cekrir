@@ -27,6 +27,7 @@ Except for health and the public authentication endpoints, send `Authorization: 
 | PATCH | `/api/v1/auth/users/{user_id}/role` | `users:role:update` | UUID `user_id`; JSON `role` is `admin` or `member`. Returns the updated user; 404 if missing, 409 for a conflicting location assignment. |
 | GET | `/api/v1/shipments` | `shipments:read` | Returns shipments. Query `limit` defaults to 100, range 1–500; `offset` defaults to 0, minimum 0. |
 | POST | `/api/v1/shipments` | `shipments:create` | JSON `resi_number`, `courier`. Returns shipment: 201 if created, 200 if already present. Tracking provider failure: 502. |
+| POST | `/api/v1/shipments/analyze-screenshot` | `shipments:create` | Raw PNG, JPEG, or WebP. Returns extracted shipment fields for review. See [Screenshot autofill](#screenshot-autofill). |
 | POST | `/api/v1/shipments/{shipment_id}/refresh` | `shipments:refresh` | Refreshes tracking and returns the shipment; 404 if missing, 502 for provider failure. |
 | POST | `/api/v1/tracking/binderbyte` | `shipments:read` | JSON `resi_number`, `courier`, optional `phone_last_five`; returns BinderByte summary, detail and history; 503 when unavailable or unconfigured. |
 | POST | `/api/v1/devices/{device_id}/frames?courier=jne` | `X-Device-Key` | Raw JPEG from the assigned ESP. Authenticates its individual key, records its check-in and processes barcodes. |
@@ -68,6 +69,23 @@ Select Resend by setting `CEKRIR_EMAIL_PROVIDER=resend`, `CEKRIR_RESEND_API_KEY`
 For package notifications, the main API snapshots the mapped camera's location when a detection notification is created through `/api/v1/detections` or `/api/v1/detections/frame`. It sends to the location admin and members whose database accounts are active and email-verified, with one email per user. A camera must be assigned to a location before its detections can generate location emails. Notifications for unassigned cameras do not send email. The separate camera-preview server's `/camera/frame` only displays JPEGs and does not perform package detection or trigger these emails. The existing shared ingestion key does not authenticate an individual camera: someone with that key can claim a different camera ID, so per-device credentials are needed before relying on this mapping across untrusted devices.
 
 The individual email endpoint allows an admin to send to themselves or to an active, verified member of an owned location. Use a unique `Idempotency-Key` for each new message; Resend uses the derived per-user key to deduplicate retries for 24 hours. Email is sent synchronously and a successful response means the provider accepted the request, not that it reached the recipient. Package and welcome emails are best-effort: failures are logged and are not queued for retry. The existing in-app notification list and Redis WebSocket are not yet scoped by location; the location restriction described here applies to email.
+
+### Screenshot autofill
+
+Send the original screenshot bytes with `Content-Type: image/png`, `image/jpeg`, or `image/webp`. The image must be static, at most 5 MiB, and at most 20 megapixels. The endpoint returns `200` with the fields below when analysis completes, including when some fields are unreadable. Results are for review only. Cekrir does not persist the image or this response.
+
+```json
+{
+  "resi_number": "000Example12",
+  "courier_service": "SPX Express",
+  "sender_name": null,
+  "product_names": ["Storage box"]
+}
+```
+
+Unreadable text fields return `null` and unavailable products return `[]`. Errors use `413` for an oversized body, `415` for an unsupported media type, `422` for an invalid image, `502` for invalid provider output, `503` for an unavailable or unconfigured provider, and `504` for a provider timeout.
+
+Set `CEKRIR_OPENAI_API_KEY` in the backend environment and optionally set `CEKRIR_SCREENSHOT_MODEL` to a model that supports images and structured output. The default is `gpt-6-luna`. The backend sends the screenshot to OpenAI with `store: false` and a 25-second provider deadline. When the API is behind Nginx, apply the screenshot route block from [the proxy template](../../deploy/nginx/cekrir.conf) to the active API server, including its HTTPS configuration.
 
 ### Live notifications WebSocket
 
