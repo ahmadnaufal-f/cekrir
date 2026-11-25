@@ -199,10 +199,10 @@ onBeforeUnmount(clearScreenshot)
         <button
           class="button button--quiet package-screenshot__picker"
           type="button"
-          :aria-label="file ? 'Ganti gambar' : 'Pilih gambar'"
           @click="picker?.click()"
         >
           <AppIcon name="image" />
+          <span>{{ file ? 'Ganti gambar' : 'Pilih gambar' }}</span>
         </button>
         <button
           v-if="file"
@@ -356,7 +356,9 @@ onBeforeUnmount(clearScreenshot)
 
 .package-screenshot__picker {
   min-height: 56px;
+  flex-direction: column;
   justify-self: stretch;
+  gap: 6px;
 }
 
 .package-screenshot__picker .app-icon {
