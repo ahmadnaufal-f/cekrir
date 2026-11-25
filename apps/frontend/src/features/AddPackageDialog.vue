@@ -9,6 +9,7 @@ import {
   type PropType,
 } from 'vue'
 import AppDialog from '../components/AppDialog.vue'
+import AppIcon from '../components/AppIcon.vue'
 import TabSelector from '../components/TabSelector.vue'
 import { errorMessage } from '../lib/strings'
 import type { ApiServices } from './api/contracts'
@@ -195,23 +196,22 @@ onBeforeUnmount(clearScreenshot)
           hidden
           @change="selectScreenshot"
         />
-        <div class="package-screenshot__actions">
-          <button
-            class="button button--quiet"
-            type="button"
-            @click="picker?.click()"
-          >
-            {{ file ? 'Ganti gambar' : 'Pilih gambar' }}
-          </button>
-          <button
-            v-if="file"
-            class="text-button"
-            type="button"
-            @click="clearScreenshot"
-          >
-            Hapus gambar
-          </button>
-        </div>
+        <button
+          class="button button--quiet package-screenshot__picker"
+          type="button"
+          :aria-label="file ? 'Ganti gambar' : 'Pilih gambar'"
+          @click="picker?.click()"
+        >
+          <AppIcon name="image" />
+        </button>
+        <button
+          v-if="file"
+          class="text-button"
+          type="button"
+          @click="clearScreenshot"
+        >
+          Hapus gambar
+        </button>
         <img
           v-if="preview"
           class="package-screenshot__preview"
@@ -327,6 +327,10 @@ onBeforeUnmount(clearScreenshot)
   --card-inset: 18px;
 }
 
+.package-tabs :deep(.tab-selector__list) {
+  border-bottom: 0;
+}
+
 .package-tabs :deep(.tab-selector__tab) {
   flex: 1;
 }
@@ -350,11 +354,14 @@ onBeforeUnmount(clearScreenshot)
   margin: 0;
 }
 
-.package-screenshot__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+.package-screenshot__picker {
+  min-height: 56px;
+  justify-self: stretch;
+}
+
+.package-screenshot__picker .app-icon {
+  width: 1.5rem;
+  height: 1.5rem;
 }
 
 .package-screenshot__preview {
