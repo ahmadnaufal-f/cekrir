@@ -18,6 +18,7 @@ import { normalizeDeliverySearch } from '../lib/delivery-search'
 import { errorMessage, formatTime } from '../lib/strings'
 import { ServiceError } from '../services/contracts'
 import AddPackageDialog from './AddPackageDialog.vue'
+import { courierName } from './package-draft'
 const props = defineProps<{
   services: ApiServices
   user: User
@@ -65,12 +66,13 @@ const totals = computed(() => {
   if (busy.value || next.value !== null || error.value || historyError.value)
     return null
   const today = reportingDay.value.toDateString()
+  const received = items.value.filter((item) => item.status === 'delivered')
   return {
     ...totalsQuery.value,
-    receivedToday: items.value.filter(
+    receivedToday: received.filter(
       ({ created_at }) => new Date(created_at).toDateString() === today,
     ).length,
-    receivedAllTime: items.value.length,
+    receivedAllTime: received.length,
   }
 })
 const statusLabels = {
@@ -89,7 +91,7 @@ function deliveryCard(item: Shipment) {
   return {
     id: item.id,
     trackingNumber: item.resi_number,
-    courier: { code: item.courier, name: item.courier.toUpperCase() },
+    courier: { code: item.courier, name: courierName(item.courier) },
     scannedAt: item.created_at,
     photoState: 'unavailable' as const,
     trackingState: 'ready' as const,
@@ -189,6 +191,10 @@ async function refreshTracking() {
     mutation.value = false
   }
 }
+function openSavedPackage(id: string) {
+  addingPackage.value = false
+  emit('open', id)
+}
 watch(
   () => [props.id, props.revision],
   (value, previous) => {
@@ -242,8 +248,10 @@ onUnmounted(() => {
       <AddPackageDialog
         v-if="!id && addingPackage"
         :analyze-screenshot="services.shipments.analyzeScreenshot"
+        :add-expected="services.shipments.addExpected"
         :mock="services.mode === 'mock'"
         @close="addingPackage = false"
+        @saved="openSavedPackage"
       />
       <p v-if="error" class="banner banner--error shipment-notice" role="alert">
         {{ error }}
@@ -255,7 +263,7 @@ onUnmounted(() => {
       <template v-if="id">
         <article v-if="selected" class="panel api-detail">
           <p class="eyebrow">
-            {{ selected.courier.toUpperCase() }} ·
+            {{ courierName(selected.courier) }} ·
             {{ statusLabels[selected.status] }}
           </p>
           <h2>{{ selected.resi_number }}</h2>
@@ -263,6 +271,30 @@ onUnmounted(() => {
           <p v-if="selected.provider === 'demo'" class="banner">
             Pelacakan demo — contoh data, bukan hasil kurir langsung.
           </p>
+          <section
+            v-if="selected.sender_name || selected.product_names?.length"
+          >
+            <h3>Detail pesanan</h3>
+            <dl class="api-facts">
+              <div v-if="selected.sender_name">
+                <dt>Nama pengirim</dt>
+                <dd>{{ selected.sender_name }}</dd>
+              </div>
+              <div v-if="selected.product_names?.length">
+                <dt>Nama produk</dt>
+                <dd>
+                  <ul class="package-product-list">
+                    <li
+                      v-for="(name, index) in selected.product_names"
+                      :key="index"
+                    >
+                      {{ name }}
+                    </li>
+                  </ul>
+                </dd>
+              </div>
+            </dl>
+          </section>
           <dl class="api-facts">
             <div>
               <dt>Sumber</dt>
@@ -405,6 +437,11 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.package-product-list {
+  margin: 0;
+  padding-inline-start: 1.25rem;
+}
+
 .shipment-page__touch-hint {
   display: none;
 }

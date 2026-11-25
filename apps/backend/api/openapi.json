@@ -467,7 +467,14 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ShipmentRead"
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/PackageRead"
+                      },
+                      {
+                        "$ref": "#/components/schemas/ShipmentRead"
+                      }
+                    ]
                   },
                   "title": "Response List Shipments Api V1 Shipments Get"
                 }
@@ -536,6 +543,121 @@
         ]
       }
     },
+    "/api/v1/shipments/expected": {
+      "post": {
+        "tags": [
+          "shipments"
+        ],
+        "summary": "Add Expected Package",
+        "operationId": "add_expected_package_api_v1_shipments_expected_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedPackageInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageRead"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageRead"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Receiving location unavailable"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/shipments/{shipment_id}": {
+      "get": {
+        "tags": [
+          "shipments"
+        ],
+        "summary": "Get Shipment",
+        "operationId": "get_shipment_api_v1_shipments__shipment_id__get",
+        "parameters": [
+          {
+            "name": "shipment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Shipment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PackageRead"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ShipmentRead"
+                    }
+                  ],
+                  "title": "Response Get Shipment Api V1 Shipments  Shipment Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/v1/shipments/{shipment_id}/refresh": {
       "post": {
         "tags": [
@@ -560,7 +682,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ShipmentRead"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PackageRead"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ShipmentRead"
+                    }
+                  ],
+                  "title": "Response Check Shipment Api V1 Shipments  Shipment Id  Refresh Post"
                 }
               }
             }
@@ -1909,6 +2039,50 @@
         ],
         "title": "EmailNotificationInput"
       },
+      "ExpectedPackageInput": {
+        "properties": {
+          "courier": {
+            "type": "string",
+            "const": "spx",
+            "title": "Courier"
+          },
+          "resi_number": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 3,
+            "pattern": "^[A-Za-z0-9-]+$",
+            "title": "Resi Number"
+          },
+          "sender_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Name"
+          },
+          "product_names": {
+            "items": {
+              "type": "string",
+              "maxLength": 200,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Product Names"
+          }
+        },
+        "type": "object",
+        "required": [
+          "courier",
+          "resi_number"
+        ],
+        "title": "ExpectedPackageInput"
+      },
       "FcmRegistration": {
         "properties": {
           "token": {
@@ -2080,6 +2254,164 @@
           "created_at"
         ],
         "title": "NotificationRead"
+      },
+      "PackageRead": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "in_transit",
+              "delivered",
+              "exception"
+            ],
+            "title": "Status"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Summary"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/TrackingEvent"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "History"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "resi_number": {
+            "type": "string",
+            "title": "Resi Number"
+          },
+          "courier": {
+            "type": "string",
+            "title": "Courier"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "camera"
+            ],
+            "title": "Source"
+          },
+          "camera_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Id"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Checked At"
+          },
+          "last_detected_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Detected At"
+          },
+          "photo_status": {
+            "type": "string",
+            "enum": [
+              "not_requested",
+              "pending",
+              "ready",
+              "unavailable"
+            ],
+            "title": "Photo Status"
+          },
+          "photo_captured_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Captured At"
+          },
+          "sender_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Name"
+          },
+          "product_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Product Names"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url",
+            "readOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "summary",
+          "id",
+          "resi_number",
+          "courier",
+          "source",
+          "camera_id",
+          "provider",
+          "created_at",
+          "checked_at",
+          "last_detected_at",
+          "photo_status",
+          "photo_captured_at",
+          "sender_name",
+          "product_names",
+          "photo_url"
+        ],
+        "title": "PackageRead"
       },
       "PaymentCreate": {
         "properties": {

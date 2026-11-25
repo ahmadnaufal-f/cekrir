@@ -2,6 +2,7 @@ import type {
   Shipment,
   PackageNotification,
   ResiInput,
+  ExpectedPackageInput,
   ScreenshotAnalysis,
 } from '../../types/api'
 import type { AppServices } from '../../services/contracts'
@@ -60,6 +61,7 @@ export interface ApiServices {
       reload?: boolean,
     ): Promise<Shipment | null>
     create(input: ResiInput): Promise<Shipment>
+    addExpected(input: ExpectedPackageInput): Promise<Shipment>
     analyzeScreenshot(
       image: File,
       signal?: AbortSignal,

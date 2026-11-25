@@ -412,6 +412,25 @@ export function createApiClient(options: ClientOptions = {}): ApiServices {
         cache.set(item.id, item)
         return item
       },
+      async addExpected(input) {
+        try {
+          const item = await authorized<Shipment>(
+            '/shipments/expected',
+            post(input),
+          )
+          cache.set(item.id, item)
+          return item
+        } catch (cause) {
+          if (cause instanceof ServiceError && cause.status === 409) {
+            throw new ServiceError(
+              'location_unavailable',
+              'Akun ini belum terhubung ke lokasi penerimaan.',
+              409,
+            )
+          }
+          throw cause
+        }
+      },
       async analyzeScreenshot(image, signal) {
         try {
           const result = await authorized<unknown>(

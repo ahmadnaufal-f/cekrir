@@ -103,6 +103,37 @@ export function createApiMock({ simulateDetection = false } = {}): ApiServices {
           sender_name: 'Toko Contoh',
           product_names: ['Kotak penyimpanan'],
         })
+      if (path === '/shipments/expected' && init?.method === 'POST') {
+        if (
+          body.courier !== 'spx' ||
+          !/^[A-Za-z0-9-]{3,64}$/.test(body.resi_number?.trim() ?? '')
+        )
+          return response({}, 422)
+        const resiNumber = body.resi_number.trim().toUpperCase()
+        const existing = shipments.find(
+          (item) => item.courier === 'spx' && item.resi_number === resiNumber,
+        )
+        if (existing) return response(existing)
+        const now = new Date().toISOString()
+        const item: Shipment = {
+          id: `demo-shipment-${shipments.length + 1}`,
+          courier: 'spx',
+          resi_number: resiNumber,
+          sender_name: body.sender_name,
+          product_names: body.product_names,
+          source: 'manual',
+          camera_id: null,
+          status: 'pending',
+          summary: 'Menunggu paket tiba.',
+          provider: 'manual',
+          history: [],
+          created_at: now,
+          checked_at: now,
+          last_detected_at: null,
+        }
+        shipments.unshift(item)
+        return response(item, 201)
+      }
       if (path === '/shipments' && init?.method === 'POST') {
         const existing = shipments.find(
           (value) =>

@@ -1,33 +1,56 @@
 <script setup lang="ts">
 import {
   onBeforeUnmount,
+  nextTick,
   ref,
   shallowRef,
+  useId,
   useTemplateRef,
   type PropType,
 } from 'vue'
 import AppDialog from '../components/AppDialog.vue'
+import TabSelector from '../components/TabSelector.vue'
 import { errorMessage } from '../lib/strings'
 import type { ApiServices } from './api/contracts'
-import { fillPackageDraft, type PackageDraft } from './package-draft'
+import {
+  fillPackageDraft,
+  indonesiaCouriers,
+  isShopeeExpress,
+  type PackageDraft,
+} from './package-draft'
 
 const props = defineProps({
   analyzeScreenshot: {
     type: Function as PropType<ApiServices['shipments']['analyzeScreenshot']>,
     required: true,
   },
+  addExpected: {
+    type: Function as PropType<ApiServices['shipments']['addExpected']>,
+    required: true,
+  },
   mock: Boolean,
 })
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; saved: [id: string] }>()
+
+const tabId = `add-package-${useId()}`
+const tabs = [
+  { value: 'manual', label: 'Isi manual', panelId: `${tabId}-manual-panel` },
+  { value: 'ai', label: 'Pakai AI', panelId: `${tabId}-ai-panel` },
+]
+const activeTab = ref('manual')
 
 const maxScreenshotBytes = 5 * 1024 * 1024
 const screenshotTypes = ['image/png', 'image/jpeg', 'image/webp']
 const picker = useTemplateRef<HTMLInputElement>('screenshot-picker')
+const resiInput = useTemplateRef<HTMLInputElement>('resi-input')
 const file = shallowRef<File | null>(null)
 const preview = ref('')
 const busy = ref(false)
 const feedback = ref('')
 const error = ref('')
+const reviewNote = ref('')
+const saving = ref(false)
+const saveError = ref('')
 const draft = ref<PackageDraft>({
   resiNumber: '',
   courier: '',
@@ -79,9 +102,21 @@ async function autofill() {
     if (request !== current) return
 
     draft.value = fillPackageDraft(draft.value, result)
-    feedback.value = Object.values(draft.value).every((value) => value.trim())
-      ? 'Periksa kembali detail paket.'
-      : 'Detail yang belum terbaca dapat diisi secara manual.'
+    if (result.courier_service && !isShopeeExpress(result.courier_service)) {
+      draft.value.courier = ''
+      reviewNote.value =
+        'Kurir pada tangkapan layar belum didukung. Pilih Shopee Express jika sesuai dengan paket.'
+    } else {
+      reviewNote.value =
+        'Periksa detail dari tangkapan layar sebelum menyimpan.'
+    }
+    if (result.resi_number) {
+      activeTab.value = 'manual'
+      void nextTick(() => resiInput.value?.focus())
+    } else {
+      feedback.value =
+        'Nomor resi belum terbaca. Pilih tangkapan layar lain atau isi secara manual.'
+    }
   } catch (cause) {
     if (request === current) error.value = errorMessage(cause)
   } finally {
@@ -92,18 +127,66 @@ async function autofill() {
   }
 }
 
+async function savePackage() {
+  if (saving.value || busy.value) return
+  const resi = draft.value.resiNumber.trim()
+  const sender = draft.value.sender.trim()
+  const products = draft.value.products
+    .split('\n')
+    .map((name) => name.trim())
+    .filter(Boolean)
+  saveError.value = ''
+  if (!/^[A-Za-z0-9-]{3,64}$/.test(resi) || draft.value.courier !== 'spx') {
+    saveError.value = 'Isi nomor resi yang valid dan pilih Shopee Express.'
+    return
+  }
+  if (products.length > 20 || products.some((name) => [...name].length > 200)) {
+    saveError.value =
+      'Isi maksimal 20 nama produk, masing-masing hingga 200 karakter.'
+    return
+  }
+
+  saving.value = true
+  try {
+    const packageItem = await props.addExpected({
+      resi_number: resi,
+      courier: 'spx',
+      sender_name: sender || null,
+      product_names: products,
+    })
+    emit('saved', packageItem.id)
+  } catch (cause) {
+    saveError.value = errorMessage(cause)
+  } finally {
+    saving.value = false
+  }
+}
+
 onBeforeUnmount(clearScreenshot)
 </script>
 
 <template>
-  <AppDialog
-    title="Tambah paket"
-    description="Detail hanya tersedia selama formulir ini terbuka."
-    @close="emit('close')"
-  >
-    <details class="package-screenshot">
-      <summary>Isi dari tangkapan layar</summary>
-      <div class="package-screenshot__body">
+  <AppDialog title="Tambah paket" :busy="saving" @close="emit('close')">
+    <TabSelector
+      :id="tabId"
+      v-model="activeTab"
+      class="package-tabs"
+      label="Cara menambah paket"
+      :tabs="tabs"
+    />
+
+    <section
+      v-show="activeTab === 'ai'"
+      :id="tabs[1]?.panelId"
+      :aria-labelledby="`${tabId}-ai`"
+      role="tabpanel"
+    >
+      <div class="package-screenshot">
+        <p>
+          Unggah tangkapan layar pembelian yang menampilkan
+          <strong>nomor resi</strong>. Jika ada, sertakan nama kurir, nama
+          pengirim, dan informasi produk.
+        </p>
         <p class="field-help">PNG, JPEG, atau WebP hingga 5 MiB.</p>
         <input
           ref="screenshot-picker"
@@ -157,71 +240,113 @@ onBeforeUnmount(clearScreenshot)
         </p>
         <p v-if="error" class="field-error" role="alert">{{ error }}</p>
       </div>
-    </details>
+    </section>
 
-    <div class="package-draft">
-      <label>
-        Nomor resi
-        <input
-          v-model="draft.resiNumber"
-          type="text"
-          autocomplete="off"
-          spellcheck="false"
-        />
-      </label>
-      <label>
-        Kurir
-        <input v-model="draft.courier" type="text" autocomplete="off" />
-      </label>
-      <label>
-        Nama pengirim
-        <input v-model="draft.sender" type="text" autocomplete="off" />
-      </label>
-      <label>
-        Nama produk
-        <textarea
-          v-model="draft.products"
-          rows="3"
-          placeholder="Satu nama produk per baris"
-        />
-      </label>
-      <button
-        class="button button--primary package-draft__done"
-        type="button"
-        @click="emit('close')"
-      >
-        Selesai meninjau
-      </button>
-    </div>
+    <section
+      v-show="activeTab === 'manual'"
+      :id="tabs[0]?.panelId"
+      :aria-labelledby="`${tabId}-manual`"
+      role="tabpanel"
+    >
+      <form class="package-draft" @submit.prevent="savePackage">
+        <p v-if="reviewNote" class="field-help" role="status">
+          {{ reviewNote }}
+        </p>
+        <label>
+          Nomor resi
+          <input
+            ref="resi-input"
+            v-model="draft.resiNumber"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            maxlength="64"
+            :readonly="saving"
+            required
+          />
+        </label>
+        <div class="package-draft__field">
+          <label :for="`${tabId}-courier`">Kurir</label>
+          <select
+            :id="`${tabId}-courier`"
+            v-model="draft.courier"
+            :disabled="saving"
+            required
+          >
+            <option disabled value="">Pilih kurir</option>
+            <option
+              v-for="courier in indonesiaCouriers"
+              :key="courier.code"
+              :value="courier.code"
+              :disabled="courier.code !== 'spx'"
+            >
+              {{ courier.name }}
+            </option>
+          </select>
+        </div>
+        <label>
+          <span
+            >Nama pengirim
+            <span class="package-draft__optional">(opsional)</span></span
+          >
+          <input
+            v-model="draft.sender"
+            type="text"
+            autocomplete="off"
+            maxlength="200"
+            :readonly="saving"
+          />
+        </label>
+        <label>
+          <span
+            >Nama produk
+            <span class="package-draft__optional">(opsional)</span></span
+          >
+          <textarea
+            v-model="draft.products"
+            rows="3"
+            placeholder="Satu nama produk per baris"
+            :readonly="saving"
+          />
+        </label>
+        <p v-if="saveError" class="field-error" role="alert">{{ saveError }}</p>
+        <button
+          class="button button--primary package-draft__done"
+          type="submit"
+          :disabled="saving || busy"
+        >
+          {{ saving ? 'Menyimpan…' : 'Simpan paket' }}
+        </button>
+      </form>
+    </section>
   </AppDialog>
 </template>
 
 <style scoped>
-.package-screenshot {
-  padding: 12px 14px;
-  border: 1px solid #d6ded0;
-  border-radius: 8px;
+.package-tabs {
+  --card-inset: 18px;
 }
 
-.package-screenshot summary {
-  padding-block: 8px;
-  cursor: pointer;
-  font-weight: 650;
+.package-tabs :deep(.tab-selector__tab) {
+  flex: 1;
 }
 
-.package-screenshot__body,
+.package-screenshot,
 .package-draft {
   display: grid;
   gap: 12px;
+  margin-top: 16px;
 }
 
-.package-screenshot__body {
+.package-screenshot {
   justify-items: start;
-  padding-top: 8px;
+  line-height: 1.6;
 }
 
-.package-screenshot__body p,
-.package-draft input {
+.package-screenshot p,
+.package-draft p,
+.package-draft input,
+.package-draft select {
   margin: 0;
 }
 
@@ -240,15 +365,26 @@ onBeforeUnmount(clearScreenshot)
   object-fit: contain;
 }
 
-.package-draft {
-  margin-top: 16px;
-}
-
-.package-draft label {
+.package-draft label,
+.package-draft__field {
   display: grid;
   gap: 6px;
 }
 
+.package-draft__field label {
+  margin: 0;
+}
+
+.package-draft__optional {
+  color: #53675a;
+  font-weight: 400;
+}
+
+.package-draft input {
+  font-weight: 400;
+}
+
+.package-draft select,
 .package-draft textarea {
   width: 100%;
   padding: 12px 13px;
@@ -258,9 +394,14 @@ onBeforeUnmount(clearScreenshot)
   color: inherit;
   font: inherit;
   font-size: 1rem;
+  font-weight: 400;
+}
+
+.package-draft textarea {
   resize: vertical;
 }
 
+.package-draft select:focus,
 .package-draft textarea:focus {
   outline: 2px solid #8da88e;
   outline-offset: 1px;

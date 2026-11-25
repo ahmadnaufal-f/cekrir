@@ -67,6 +67,14 @@ class DetectionResult(BaseModel):
     shipment: ShipmentRead
 
 
+class PackageRead(ShipmentRead):
+    sender_name: str | None
+    product_names: list[str]
+
+
+VisibleShipment = PackageRead | ShipmentRead
+
+
 class NotificationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

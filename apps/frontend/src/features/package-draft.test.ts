@@ -1,7 +1,31 @@
 import { describe, expect, it } from 'vitest'
-import { fillPackageDraft } from './package-draft'
+import { fillPackageDraft, isShopeeExpress } from './package-draft'
 
 describe('package draft', () => {
+  it.each([
+    'SPX',
+    'SPX Express',
+    'Shopee Express',
+    'Shopee Xpress',
+    'Shopee Express (SPX)',
+  ])('recognizes %s as the supported courier', (name) =>
+    expect(isShopeeExpress(name)).toBe(true),
+  )
+
+  it('defaults an unreadable courier to SPX and leaves an unsupported courier blank for review', () => {
+    const draft = { resiNumber: '', courier: '', sender: '', products: '' }
+    const details = {
+      resi_number: '0001',
+      sender_name: null,
+      product_names: [],
+    }
+    expect(
+      fillPackageDraft(draft, { ...details, courier_service: null }).courier,
+    ).toBe('spx')
+    expect(
+      fillPackageDraft(draft, { ...details, courier_service: 'JNE' }).courier,
+    ).toBe('')
+  })
   it('fills only blank fields and preserves the exact resi and manual edits', () => {
     expect(
       fillPackageDraft(

@@ -23,11 +23,19 @@ export interface Shipment {
   created_at: string
   checked_at: string
   last_detected_at: string | null
+  sender_name?: string | null
+  product_names?: string[]
 }
 
 export interface ResiInput {
   resi_number: string
   courier: string
+}
+
+export interface ExpectedPackageInput extends ResiInput {
+  courier: 'spx'
+  sender_name: string | null
+  product_names: string[]
 }
 
 export interface ScreenshotAnalysis {

@@ -1,4 +1,6 @@
-from pydantic import BaseModel, Field, field_validator
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 
 class CourierInput(BaseModel):
@@ -21,6 +23,16 @@ class ResiInput(CourierInput):
 
 class DetectionInput(ResiInput):
     camera_id: str = Field(min_length=1, max_length=100)
+
+
+class ExpectedPackageInput(ResiInput):
+    courier: Literal["spx"]
+    sender_name: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] | None = (
+        None
+    )
+    product_names: list[
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    ] = Field(default_factory=list, max_length=20)
 
 
 class CameraFrameInput(CourierInput):

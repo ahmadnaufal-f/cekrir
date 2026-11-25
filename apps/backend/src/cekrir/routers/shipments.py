@@ -5,15 +5,15 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from cekrir.db.session import get_session
-from cekrir.dependencies import get_provider, get_publisher
+from cekrir.dependencies import get_provider, get_publisher, get_user_id
 from cekrir.middleware import RequirePermission
-from cekrir.schemas import ShipmentRead
+from cekrir.schemas import PackageRead, ShipmentRead, VisibleShipment
 from cekrir.services import binderbyte, screenshot_analysis, shipments
 from cekrir.services.cctv_photos import photo_path
 from cekrir.services.notifications import NotificationPublisher
 from cekrir.services.tracking import TrackingProvider
 from cekrir.validation.screenshots import SCREENSHOT_FORMATS, read_screenshot
-from cekrir.validation.shipments import ResiInput
+from cekrir.validation.shipments import ExpectedPackageInput, ResiInput
 from cekrir.validation.tracking import BinderByteInput
 
 router = APIRouter(prefix="/api/v1", tags=["shipments"])
@@ -65,27 +65,59 @@ def check_binderbyte(payload: BinderByteInput, request: Request):
 
 @router.get(
     "/shipments",
-    response_model=list[ShipmentRead],
+    response_model=list[VisibleShipment],
     dependencies=[Depends(RequirePermission("shipments:read"))],
 )
 def list_shipments(
+    response: Response,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    user_id: UUID = Depends(get_user_id),
     session: Session = Depends(get_session),
 ):
-    return shipments.list_shipments(session, limit, offset)
+    response.headers["Cache-Control"] = "private, no-store"
+    return shipments.list_shipments(session, user_id, limit, offset)
+
+
+@router.post(
+    "/shipments/expected",
+    response_model=PackageRead,
+    status_code=201,
+    dependencies=[Depends(RequirePermission("shipments:create"))],
+    responses={200: {"model": PackageRead}, 409: {"description": "Receiving location unavailable"}},
+)
+def add_expected_package(
+    payload: ExpectedPackageInput,
+    response: Response,
+    user_id: UUID = Depends(get_user_id),
+    session: Session = Depends(get_session),
+):
+    try:
+        package, created = shipments.add_expected_package(session, user_id, payload)
+    except shipments.ShipmentLocationUnavailable as exc:
+        raise HTTPException(409, str(exc)) from exc
+    response.status_code = 201 if created else 200
+    response.headers["Cache-Control"] = "private, no-store"
+    return package
 
 
 @router.get(
     "/shipments/{shipment_id}",
-    response_model=ShipmentRead,
+    response_model=VisibleShipment,
     dependencies=[Depends(RequirePermission("shipments:read"))],
 )
-def get_shipment(shipment_id: UUID, session: Session = Depends(get_session)):
+def get_shipment(
+    shipment_id: UUID,
+    response: Response,
+    user_id: UUID = Depends(get_user_id),
+    session: Session = Depends(get_session),
+):
     try:
-        return shipments.get_shipment(session, str(shipment_id))
+        shipment = shipments.get_shipment(session, str(shipment_id), user_id)
     except shipments.ShipmentNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    response.headers["Cache-Control"] = "private, no-store"
+    return shipment
 
 
 @router.get(
@@ -93,10 +125,13 @@ def get_shipment(shipment_id: UUID, session: Session = Depends(get_session)):
     dependencies=[Depends(RequirePermission("shipments:read"))],
 )
 def get_shipment_photo(
-    shipment_id: UUID, request: Request, session: Session = Depends(get_session)
+    shipment_id: UUID,
+    request: Request,
+    user_id: UUID = Depends(get_user_id),
+    session: Session = Depends(get_session),
 ):
     try:
-        shipment = shipments.get_shipment(session, str(shipment_id))
+        shipment = shipments.get_shipment(session, str(shipment_id), user_id)
     except shipments.ShipmentNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if shipment.photo_status == "pending":
@@ -133,16 +168,17 @@ def create_shipment(
 
 @router.post(
     "/shipments/{shipment_id}/refresh",
-    response_model=ShipmentRead,
+    response_model=VisibleShipment,
     dependencies=[Depends(RequirePermission("shipments:refresh"))],
 )
 def check_shipment(
     shipment_id: str,
+    user_id: UUID = Depends(get_user_id),
     session: Session = Depends(get_session),
     provider: TrackingProvider = Depends(get_provider),
     publisher: NotificationPublisher = Depends(get_publisher),
 ):
     try:
-        return shipments.check_shipment(session, shipment_id, provider, publisher)
+        return shipments.check_shipment(session, shipment_id, user_id, provider, publisher)
     except shipments.ShipmentNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
