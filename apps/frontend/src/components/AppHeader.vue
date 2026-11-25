@@ -118,9 +118,10 @@ onUnmounted(() => {
         <AppIcon v-else name="user" />
       </button>
       <div
-        v-show="menuOpen"
         id="account-dropdown-actions"
         class="account-dropdown__actions"
+        :data-open="menuOpen"
+        :inert="!menuOpen"
       >
         <RouterLink
           :to="{ name: 'settings', state: { settingsOpenedInApp: true } }"
@@ -204,9 +205,11 @@ onUnmounted(() => {
   border-color: #dce2d8;
   box-shadow: 0 6px 20px #233d371f;
 }
-.brand:hover,
-.account-avatar:hover {
-  background: #e9eedf;
+@media (hover: hover) and (pointer: fine) {
+  .brand:hover,
+  .account-avatar:hover {
+    background: #e9eedf;
+  }
 }
 .account-avatar--current,
 .account-avatar[aria-expanded='true'] {
@@ -226,6 +229,15 @@ onUnmounted(() => {
   border-radius: 14px;
   background: #fffefa;
   box-shadow: 0 10px 28px #233d3726;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform-origin: calc(100% - 24px) top;
+}
+.account-dropdown__actions[data-open='true'] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
 }
 .account-dropdown__action {
   display: flex;
@@ -243,20 +255,46 @@ onUnmounted(() => {
   text-decoration: none;
   overflow-wrap: anywhere;
 }
-.account-dropdown__action:hover,
 .account-dropdown__action[aria-current='page'] {
   background: #eef2e8;
+}
+@media (hover: hover) and (pointer: fine) {
+  .account-dropdown__action:hover {
+    background: #eef2e8;
+  }
 }
 .account-dropdown__action:focus-visible {
   outline-offset: -2px;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .brand,
-  .account-avatar {
+  .account-dropdown__actions {
+    transform: translateY(-4px) scale(0.97);
     transition:
-      background-color 160ms ease-out,
-      border-color 160ms ease-out,
-      box-shadow 160ms ease-out;
+      opacity var(--motion-menu-exit) var(--ease-exit),
+      transform var(--motion-menu-exit) var(--ease-exit),
+      visibility 0s linear var(--motion-menu-exit);
+  }
+
+  .account-dropdown__actions[data-open='true'] {
+    transform: none;
+    transition:
+      opacity var(--motion-menu-enter) var(--ease-enter),
+      transform var(--motion-menu-enter) var(--ease-enter);
+  }
+
+  .brand {
+    transition:
+      background-color var(--motion-feedback) ease,
+      border-color var(--motion-feedback) ease,
+      box-shadow var(--motion-feedback) ease;
+  }
+
+  .account-avatar {
+    transition: transform var(--motion-feedback) var(--ease-enter);
+  }
+
+  .account-avatar:active {
+    transform: scale(0.96);
   }
 }
 </style>

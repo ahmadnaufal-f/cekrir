@@ -706,6 +706,13 @@ footer span {
   --ink: #233d37;
   --muted: #53675a;
   --accent: #234e41;
+  --focus-ring: #42654a;
+  --motion-feedback: 140ms;
+  --motion-menu-enter: 160ms;
+  --motion-menu-exit: 120ms;
+  --motion-dialog-enter: 220ms;
+  --ease-enter: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-exit: cubic-bezier(0.55, 0, 1, 0.45);
   --card-inset: 24px;
   --card-text-inset: calc(var(--card-inset) + 1px);
 }
@@ -1049,6 +1056,34 @@ footer {
   line-height: 1.18;
   letter-spacing: -0.035em;
   overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.api-shell > main:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+}
+
+.api-shell > main:focus-visible:has(h1) {
+  outline: none;
+}
+
+.api-shell > main:focus-visible h1 {
+  position: relative;
+}
+
+.api-shell > main:focus-visible h1::before {
+  position: absolute;
+  inset-block: 15%;
+  inset-inline-start: -12px;
+  width: 3px;
+  border-radius: 2px;
+  background: currentColor;
+  content: '';
+}
+
+.api-shell :is(button, a, input, select, summary):focus-visible {
+  outline-color: var(--focus-ring);
 }
 
 .api-shell--auth {

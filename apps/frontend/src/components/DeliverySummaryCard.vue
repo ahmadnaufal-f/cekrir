@@ -87,9 +87,9 @@ const number = new Intl.NumberFormat()
   margin-bottom: 30px;
   padding-block: 22px;
   padding-inline: var(--card-inset);
-  border: 1px solid #dfe4d9;
+  border: 1px solid #d6dfd2;
   border-radius: 12px;
-  background: #fffefa;
+  background: #eff3ea;
 }
 .delivery-summary__header {
   display: flex;
@@ -143,6 +143,9 @@ const number = new Intl.NumberFormat()
   font-variant-numeric: tabular-nums;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+.delivery-summary__today {
+  color: var(--accent);
 }
 .delivery-summary__unit {
   color: #53675a;

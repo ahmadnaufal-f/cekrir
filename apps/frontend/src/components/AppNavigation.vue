@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink } from 'vue-router'
 import { shellCopy as copy } from '../lib/shell-copy'
 import { ui } from '../lib/strings'
 import AppIcon, { type IconName } from './AppIcon.vue'
 
-const route = useRoute()
 interface NavigationLink {
   name: 'shipments' | 'devices' | 'members'
   label: string
@@ -16,19 +14,10 @@ const links: NavigationLink[] = [
   { name: 'devices', label: ui.devices, icon: 'device' },
   { name: 'members', label: 'Pengguna', icon: 'users' },
 ]
-const activeIndex = computed(() =>
-  links.findIndex((link) => link.name === route.name),
-)
 </script>
 
 <template>
   <nav id="main-navigation" class="api-nav" :aria-label="copy.navigation">
-    <span
-      v-if="activeIndex >= 0"
-      class="api-nav__indicator"
-      :style="{ '--active-index': activeIndex, '--tab-count': links.length }"
-      aria-hidden="true"
-    />
     <RouterLink
       v-for="link in links"
       :key="link.name"
@@ -59,22 +48,7 @@ const activeIndex = computed(() =>
   gap: var(--nav-gap);
 }
 
-.api-nav__indicator {
-  position: absolute;
-  inset-block: var(--nav-padding);
-  left: var(--nav-padding);
-  width: calc(
-    (100% - 2 * var(--nav-padding) - (var(--tab-count) - 1) * var(--nav-gap)) /
-      var(--tab-count)
-  );
-  transform: translateX(calc(var(--active-index) * (100% + var(--nav-gap))));
-  border-radius: var(--tab-radius);
-  background: #234e41;
-  pointer-events: none;
-}
-
 .api-nav a {
-  position: relative;
   flex: 1;
   min-width: 0;
   min-height: 60px;
@@ -96,25 +70,22 @@ const activeIndex = computed(() =>
 }
 
 .api-nav a[aria-current='page'] {
+  background: var(--accent);
   color: #fffefa;
 }
 
-.api-nav a:hover {
-  outline: 1px solid #71866c;
+.api-nav a:active:not([aria-current='page']) {
+  background: #dce8d8;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .api-nav a:hover:not(:active, [aria-current='page']) {
+    background: #eef2e8;
+  }
 }
 
 .api-nav svg {
   width: 22px;
   height: 22px;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .api-nav__indicator {
-    transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
-
-  .api-nav a {
-    transition: color 160ms ease-out;
-  }
 }
 </style>

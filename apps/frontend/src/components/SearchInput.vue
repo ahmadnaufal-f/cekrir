@@ -36,16 +36,18 @@ function clearSearch() {
         autocomplete="off"
         :aria-controls="props.controls"
       />
-      <button
-        v-if="model.length > 0"
-        class="search-input__clear"
-        type="button"
-        :aria-label="props.clearLabel"
-        @click="clearSearch"
-      >
-        <AppIcon name="close" />
-      </button>
-      <AppIcon v-else class="search-input__icon" name="search" />
+      <div class="search-input__action">
+        <button
+          v-if="model.length > 0"
+          class="search-input__clear"
+          type="button"
+          :aria-label="props.clearLabel"
+          @click="clearSearch"
+        >
+          <AppIcon name="close" />
+        </button>
+        <AppIcon v-else class="search-input__icon" name="search" />
+      </div>
     </div>
   </div>
 </template>
@@ -71,11 +73,11 @@ function clearSearch() {
 .search-input__control {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 4px;
   min-width: 0;
   min-height: 48px;
   padding-block: 2px;
-  padding-inline: var(--card-inset);
+  padding-inline: var(--card-inset) 4px;
   border: 1px solid #d6ded0;
   border-radius: 8px;
   background: #fffefa;
@@ -83,13 +85,18 @@ function clearSearch() {
 }
 
 .search-input__control:focus-within {
-  border-color: #8da88e;
-  outline: 2px solid #8da88e;
+  border-color: var(--focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
+.search-input__action {
+  display: grid;
+  flex: 0 0 44px;
+  place-items: center;
+}
+
 .search-input__icon {
-  flex: none;
   width: 1.25rem;
   height: 1.25rem;
   color: #53675a;
@@ -123,7 +130,6 @@ function clearSearch() {
 
 .search-input__clear {
   display: grid;
-  flex: 0 0 44px;
   width: 44px;
   height: 44px;
   place-items: center;
@@ -134,13 +140,19 @@ function clearSearch() {
   color: #53675a;
 }
 
-.search-input__clear:hover {
+.search-input__clear:active {
   background: #eef2e8;
-  color: #233d37;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .search-input__clear:hover {
+    background: #eef2e8;
+    color: #233d37;
+  }
 }
 
 .search-input__clear:focus-visible {
-  outline: 3px solid #b88736;
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 </style>
