@@ -711,8 +711,11 @@ footer span {
   --motion-menu-enter: 160ms;
   --motion-menu-exit: 120ms;
   --motion-dialog-enter: 220ms;
+  --motion-selection: 280ms;
+  --motion-screen-enter: 320ms;
   --ease-enter: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-exit: cubic-bezier(0.55, 0, 1, 0.45);
+  --ease-move: cubic-bezier(0.65, 0, 0.2, 1);
   --card-inset: 24px;
   --card-text-inset: calc(var(--card-inset) + 1px);
 }
@@ -975,7 +978,22 @@ footer {
 
 @media (prefers-reduced-motion: no-preference) {
   .button {
-    transition: background-color 160ms ease-out;
+    transition: background-color var(--motion-feedback) ease;
+  }
+
+  .api-shell .button--primary,
+  .api-shell .refresh-button {
+    transition:
+      background-color var(--motion-feedback) ease,
+      transform var(--motion-feedback) var(--ease-enter);
+  }
+
+  .api-shell
+    :is(.button--primary, .refresh-button):active:not(
+      :disabled,
+      [aria-disabled='true']
+    ) {
+    transform: scale(0.96);
   }
 }
 
@@ -1035,6 +1053,25 @@ footer {
 
 .focused-page__heading {
   --page-header-offset: calc(var(--app-header-padding) + 48px + 8px);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .focused-page__content,
+  .api-settings {
+    animation: focused-page-enter var(--motion-screen-enter) var(--ease-enter);
+  }
+}
+
+@keyframes focused-page-enter {
+  from {
+    opacity: 0.65;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .api-shell--with-nav {

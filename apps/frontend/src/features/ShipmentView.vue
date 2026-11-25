@@ -206,7 +206,7 @@ onUnmounted(() => {
     <div v-if="id" class="sticky-header focused-page__back">
       <BackButton label="Kembali ke semua paket" @click="emit('back')" />
     </div>
-    <div :class="{ 'focused-page__content': id }">
+    <div :key="id ?? undefined" :class="{ 'focused-page__content': id }">
       <PageHeader
         :class="{ 'focused-page__heading': id }"
         :title="title"

@@ -25,8 +25,14 @@ withDefaults(defineProps<{ label?: string }>(), { label: ui.back })
   color: #234e41;
 }
 
-.back-button:hover {
+.back-button:active {
   background: #e9eedf;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .back-button:hover {
+    background: #e9eedf;
+  }
 }
 
 .back-button .app-icon {
@@ -37,9 +43,12 @@ withDefaults(defineProps<{ label?: string }>(), { label: ui.back })
 @media (prefers-reduced-motion: no-preference) {
   .back-button {
     transition:
-      background-color 160ms ease-out,
-      border-color 160ms ease-out,
-      box-shadow 160ms ease-out;
+      background-color var(--motion-feedback) ease,
+      transform var(--motion-feedback) var(--ease-enter);
+  }
+
+  .back-button:active {
+    transform: scale(0.96);
   }
 }
 </style>

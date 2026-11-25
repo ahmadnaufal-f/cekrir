@@ -4,6 +4,7 @@ import {
   nextTick,
   onBeforeUnmount,
   onMounted,
+  shallowRef,
   useTemplateRef,
   watch,
 } from 'vue'
@@ -17,10 +18,11 @@ const props = defineProps<{
 
 const viewport = useTemplateRef<HTMLDivElement>('viewport')
 const activeIndex = defineModel<number>('activeIndex', { default: 0 })
+const slidePosition = shallowRef(activeIndex.value)
 const progressLabel = computed(
   () => `Langkah ${activeIndex.value + 1} dari ${props.steps.length}`,
 )
-const progress = computed(() => (activeIndex.value + 1) / props.steps.length)
+const progress = computed(() => (slidePosition.value + 1) / props.steps.length)
 
 let resizeObserver: ResizeObserver | null = null
 let animationFrame: number | null = null
@@ -33,8 +35,11 @@ function reduceMotion(): boolean {
 function updateActiveIndex(): void {
   const element = viewport.value
   if (!element || element.clientWidth === 0) return
-  const index = Math.round(element.scrollLeft / element.clientWidth)
-  activeIndex.value = Math.min(Math.max(index, 0), props.steps.length - 1)
+  slidePosition.value = Math.min(
+    Math.max(element.scrollLeft / element.clientWidth, 0),
+    props.steps.length - 1,
+  )
+  activeIndex.value = Math.round(slidePosition.value)
 }
 
 function queueActiveIndexUpdate(): void {
@@ -91,6 +96,7 @@ function handleResize(): void {
 watch(
   () => props.steps,
   () => {
+    slidePosition.value = 0
     activeIndex.value = 0
     void nextTick(alignActiveSlide)
   },
@@ -256,7 +262,7 @@ onBeforeUnmount(() => {
 
 .setup-step-carousel__meter {
   width: min(170px, 36%);
-  height: 4px;
+  height: 6px;
   overflow: hidden;
   border-radius: 99px;
   background: #e6ebe2;
@@ -376,15 +382,16 @@ onBeforeUnmount(() => {
 }
 
 .setup-step-carousel__dot span {
-  width: 9px;
+  width: 22px;
   height: 9px;
   border-radius: 99px;
   background: #c4d0c0;
+  transform: scaleX(0.41);
 }
 
 .setup-step-carousel__dot--active span {
-  width: 22px;
   background: #234e41;
+  transform: scaleX(1);
 }
 
 .setup-step-carousel__arrow {
@@ -413,6 +420,19 @@ onBeforeUnmount(() => {
 
   .setup-step-carousel__arrow:hover:not(:disabled) {
     background: #f0f3eb;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .setup-step-carousel__dot span,
+  .setup-step-carousel__arrow {
+    transition:
+      transform var(--motion-feedback) var(--ease-enter),
+      background-color var(--motion-feedback) ease;
+  }
+
+  .setup-step-carousel__arrow:active:not(:disabled) {
+    transform: scale(0.96);
   }
 }
 

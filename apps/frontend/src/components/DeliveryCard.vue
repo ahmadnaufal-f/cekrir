@@ -91,7 +91,8 @@ function openDelivery(event: MouseEvent) {
   text-decoration: none;
 }
 .delivery-card:active {
-  background: #eef2e8;
+  border-color: #a8b9a5;
+  background: #e9f0e6;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -172,6 +173,20 @@ function openDelivery(event: MouseEvent) {
     transition:
       background-color var(--motion-feedback) ease,
       border-color var(--motion-feedback) ease;
+  }
+
+  .delivery-card__arrow {
+    transition: transform var(--motion-feedback) var(--ease-enter);
+  }
+
+  .delivery-card:active .delivery-card__arrow {
+    transform: translateX(7px);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .delivery-card:hover:not(:active) .delivery-card__arrow {
+      transform: translateX(4px);
+    }
   }
 }
 </style>
