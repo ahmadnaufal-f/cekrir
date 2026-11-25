@@ -20,6 +20,8 @@ from cekrir.routers import (
 from cekrir.routers.detections import device_router
 from cekrir.routers.locations import router as location_router
 from cekrir.routers.payments import router as payment_router
+from cekrir.routers.tuya_oauth import protect_callback_logs
+from cekrir.routers.tuya_oauth import router as tuya_oauth_router
 from cekrir.services.auth import ensure_bootstrap_admin
 from cekrir.services.notifications import NotificationPublisher
 from cekrir.services.tracking import TrackingProvider, TrackingUnavailable, build_tracking_provider
@@ -103,6 +105,8 @@ def create_app(
     app.include_router(notification_router)
     app.include_router(payment_router)
     app.include_router(location_router)
+    app.include_router(tuya_oauth_router)
+    protect_callback_logs()
     return app
 
 

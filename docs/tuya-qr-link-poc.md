@@ -31,3 +31,26 @@ Record whether account linking, camera verification, command acceptance, and JPE
 If camera verification passes and Tuya returns code `500` during snapshot capture, try **Cloud → API Explorer → Camera Service → Capture An Image** with the same project, data center, and device ID. If Tuya returns the same error there, record the request ID (`tid`) if present and the time of the request for Tuya support. [Tuya API Explorer](https://developer.tuya.com/en/docs/iot/api-debugging?id=Ka6yniaizeiiu) · [Tuya error codes](https://developer.tuya.com/en/docs/iot/error-code?id=K989ruxx88swc)
 
 The POC runs independently of Cekrir sign-in, PostgreSQL, and the existing delivery-photo integration. Automated tests simulate Tuya’s responses. The separate-account QR scan and JPEG retrieval require a live pilot with a real project and camera.
+
+## Hosted OAuth pilot for Singapore
+
+1. In Tuya’s **Configure OAuth 2.0 Authorization** screen, select the Android App Authorization key, enable Singapore, and register `https://api.cekrir.bakuretsumagic.my.id/api/v1/integrations/tuya/oauth/callback/sg`. If you deploy to another HTTPS hostname, keep the path and register that hostname. Upload the [Cekrir package icon](frontend/cekrir-tuya-app-icon.png) under **App Icon** and save the generated **H5 Page URL**. [Tuya OAuth setup](https://developer.tuya.com/en/docs/iot/authorization-code-page-usage?id=Kdkyz44dz6a7r)
+2. On the backend VM, add the following to `apps/backend/.env`. Use the credentials from **Authorization → App Authorization** for the key selected in the H5 configuration, and use the same SHA‑1 registered with `id.cekrir.app`. [Tuya app authorization](https://developer.tuya.com/en/docs/iot/manage-application?id=Kag37wnxynw)
+
+   ```dotenv
+   CEKRIR_TUYA_OAUTH_CLIENT_ID=your-app-authorization-client-id
+   CEKRIR_TUYA_OAUTH_CLIENT_SECRET=your-app-authorization-client-secret
+   CEKRIR_TUYA_OAUTH_ANDROID_SHA1=40:7B:B4:24:FB:C1:B1:99:95:D3:BA:85:2F:2D:DC:84:95:B1:C3:13
+   CEKRIR_TUYA_OAUTH_H5_URL='paste-the-generated-singapore-h5-page-url'
+   ```
+
+3. Deploy the PR’s backend using `sudo docker compose up -d --build api` from `apps/backend`. The OAuth pilot uses the existing Redis service and adds no database migrations. The callback receives the authorization code in the query string. Keep query strings out of reverse-proxy access logs for that path. The repository’s Nginx configuration has access logging disabled.
+4. With a current Cekrir admin access token set as `CEKRIR_API_TOKEN` in your shell, use the start endpoint to create an authorization attempt.
+
+   ```sh
+   curl --fail-with-body --request POST \
+     --header "Authorization: Bearer ${CEKRIR_API_TOKEN}" \
+     https://api.cekrir.bakuretsumagic.my.id/api/v1/integrations/tuya/oauth/start/sg
+   ```
+
+5. Open the returned `authorization_url` within ten minutes and authorize the test account on Tuya’s page. The callback consumes the state once, exchanges the code in Singapore, and reports success. Start a fresh attempt if anything fails. The pilot discards the returned tokens after confirming the exchange. A live test is required to confirm that Tuya accepts the chosen account and returns the original state. [Tuya authorization code exchange](https://developer.tuya.com/en/docs/iot/authentication-method?id=Ka49gbaxjygox)

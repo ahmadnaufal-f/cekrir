@@ -1,14 +1,9 @@
 """Loopback-only Tuya Cloud Project account-linking proof of concept."""
 
-import hmac
 import os
-import re
-import time
 from collections.abc import Iterator
-from hashlib import sha256
 from pathlib import Path
 from typing import Annotated
-from uuid import uuid4
 
 import httpx
 import uvicorn
@@ -18,16 +13,9 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, StringConstraints
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from cekrir.services.tuya_cloud import DATA_CENTERS, TuyaCloud, TuyaError
+
 ENV_FILE = Path(__file__).resolve().parents[2] / ".env.tuya-qr-poc"
-DATA_CENTERS = {
-    "cn": "https://openapi.tuyacn.com",
-    "us": "https://openapi.tuyaus.com",
-    "us-east": "https://openapi-ueaz.tuyaus.com",
-    "eu": "https://openapi.tuyaeu.com",
-    "eu-west": "https://openapi-weaz.tuyaeu.com",
-    "in": "https://openapi.tuyain.com",
-    "sg": "https://openapi-sg.iotbing.com",
-}
 
 TuyaId = Annotated[
     str,
@@ -51,57 +39,9 @@ class CaptureRequest(BaseModel):
     command_id: str
 
 
-class TuyaError(Exception):
-    pass
-
-
-class TuyaProject:
-    def __init__(self, client: httpx.Client, access_id: str, access_secret: str):
-        self.client = client
-        self.access_id = access_id
-        self.access_secret = access_secret
-
-    def _request(self, method: str, path: str, access_token: str = "", *, operation: str) -> object:
-        timestamp = str(time.time_ns() // 1_000_000)
-        nonce = uuid4().hex
-        # These Cloud Project requests have no body or custom signed headers.
-        to_sign = f"{method}\n{sha256(b'').hexdigest()}\n\n{path}"
-        message = f"{self.access_id}{access_token}{timestamp}{nonce}{to_sign}"
-        signature = hmac.new(self.access_secret.encode(), message.encode(), sha256)
-        headers = {
-            "client_id": self.access_id,
-            "t": timestamp,
-            "nonce": nonce,
-            "sign_method": "HMAC-SHA256",
-            "sign": signature.hexdigest().upper(),
-        }
-        if access_token:
-            headers["access_token"] = access_token
-
-        try:
-            response = self.client.request(method, path, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-        except httpx.HTTPStatusError as exc:
-            raise TuyaError(f"Tuya returned HTTP {exc.response.status_code}.") from None
-        except (httpx.RequestError, ValueError):
-            raise TuyaError("Could not read a response from Tuya.") from None
-        if not isinstance(data, dict):
-            raise TuyaError("Tuya returned an unexpected response.")
-        if data.get("success") is not True:
-            code = str(data.get("code", ""))
-            suffix = f" (code {code})" if code.isascii() and code.isdigit() else ""
-            detail = f"Tuya returned an error during {operation}{suffix}."
-            request_id = data.get("tid")
-            if isinstance(request_id, str) and re.fullmatch(r"[0-9a-fA-F]{32}", request_id):
-                detail += f" Tuya request ID {request_id}."
-            raise TuyaError(detail)
-        return data.get("result")
-
+class TuyaProject(TuyaCloud):
     def token(self) -> str:
-        result = self._request(
-            "GET", "/v1.0/token?grant_type=1", operation="project authentication"
-        )
+        result = self.request("GET", "/v1.0/token?grant_type=1", operation="project authentication")
         token = result.get("access_token") if isinstance(result, dict) else None
         if not isinstance(token, str) or not token:
             raise TuyaError("Tuya returned no project access token.")
@@ -110,7 +50,7 @@ class TuyaProject:
     def find_camera(self, link: CameraLink, access_token: str) -> CameraSummary | None:
         page_size = 50
         for page in range(1, 11):
-            devices = self._request(
+            devices = self.request(
                 "GET",
                 f"/v1.0/users/{link.uid}/devices?from=home&page_no={page}&page_size={page_size}",
                 access_token,
@@ -131,7 +71,7 @@ class TuyaProject:
         raise TuyaError("The camera was not found within the first 500 devices.")
 
     def request_capture(self, link: CameraLink, access_token: str) -> CaptureRequest:
-        result = self._request(
+        result = self.request(
             "POST",
             f"/v1.0/cameras/{link.device_id}/actions/capture",
             access_token,

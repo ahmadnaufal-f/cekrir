@@ -65,6 +65,12 @@ class Settings(BaseSettings):
         pattern=r"^[A-Za-z0-9_-]+$",
         validation_alias="TUYA_CCTV_DEVICE_ID",
     )
+    tuya_oauth_client_id: str | None = None
+    tuya_oauth_client_secret: SecretStr | None = None
+    tuya_oauth_android_sha1: str | None = Field(
+        default=None, pattern=r"^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){19}$"
+    )
+    tuya_oauth_h5_url: HttpUrl | None = None
 
     @field_validator("database_url")
     @classmethod
