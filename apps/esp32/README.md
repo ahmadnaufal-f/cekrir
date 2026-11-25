@@ -99,6 +99,16 @@ Press reset if startup output is missing. A healthy run reports a camera sensor 
 
 To capture and open an image on Windows, double-click `capture.bat` in the `apps/esp32` folder. It uses `COM10` by default. If your board uses another port, edit the `PORT` line near the top of the batch file or run `capture.bat COM3` from Command Prompt with the correct port. Each capture replaces `captures/camera-check.jpg`.
 
+For a barcode test, point the camera at a well-lit label and run `capture_barcode.bat` (or `capture_barcode.bat COM3` for a different port). It saves and opens `captures/barcode-test.jpg`, replacing the previous barcode test image. The camera diagnostic requests 1600 × 1200 JPEG images when the sensor supports it; the serial monitor shows the actual dimensions. Like `capture.bat`, it needs the `esp32_s3_cam_camera_check` firmware and a USB connection; it does not upload firmware or decode the barcode. The Wi-Fi camera and onboarded-device firmware use different protocols and will not respond to this USB capture command. The main backend accepts JPEGs up to 512 KiB, so a high-resolution capture may need a smaller resolution or more compression before submission.
+
+To decode a saved image and check AnterAja tracking, add `CEKRIR_BINDERBYTE_API_KEY` to your private `apps/backend/.env` and run from the repository root:
+
+```bash
+apps/backend/.venv/Scripts/python.exe apps/esp32/decode_barcode.py apps/esp32/captures/barcode-test.jpg --enhance
+```
+
+The script sends the decoded tracking number to BinderByte, not the image. A lookup can consume provider quota; add `--decode-only` to skip it. If more than one barcode is found, the script avoids making a tracking request. This is separate from the automatic backend ingestion workflow.
+
 You can also save an image using the Python environment installed by PlatformIO, which includes `pyserial`:
 
 ```powershell

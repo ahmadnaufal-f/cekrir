@@ -17,8 +17,9 @@ class LocationRead(BaseModel):
 
 class FrameDetection(BaseModel):
     resi_number: str
-    shipment_id: UUID
+    shipment_id: UUID | None = None
     created: bool
+    tracking: dict | None = None
 
 
 class CameraFrameResult(BaseModel):
@@ -65,6 +66,7 @@ class ShipmentRead(TrackingSnapshot):
 class DetectionResult(BaseModel):
     created: bool
     shipment: ShipmentRead
+    tracking: dict | None = None
 
 
 class NotificationRead(BaseModel):

@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     smtp_from: str | None = None
     verification_url: HttpUrl | None = None
     cors_origins: list[str] = [
+        "https://cekrir.arkaes.dev",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "capacitor://localhost",
@@ -50,6 +51,8 @@ class Settings(BaseSettings):
     tracking_api_key: SecretStr | None = None
     ingest_api_key: SecretStr | None = None
     binderbyte_api_key: SecretStr | None = None
+    # TODO: Configure the courier for automatic BinderByte detection lookups.
+    binderbyte_detection_courier: str = ""
     cctv_encryption_key: SecretStr | None = None
     firebase_credentials_file: str | None = None
     cctv_rtsp_url: str | None = None

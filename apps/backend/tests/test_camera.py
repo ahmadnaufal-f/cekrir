@@ -1,10 +1,13 @@
 from io import BytesIO
+from unittest.mock import patch
 
 import pytest
 import zxingcpp
 from PIL import Image
+from pydantic import SecretStr
 
 from cekrir.services.barcodes import MAX_FRAME_BYTES
+from cekrir.services.binderbyte import BinderByteUnavailable
 
 HEADERS = {"Content-Type": "image/jpeg", "X-Ingest-Key": "test-key"}
 PARAMS = {"courier": "JNE", "camera_id": "esp32-front-door"}
@@ -107,7 +110,7 @@ def test_large_body_and_large_dimensions_are_rejected(client):
     )
     assert response.status_code == 413
     response = client.post(
-        ENDPOINT, params=PARAMS, content=jpeg(Image.new("L", (2048, 1536), 255)), headers=HEADERS
+        ENDPOINT, params=PARAMS, content=jpeg(Image.new("L", (2049, 1536), 255)), headers=HEADERS
     )
     assert response.status_code == 422
 
@@ -133,3 +136,73 @@ def test_camera_metadata_is_validated(client):
     for params in [{"courier": "jne"}, {"courier": "j&bad", "camera_id": "door"}]:
         response = client.post(ENDPOINT, params=params, content=b"jpeg", headers=HEADERS)
         assert response.status_code == 422
+
+
+def test_missing_courier_returns_barcode_without_creating_shipment(client):
+    frame = jpeg(barcode_image("CEKRIR001"))
+    for params in ({"camera_id": "door"}, {"camera_id": "door", "courier": ""}):
+        response = client.post(ENDPOINT, params=params, content=frame, headers=HEADERS)
+        assert response.status_code == 200
+        detection = response.json()["detections"][0]
+        assert detection["resi_number"] == "CEKRIR001"
+        assert detection["shipment_id"] is None
+        assert detection["tracking"] is None
+    assert client.get("/api/v1/shipments").json() == []
+
+
+def test_first_detection_looks_up_configured_courier_once(client):
+    client.app.state.settings.binderbyte_api_key = SecretStr("test-key")
+    client.app.state.settings.binderbyte_detection_courier = "anteraja"
+    payload = {"resi_number": "CEKRIR123", "courier": "anteraja"}
+    assert client.post("/api/v1/shipments", json=payload).status_code == 201
+    frame = jpeg(barcode_image("CEKRIR123"))
+    params = {"camera_id": "door", "courier": "anteraja"}
+    tracking = {"summary": {"status": "ON PROCESS"}, "detail": {}, "history": []}
+    with patch("cekrir.services.detections.check_tracking", return_value=tracking) as lookup:
+        first = client.post(ENDPOINT, params=params, content=frame, headers=HEADERS)
+        second = client.post(ENDPOINT, params=params, content=frame, headers=HEADERS)
+    assert first.status_code == second.status_code == 200
+    assert first.json()["detections"][0]["tracking"] == tracking
+    assert second.json()["detections"][0]["tracking"] is None
+    assert lookup.call_count == 1
+    assert lookup.call_args.args[1].courier == "anteraja"
+
+
+def test_blank_or_different_courier_does_not_call_binderbyte(client):
+    client.app.state.settings.binderbyte_api_key = SecretStr("test-key")
+    frame = jpeg(barcode_image("CEKRIR123"))
+    with patch("cekrir.services.detections.check_tracking") as lookup:
+        result = client.post(ENDPOINT, params=PARAMS, content=frame, headers=HEADERS)
+        client.app.state.settings.binderbyte_detection_courier = "anteraja"
+        result2 = client.post(
+            ENDPOINT, params=PARAMS, content=jpeg(barcode_image("CEKRIR456")), headers=HEADERS
+        )
+    assert result.status_code == result2.status_code == 200
+    assert result.json()["detections"][0]["tracking"] is None
+    assert result2.json()["detections"][0]["tracking"] is None
+    lookup.assert_not_called()
+
+
+def test_tracking_failure_does_not_lose_detection(client):
+    client.app.state.settings.binderbyte_api_key = SecretStr("test-key")
+    client.app.state.settings.binderbyte_detection_courier = "anteraja"
+    with patch(
+        "cekrir.services.detections.check_tracking", side_effect=BinderByteUnavailable("offline")
+    ):
+        response = client.post(
+            ENDPOINT,
+            params={"camera_id": "door", "courier": "anteraja"},
+            content=jpeg(barcode_image("CEKRIR123")),
+            headers=HEADERS,
+        )
+    assert response.status_code == 200
+    assert response.json()["detections"][0]["shipment_id"] is not None
+    assert response.json()["detections"][0]["tracking"] is None
+
+
+def test_three_megapixel_frame_is_resized_and_decoded(client):
+    frame = Image.new("L", (2048, 1536), 255)
+    frame.paste(barcode_image("CEKRIR123"), (600, 650))
+    response = client.post(ENDPOINT, params=PARAMS, content=jpeg(frame), headers=HEADERS)
+    assert response.status_code == 200
+    assert response.json()["detections"][0]["resi_number"] == "CEKRIR123"

@@ -10,7 +10,7 @@ class CourierInput(BaseModel):
         return value.strip().lower() if isinstance(value, str) else value
 
 
-class ResiInput(CourierInput):
+class ResiNumberInput(BaseModel):
     resi_number: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9-]+$")
 
     @field_validator("resi_number", mode="before")
@@ -19,9 +19,22 @@ class ResiInput(CourierInput):
         return value.strip().upper() if isinstance(value, str) else value
 
 
+class ResiInput(ResiNumberInput, CourierInput):
+    pass
+
+
 class DetectionInput(ResiInput):
     camera_id: str = Field(min_length=1, max_length=100)
 
 
-class CameraFrameInput(CourierInput):
+class CameraCourierInput(CourierInput):
+    courier: str | None = Field(default=None, min_length=2, max_length=32, pattern=r"^[a-z0-9_-]+$")
+
+    @field_validator("courier", mode="before")
+    @classmethod
+    def empty_courier_is_none(cls, value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
+
+
+class CameraFrameInput(CameraCourierInput):
     camera_id: str = Field(min_length=1, max_length=100)

@@ -17,7 +17,9 @@ config:
 request:
   variables:
     - name: baseUrl
-      value: https://api.cekrir.bakuretsumagic.my.id/
+      value: https://api.cekrir.bakuretsumagic.my.id
+    - name: accessToken
+      value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NjRjNjJlYy0xZThlLTRlOGMtYmI2Ny01NjY0NDM2NDE1ZDAiLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwiZnVsbF9uYW1lIjoiRGV2ZWxvcG1lbnQgQWRtaW4iLCJyb2xlIjoiYWRtaW4iLCJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiaXNzIjoiY2VrcmlyLWFwaSIsImlhdCI6MTc5NTI3OTg3OSwiZXhwIjoxNzk1MjgwNzc5fQ.Q9RwpkKR16KxCZAVRMRe1TlX6pUVGXTbRIJdn_Df-pE
 bundled: false
 extensions:
   bruno:

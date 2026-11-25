@@ -1,4 +1,5 @@
 from io import BytesIO
+from math import sqrt
 
 import zxingcpp
 from PIL import Image, UnidentifiedImageError
@@ -6,6 +7,7 @@ from PIL import Image, UnidentifiedImageError
 MAX_FRAME_BYTES = 512 * 1024
 MAX_FRAME_PIXELS = 2_000_000
 MAX_FRAME_DIMENSION = 2048
+MAX_SOURCE_PIXELS = 4_000_000
 BARCODE_FORMATS = (
     zxingcpp.BarcodeFormat.Code128,
     zxingcpp.BarcodeFormat.Code39,
@@ -28,14 +30,21 @@ def decode_frame(jpeg: bytes) -> list[str]:
                 raise InvalidCameraFrame("Frame must be a JPEG image")
             width, height = image.size
             # Check headers before decompressing an untrusted image.
-            if max(width, height) > MAX_FRAME_DIMENSION or width * height > MAX_FRAME_PIXELS:
+            if max(width, height) > MAX_FRAME_DIMENSION or width * height > MAX_SOURCE_PIXELS:
                 raise InvalidCameraFrame(
-                    "Frame must be at most 2 megapixels and 2048 pixels per side"
+                    "Frame must be at most 4 megapixels and 2048 pixels per side"
                 )
             image.load()
+            image = image.convert("L")
+            if width * height > MAX_FRAME_PIXELS:
+                scale = sqrt(MAX_FRAME_PIXELS / (width * height))
+                image = image.resize(
+                    (max(1, int(width * scale)), max(1, int(height * scale))),
+                    Image.Resampling.LANCZOS,
+                )
             return [
                 barcode.text
-                for barcode in zxingcpp.read_barcodes(image.convert("L"), formats=BARCODE_FORMATS)
+                for barcode in zxingcpp.read_barcodes(image, formats=BARCODE_FORMATS)
                 if barcode.valid
             ]
     except (UnidentifiedImageError, Image.DecompressionBombError, OSError) as exc:
