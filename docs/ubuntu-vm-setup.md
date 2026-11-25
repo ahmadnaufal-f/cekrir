@@ -82,7 +82,13 @@ In `nano`, edit the values and save with `Ctrl+O`, `Enter`, then `Ctrl+X`:
 - Set `CEKRIR_SEED_ADMIN_EMAIL` and `CEKRIR_SEED_MEMBER_EMAIL` to the intended users' actual email addresses. Set different strong passwords for the two accounts, each at least 12 characters and at most 72 UTF-8 bytes. `openssl rand -hex 24` provides a suitable value. Set `CEKRIR_SEED_LOCATION` to the location name.
 - On a fresh database, migration `20261120_0007` creates both accounts as **already verified** and assigns the location to the admin. Choose those addresses carefully; this seed bypasses email verification. The member is not automatically assigned to the location.
 - To enable Resend, uncomment and fill `CEKRIR_EMAIL_PROVIDER=resend`, `CEKRIR_RESEND_API_KEY`, `CEKRIR_RESEND_FROM`, and the HTTPS `CEKRIR_VERIFICATION_URL`. A verified Resend sending domain is required. Otherwise the server starts, but registration cannot send verification emails until email delivery is configured.
-- If you have a web frontend, set `CEKRIR_CORS_ORIGINS` to its exact HTTPS origin as a JSON array. Do not put API keys in the frontend.
+- Set `CEKRIR_CORS_ORIGINS` to include the hosted frontend and Capacitor origins. An existing `.env` overrides the backend defaults, so update its list explicitly:
+
+  ```dotenv
+  CEKRIR_CORS_ORIGINS='["https://cekrir.arkaes.dev","http://localhost:5173","http://127.0.0.1:5173","capacitor://localhost","http://localhost","https://localhost"]'
+  ```
+
+  Include any other trusted frontend origins your deployment needs. Do not put API keys in the frontend.
 
 `apps/backend/.env` contains private credentials. Keep the file private, do not commit or paste it into chat, and back it up securely. Compose reads it automatically when run from this directory; the Docker build excludes it.
 

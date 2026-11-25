@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     smtp_from: str | None = None
     verification_url: HttpUrl | None = None
     cors_origins: list[str] = [
+        "https://cekrir.arkaes.dev",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "capacitor://localhost",
