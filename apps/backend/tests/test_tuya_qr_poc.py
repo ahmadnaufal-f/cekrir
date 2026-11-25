@@ -18,6 +18,7 @@ ACCESS_TOKEN = "test-token"
 def pilot():
     requests = []
     devices = []
+    upstream_errors = {}
 
     def upstream(request: httpx.Request) -> httpx.Response:
         requests.append(request)
@@ -45,6 +46,8 @@ def pilot():
                 assert request.url.path == "/v1.0/cameras/pilot-camera/actions/capture"
                 assert request.method == "POST"
                 result = {"sn": "capture-42"}
+        if request.url.path in upstream_errors:
+            return httpx.Response(200, json=upstream_errors[request.url.path])
         return httpx.Response(200, json={"success": True, "result": result})
 
     with httpx.Client(
@@ -55,13 +58,13 @@ def pilot():
         )
         try:
             with TestClient(app, base_url=ORIGIN, client=("127.0.0.1", 12345)) as client:
-                yield client, devices, requests
+                yield client, devices, requests, upstream_errors
         finally:
             app.dependency_overrides.clear()
 
 
 def test_verifies_a_visible_camera_and_requests_capture_after_rechecking(pilot):
-    client, devices, requests = pilot
+    client, devices, requests, _ = pilot
     headers = {"Origin": ORIGIN}
     assert client.post("/api/verify", json=LINK, headers=headers).status_code == 404
 
@@ -84,7 +87,7 @@ def test_verifies_a_visible_camera_and_requests_capture_after_rechecking(pilot):
 
 
 def test_local_poc_rejects_cross_origin_requests_and_invalid_ids(pilot):
-    client, _, requests = pilot
+    client, _, requests, _ = pilot
     assert client.get("/").status_code == 200
     assert (
         client.post("/api/verify", json=LINK, headers={"Origin": "https://other.test"}).status_code
@@ -93,3 +96,32 @@ def test_local_poc_rejects_cross_origin_requests_and_invalid_ids(pilot):
     invalid = {**LINK, "device_id": "../../another-device"}
     assert client.post("/api/capture", json=invalid, headers={"Origin": ORIGIN}).status_code == 422
     assert requests == []
+
+
+@pytest.mark.parametrize(
+    ("path", "operation", "request_id", "with_request_id"),
+    [
+        ("/v1.0/token", "project authentication", None, False),
+        ("/v1.0/users/pilot-uid/devices", "linked account device lookup", ACCESS_TOKEN, False),
+        (
+            "/v1.0/cameras/pilot-camera/actions/capture",
+            "snapshot capture",
+            "c5224fa6b7d840e18c13f3d991d02241",
+            True,
+        ),
+    ],
+)
+def test_capture_errors_identify_failed_operation(
+    pilot, path, operation, request_id, with_request_id
+):
+    client, devices, _, upstream_errors = pilot
+    devices.append({"id": LINK["device_id"], "online": True})
+    upstream_errors[path] = {"success": False, "code": 500, "tid": request_id, "msg": ACCESS_SECRET}
+
+    response = client.post("/api/capture", json=LINK, headers={"Origin": ORIGIN})
+
+    assert response.status_code == 502
+    detail = f"Tuya returned an error during {operation} (code 500)."
+    if with_request_id:
+        detail += f" Tuya request ID {request_id}."
+    assert response.json() == {"detail": detail}

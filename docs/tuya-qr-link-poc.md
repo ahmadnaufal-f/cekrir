@@ -28,4 +28,6 @@ Use this local pilot to check whether a Cekrir Tuya Cloud Project can access a c
 
 Record whether account linking, camera verification, command acceptance, and JPEG retrieval succeeded. Keep the project secret, QR image, and signed media URL out of the record. Unlink the pilot account in the console when the test is complete.
 
+If camera verification passes and Tuya returns code `500` during snapshot capture, try **Cloud → API Explorer → Camera Service → Capture An Image** with the same project, data center, and device ID. If Tuya returns the same error there, record the request ID (`tid`) if present and the time of the request for Tuya support. [Tuya API Explorer](https://developer.tuya.com/en/docs/iot/api-debugging?id=Ka6yniaizeiiu) · [Tuya error codes](https://developer.tuya.com/en/docs/iot/error-code?id=K989ruxx88swc)
+
 The POC runs independently of Cekrir sign-in, PostgreSQL, and the existing delivery-photo integration. Automated tests simulate Tuya’s responses. The separate-account QR scan and JPEG retrieval require a live pilot with a real project and camera.

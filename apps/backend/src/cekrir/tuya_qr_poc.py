@@ -2,6 +2,7 @@
 
 import hmac
 import os
+import re
 import time
 from collections.abc import Iterator
 from hashlib import sha256
@@ -60,7 +61,7 @@ class TuyaProject:
         self.access_id = access_id
         self.access_secret = access_secret
 
-    def _request(self, method: str, path: str, access_token: str = "") -> object:
+    def _request(self, method: str, path: str, access_token: str = "", *, operation: str) -> object:
         timestamp = str(time.time_ns() // 1_000_000)
         nonce = uuid4().hex
         # These Cloud Project requests have no body or custom signed headers.
@@ -90,11 +91,17 @@ class TuyaProject:
         if data.get("success") is not True:
             code = str(data.get("code", ""))
             suffix = f" (code {code})" if code.isascii() and code.isdigit() else ""
-            raise TuyaError(f"Tuya rejected the project request{suffix}.")
+            detail = f"Tuya returned an error during {operation}{suffix}."
+            request_id = data.get("tid")
+            if isinstance(request_id, str) and re.fullmatch(r"[0-9a-fA-F]{32}", request_id):
+                detail += f" Tuya request ID {request_id}."
+            raise TuyaError(detail)
         return data.get("result")
 
     def token(self) -> str:
-        result = self._request("GET", "/v1.0/token?grant_type=1")
+        result = self._request(
+            "GET", "/v1.0/token?grant_type=1", operation="project authentication"
+        )
         token = result.get("access_token") if isinstance(result, dict) else None
         if not isinstance(token, str) or not token:
             raise TuyaError("Tuya returned no project access token.")
@@ -107,6 +114,7 @@ class TuyaProject:
                 "GET",
                 f"/v1.0/users/{link.uid}/devices?from=home&page_no={page}&page_size={page_size}",
                 access_token,
+                operation="linked account device lookup",
             )
             if not isinstance(devices, list):
                 raise TuyaError("Tuya returned an unexpected device list.")
@@ -124,7 +132,10 @@ class TuyaProject:
 
     def request_capture(self, link: CameraLink, access_token: str) -> CaptureRequest:
         result = self._request(
-            "POST", f"/v1.0/cameras/{link.device_id}/actions/capture", access_token
+            "POST",
+            f"/v1.0/cameras/{link.device_id}/actions/capture",
+            access_token,
+            operation="snapshot capture",
         )
         command_id = result.get("sn") if isinstance(result, dict) else None
         if not isinstance(command_id, str) or not command_id:
