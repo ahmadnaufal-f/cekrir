@@ -168,4 +168,4 @@ See [architecture and next steps](docs/architecture.md) and [tracking/CCTV integ
 
 This is a **development prototype**. The app and API bind to loopback by default. Backend records are not scoped to households. Household delivery events and Android remote push remain gaps. The backend has protected Tuya CCTV photos, while the frontend does not yet display them. The optional ingestion key protects camera submissions; it is not a user identity. See the frontend handoff documents for the per-operation status.
 
-No license has been chosen; add one before distributing the project.
+This project is licensed under the [MIT License](LICENSE).
