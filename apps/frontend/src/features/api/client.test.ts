@@ -355,6 +355,84 @@ describe('shipments, errors and UI boundary', () => {
   })
 })
 
+describe('screenshot autofill', () => {
+  const image = new File(['original screenshot'], 'order.png', {
+    type: 'image/png',
+  })
+  const extracted = {
+    resi_number: '000xY-128',
+    courier_service: null,
+    sender_name: 'Toko Contoh',
+    product_names: ['Kotak penyimpanan'],
+  }
+
+  it('sends the original file with the existing bearer session and returns partial details', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(json(tokens()))
+      .mockResolvedValueOnce(json(extracted))
+    const api = createApiClient({ fetch })
+    await api.auth.login(credentials)
+
+    await expect(api.shipments.analyzeScreenshot(image)).resolves.toEqual(
+      extracted,
+    )
+    expect(fetch).toHaveBeenLastCalledWith(
+      '/api/v1/shipments/analyze-screenshot',
+      expect.objectContaining({
+        method: 'POST',
+        body: image,
+        cache: 'no-store',
+      }),
+    )
+    const headers = new Headers(fetch.mock.lastCall?.[1].headers)
+    expect(headers.get('Authorization')).toBe('Bearer access')
+    expect(headers.get('Content-Type')).toBe('image/png')
+  })
+
+  it('cancels the binary request when the review is closed', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(json(tokens()))
+      .mockImplementationOnce(
+        (_input: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener(
+              'abort',
+              () => reject(init.signal?.reason),
+              { once: true },
+            )
+          }),
+      )
+    const api = createApiClient({ fetch })
+    await api.auth.login(credentials)
+    const controller = new AbortController()
+    const analysis = api.shipments.analyzeScreenshot(image, controller.signal)
+    controller.abort()
+
+    await expect(analysis).rejects.toMatchObject({ code: 'cancelled' })
+  })
+
+  it.each([413, 415, 422, 502, 503, 504])(
+    'maps HTTP %i to a screenshot-specific error',
+    async (status) => {
+      const fetch = vi
+        .fn()
+        .mockResolvedValueOnce(json(tokens()))
+        .mockResolvedValueOnce(json({}, status))
+      const api = createApiClient({ fetch })
+      await api.auth.login(credentials)
+
+      await expect(
+        api.shipments.analyzeScreenshot(image),
+      ).rejects.toMatchObject({
+        code: 'screenshot_analysis',
+        status,
+      })
+    },
+  )
+})
+
 describe('foreground notifications', () => {
   it('simulates one camera detection and cancels it when disconnected', async () => {
     vi.useFakeTimers()

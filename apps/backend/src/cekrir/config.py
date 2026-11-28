@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     tracking_api_key: SecretStr | None = None
     ingest_api_key: SecretStr | None = None
     binderbyte_api_key: SecretStr | None = None
+    openai_api_key: SecretStr | None = None
+    screenshot_model: str = Field(default="gpt-6-luna", min_length=1)
     cctv_encryption_key: SecretStr | None = None
     firebase_credentials_file: str | None = None
     cctv_rtsp_url: str | None = None

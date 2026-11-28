@@ -1,18 +1,38 @@
+from uuid import UUID
+
 from sqlalchemy.orm import Session
 
-from cekrir.db.repository import ShipmentRepository
+from cekrir.db.repository import ShipmentRepository, UserRepository, shipment_view
 from cekrir.schemas import (
     NotificationRead,
+    PackageRead,
     ShipmentRead,
     TrackingSnapshot,
+    VisibleShipment,
 )
+from cekrir.services.accounts import location_for_user
 from cekrir.services.notifications import NotificationPublisher
 from cekrir.services.tracking import TrackingProvider
-from cekrir.validation.shipments import DetectionInput, ResiInput
+from cekrir.validation.shipments import DetectionInput, ExpectedPackageInput, ResiInput
 
 
 class ShipmentNotFound(Exception):
     pass
+
+
+class ShipmentLocationUnavailable(Exception):
+    pass
+
+
+def add_expected_package(
+    session: Session, user_id: UUID, payload: ExpectedPackageInput
+) -> tuple[PackageRead, bool]:
+    with session.begin():
+        user = UserRepository(session).by_id(user_id)
+        location_id, _ = location_for_user(session, user) if user else (None, None)
+        if location_id is None:
+            raise ShipmentLocationUnavailable("No receiving location is assigned to this account")
+        return ShipmentRepository(session).add_expected(payload, location_id)
 
 
 def register_shipment(
@@ -40,21 +60,23 @@ def register_shipment(
 
 def refresh_shipment(
     session: Session, shipment: ShipmentRead, provider: TrackingProvider
-) -> tuple[ShipmentRead, NotificationRead | None]:
+) -> tuple[VisibleShipment, NotificationRead | None]:
     snapshot = provider.lookup(shipment.resi_number, shipment.courier)
     return ShipmentRepository(session).refresh(shipment.id, snapshot, provider.name)
 
 
-def list_shipments(session: Session, limit: int, offset: int) -> list[ShipmentRead]:
-    return ShipmentRepository(session).list_shipments(limit, offset)
+def list_shipments(
+    session: Session, user_id: UUID, limit: int, offset: int
+) -> list[VisibleShipment]:
+    return ShipmentRepository(session).list_shipments(user_id, limit, offset)
 
 
-def get_shipment(session: Session, shipment_id: str) -> ShipmentRead:
-    model = ShipmentRepository(session).get_shipment(shipment_id)
+def get_shipment(session: Session, shipment_id: str, user_id: UUID) -> VisibleShipment:
+    model = ShipmentRepository(session).get_shipment(shipment_id, user_id)
     if model is None:
         session.rollback()
         raise ShipmentNotFound("Shipment not found")
-    shipment = ShipmentRead.model_validate(model)
+    shipment = shipment_view(model)
     session.rollback()
     return shipment
 
@@ -72,14 +94,13 @@ def submit_shipment(
 
 
 def check_shipment(
-    session: Session, shipment_id: str, provider: TrackingProvider, publisher: NotificationPublisher
-) -> ShipmentRead:
-    model = ShipmentRepository(session).get_shipment(shipment_id)
-    if model is None:
-        session.rollback()
-        raise ShipmentNotFound("Shipment not found")
-    shipment = ShipmentRead.model_validate(model)
-    session.rollback()
+    session: Session,
+    shipment_id: str,
+    user_id: UUID,
+    provider: TrackingProvider,
+    publisher: NotificationPublisher,
+) -> VisibleShipment:
+    shipment = get_shipment(session, shipment_id, user_id)
     try:
         updated, notification = refresh_shipment(session, shipment, provider)
     except LookupError as exc:

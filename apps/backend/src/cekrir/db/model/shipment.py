@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, Index, String, Text, text
+from sqlalchemy import CheckConstraint, ForeignKey, Index, String, Text, text
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
@@ -34,7 +34,15 @@ class Shipment(Base):
     __table_args__ = (
         Index("shipment_resi_number_idx", "resi_number"),
         Index("shipment_created_at_id_idx", text("created_at DESC"), text("id DESC")),
-        Index("shipment_courier_resi_number_key", "courier", "resi_number", unique=True),
+        Index(
+            "shipment_courier_resi_number_key",
+            "courier",
+            "resi_number",
+            "location_id",
+            unique=True,
+            postgresql_nulls_not_distinct=True,
+        ),
+        Index("shipment_location_id_idx", "location_id"),
         CheckConstraint(
             "photo_status IN ('not_requested', 'pending', 'ready', 'unavailable')",
             name="shipment_photo_status_check",
@@ -49,6 +57,13 @@ class Shipment(Base):
     )
     resi_number: Mapped[str] = mapped_column(String(64), nullable=False)
     courier: Mapped[str] = mapped_column(String(32), nullable=False)
+    location_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("locations.id", ondelete="CASCADE")
+    )
+    sender_name: Mapped[str | None] = mapped_column(String(200))
+    product_names: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
     source: Mapped[ShipmentSource] = mapped_column(
         SqlEnum(
             ShipmentSource,

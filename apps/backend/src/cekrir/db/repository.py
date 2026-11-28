@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -9,6 +9,8 @@ from cekrir.db.model import (
     CameraDevice,
     CctvCamera,
     EspDevice,
+    Location,
+    LocationMember,
     Notification,
     Role,
     Shipment,
@@ -18,24 +20,43 @@ from cekrir.db.model import (
 )
 from cekrir.schemas import (
     NotificationRead,
+    PackageRead,
     ShipmentRead,
     TrackingSnapshot,
+    VisibleShipment,
 )
-from cekrir.validation.shipments import DetectionInput, ResiInput
+from cekrir.validation.shipments import DetectionInput, ExpectedPackageInput, ResiInput
+
+
+def visible_shipment(user_id: UUID):
+    membership = (
+        select(LocationMember.location_id)
+        .where(LocationMember.location_id == Location.id, LocationMember.user_id == user_id)
+        .exists()
+    )
+    locations = select(Location.id).where(or_(Location.admin_user_id == user_id, membership))
+    return or_(Shipment.location_id.is_(None), Shipment.location_id.in_(locations))
+
+
+def shipment_view(row: Shipment) -> VisibleShipment:
+    if row.location_id is not None:
+        return PackageRead.model_validate(row)
+    return ShipmentRead.model_validate(row)
 
 
 class ShipmentRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def list_shipments(self, limit: int, offset: int) -> list[ShipmentRead]:
+    def list_shipments(self, user_id: UUID, limit: int, offset: int) -> list[VisibleShipment]:
         rows = self.session.scalars(
             select(Shipment)
+            .where(visible_shipment(user_id))
             .order_by(Shipment.created_at.desc(), Shipment.id.desc())
             .limit(limit)
             .offset(offset)
         )
-        return [ShipmentRead.model_validate(row) for row in rows]
+        return [shipment_view(row) for row in rows]
 
     def list_notifications(self, limit: int, offset: int) -> list[NotificationRead]:
         rows = self.session.scalars(
@@ -51,15 +72,49 @@ class ShipmentRepository:
             select(Shipment).where(
                 Shipment.courier == payload.courier,
                 Shipment.resi_number == payload.resi_number,
+                Shipment.location_id.is_(None),
             )
         )
 
-    def get_shipment(self, shipment_id: str) -> Shipment | None:
+    def get_shipment(self, shipment_id: str, user_id: UUID) -> Shipment | None:
         try:
             identifier = UUID(shipment_id)
         except ValueError:
             return None
-        return self.session.get(Shipment, identifier)
+        return self.session.scalar(
+            select(Shipment).where(Shipment.id == identifier, visible_shipment(user_id))
+        )
+
+    def add_expected(
+        self, payload: ExpectedPackageInput, location_id: UUID
+    ) -> tuple[PackageRead, bool]:
+        statement = (
+            pg_insert(Shipment)
+            .values(
+                location_id=location_id,
+                courier=payload.courier,
+                resi_number=payload.resi_number,
+                sender_name=payload.sender_name or None,
+                product_names=payload.product_names,
+                source=ShipmentSource.MANUAL,
+                status=ShipmentStatus.PENDING,
+                summary="Menunggu paket tiba.",
+                provider="manual",
+            )
+            .on_conflict_do_nothing(index_elements=["courier", "resi_number", "location_id"])
+            .returning(Shipment)
+        )
+        created = self.session.scalar(statement)
+        if created is not None:
+            return PackageRead.model_validate(created), True
+        existing = self.session.scalars(
+            select(Shipment).where(
+                Shipment.location_id == location_id,
+                Shipment.courier == payload.courier,
+                Shipment.resi_number == payload.resi_number,
+            )
+        ).one()
+        return PackageRead.model_validate(existing), False
 
     def record_detection(
         self, shipment_id: UUID, payload: DetectionInput
@@ -122,7 +177,7 @@ class ShipmentRepository:
                     history=[event.model_dump(mode="json") for event in snapshot.history],
                     last_detected_at=datetime.now(UTC) if camera else None,
                 )
-                .on_conflict_do_nothing(index_elements=["courier", "resi_number"])
+                .on_conflict_do_nothing(index_elements=["courier", "resi_number", "location_id"])
                 .returning(Shipment.id)
             )
             shipment_id = self.session.scalar(statement)
@@ -132,6 +187,7 @@ class ShipmentRepository:
                     .where(
                         Shipment.courier == payload.courier,
                         Shipment.resi_number == payload.resi_number,
+                        Shipment.location_id.is_(None),
                     )
                     .with_for_update()
                 )
@@ -164,7 +220,7 @@ class ShipmentRepository:
 
     def refresh(
         self, shipment_id: UUID, snapshot: TrackingSnapshot, provider: str
-    ) -> tuple[ShipmentRead, NotificationRead | None]:
+    ) -> tuple[VisibleShipment, NotificationRead | None]:
         changed_notification = None
         with self.session.begin():
             shipment = self.session.scalar(
@@ -182,13 +238,13 @@ class ShipmentRepository:
             shipment.provider = provider
             shipment.history = [event.model_dump(mode="json") for event in snapshot.history]
             shipment.checked_at = datetime.now(UTC)
-            if previous_status != shipment.status:
+            if previous_status != shipment.status and shipment.location_id is None:
                 arrived = shipment.status == ShipmentStatus.DELIVERED
                 changed_notification = self._notify(
                     shipment, "Package arrived" if arrived else "Package status changed"
                 )
         return (
-            ShipmentRead.model_validate(shipment),
+            shipment_view(shipment),
             NotificationRead.model_validate(changed_notification) if changed_notification else None,
         )
 
