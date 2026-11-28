@@ -60,6 +60,9 @@ def test_refresh_endpoint_checks_account_and_current_role(settings, user):
         def get(self, model, user_id):
             return user if user_id == user.id else None
 
+        def execute(self, query):
+            return SimpleNamespace(first=lambda: None)
+
     app = FastAPI()
     app.state.settings = settings
     app.add_middleware(RolePermissionMiddleware)
@@ -75,6 +78,7 @@ def test_refresh_endpoint_checks_account_and_current_role(settings, user):
     assert data["expires_in"] == 900
     assert data["refresh_expires_in"] == 604800
     assert data["user"]["role"] == "admin"
+    assert data["location_id"] is None
     assert decode_token(data["access_token"], settings, "access") == user.id
     claims = jwt.decode(
         data["access_token"],

@@ -11,6 +11,8 @@ from starlette.routing import Match
 
 from cekrir.services.auth import authenticate_token
 
+TUYA_OAUTH_CALLBACK_PATH = "/api/v1/integrations/tuya/oauth/callback/sg"
+
 
 class RequirePermission:
     """Declare a permission on a route with Depends(RequirePermission(...))."""
@@ -46,6 +48,8 @@ class RolePermissionMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
         if path in self.PUBLIC_PATHS or not path.startswith("/api/v1/"):
+            return await call_next(request)
+        if request.method == "GET" and path == TUYA_OAUTH_CALLBACK_PATH:
             return await call_next(request)
         # This one route uses its own per-device credential dependency.
         if request.method == "POST" and re.fullmatch(
