@@ -16,6 +16,7 @@ import { getCalendarDate } from '../lib/delivery-date'
 import { normalizeDeliverySearch } from '../lib/delivery-search'
 import { errorMessage, formatTime } from '../lib/strings'
 import { ServiceError } from '../services/contracts'
+import type { DeliveryTotals } from '../types/app'
 const props = defineProps<{
   services: ApiServices
   user: User
@@ -31,23 +32,20 @@ const loading = ref(false)
 const historyLoading = ref(false)
 const historyError = ref('')
 const mutation = ref(false)
+const trackingUpdated = ref(false)
 const error = ref('')
 const next = ref<number | null>(null)
 const displayPageSize = 20
 const visibleLimit = ref(displayPageSize)
 const searchQuery = ref('')
-const activeSearch = ref('')
 const query = computed(() => normalizeDeliverySearch(searchQuery.value))
-const searchDebouncing = computed(() => query.value !== activeSearch.value)
 const showSearch = computed(
   () => items.value.length > 1 || next.value !== null || !!query.value,
 )
 const matching = computed(() => {
-  if (!activeSearch.value) return items.value
+  if (!query.value) return items.value
   return items.value.filter(({ resi_number, courier }) =>
-    normalizeDeliverySearch(`${resi_number} ${courier}`).includes(
-      activeSearch.value,
-    ),
+    normalizeDeliverySearch(`${resi_number} ${courier}`).includes(query.value),
   )
 })
 const visibleItems = computed(() => matching.value.slice(0, visibleLimit.value))
@@ -58,9 +56,10 @@ const totalsQuery = computed(() => ({
   timeZone,
 }))
 const busy = computed(() => loading.value || historyLoading.value)
-const totals = computed(() => {
-  if (busy.value || next.value !== null || error.value || historyError.value)
-    return null
+const totals = computed<DeliveryTotals | null>((previous) => {
+  if (error.value || historyError.value) return null
+  if (busy.value) return previous ?? null
+  if (next.value !== null) return null
   const today = reportingDay.value.toDateString()
   return {
     ...totalsQuery.value,
@@ -82,6 +81,12 @@ const title = computed(() => (props.id ? 'Detail paket' : 'Paket'))
 const unique = (values: Shipment[]) => [
   ...new Map(values.map((item) => [item.id, item])).values(),
 ]
+function shipmentErrorMessage(cause: unknown) {
+  return cause instanceof ServiceError && cause.status === 503
+    ? 'Layanan paket sedang tidak tersedia. Coba lagi.'
+    : errorMessage(cause)
+}
+
 function deliveryCard(item: Shipment) {
   return {
     id: item.id,
@@ -92,16 +97,8 @@ function deliveryCard(item: Shipment) {
     trackingState: 'ready' as const,
   }
 }
-watch(query, (value, _, onCleanup) => {
+watch(query, () => {
   visibleLimit.value = displayPageSize
-  if (!value) {
-    activeSearch.value = ''
-    return
-  }
-  const timer = setTimeout(() => {
-    activeSearch.value = value
-  }, 250)
-  onCleanup(() => clearTimeout(timer))
 })
 async function load(fresh = false) {
   controller?.abort()
@@ -109,6 +106,7 @@ async function load(fresh = false) {
   const current = ++version
   loading.value = true
   error.value = ''
+  trackingUpdated.value = false
   historyLoading.value = false
   historyError.value = ''
   next.value = null
@@ -134,7 +132,7 @@ async function load(fresh = false) {
       current === version &&
       !(cause instanceof ServiceError && cause.code === 'cancelled')
     )
-      error.value = errorMessage(cause)
+      error.value = shipmentErrorMessage(cause)
   } finally {
     if (current === version) loading.value = false
   }
@@ -160,7 +158,7 @@ async function loadHistory() {
       next.value = result.nextOffset
     }
   } catch (cause) {
-    if (current === version) historyError.value = errorMessage(cause)
+    if (current === version) historyError.value = shipmentErrorMessage(cause)
   } finally {
     if (current === version) {
       items.value = [...loaded.values()]
@@ -174,14 +172,18 @@ function retryTotals() {
 const refresh = () => load(true)
 async function refreshTracking() {
   const current = version
-  if (!selected.value || mutation.value) return
+  if (!selected.value || loading.value || mutation.value) return
   mutation.value = true
   error.value = ''
+  trackingUpdated.value = false
   try {
     const result = await props.services.shipments.refresh(selected.value.id)
-    if (current === version) selected.value = result
+    if (current === version) {
+      selected.value = result
+      trackingUpdated.value = true
+    }
   } catch (cause) {
-    error.value = errorMessage(cause)
+    if (current === version) error.value = shipmentErrorMessage(cause)
   } finally {
     mutation.value = false
   }
@@ -204,14 +206,18 @@ onUnmounted(() => {
     <div v-if="id" class="sticky-header focused-page__back">
       <BackButton label="Kembali ke semua paket" @click="emit('back')" />
     </div>
-    <div :class="{ 'focused-page__content': id }">
+    <div :key="id ?? undefined" :class="{ 'focused-page__content': id }">
       <PageHeader
         :class="{ 'focused-page__heading': id }"
         :title="title"
         title-id="shipments-title"
       >
         <template #actions>
-          <RefreshButton :loading="busy" :disabled="busy" @click="refresh" />
+          <RefreshButton
+            :loading="busy"
+            :disabled="busy || mutation"
+            @click="refresh"
+          />
         </template>
         <p v-if="id">
           Catatan menampilkan data pelacakan terakhir yang tersimpan.
@@ -226,7 +232,7 @@ onUnmounted(() => {
         {{ error }}
         <button class="text-button" @click="load(true)">Coba lagi</button>
       </p>
-      <p v-if="id && loading" class="content-inset" role="status">
+      <p v-if="id && loading && !selected" class="content-inset" role="status">
         Memuat paket…
       </p>
       <template v-if="id">
@@ -268,14 +274,20 @@ onUnmounted(() => {
               <dd>{{ selected.provider }}</dd>
             </div>
           </dl>
-          <button
-            v-if="user.role === 'admin'"
-            class="button button--primary"
-            :disabled="mutation"
-            @click="refreshTracking"
-          >
-            {{ mutation ? 'Memeriksa…' : 'Periksa pelacakan' }}
-          </button>
+          <div v-if="user.role === 'admin'" class="shipment-tracking">
+            <button
+              class="button button--primary"
+              type="button"
+              :disabled="loading"
+              :aria-disabled="mutation || undefined"
+              @click="refreshTracking"
+            >
+              {{ mutation ? 'Memeriksa…' : 'Periksa pelacakan' }}
+            </button>
+            <p class="shipment-tracking__status" role="status">
+              {{ trackingUpdated ? 'Pemeriksaan pelacakan selesai.' : '' }}
+            </p>
+          </div>
           <h3>Riwayat pelacakan</h3>
           <p v-if="!selected.history.length">Belum ada riwayat pelacakan.</p>
           <ol class="api-history">
@@ -294,9 +306,9 @@ onUnmounted(() => {
       </template>
       <PullToRefresh v-else :busy="busy" :on-refresh="refresh">
         <DeliverySummaryCard
-          :query="totalsQuery"
+          :query="totals ?? totalsQuery"
           :totals="totals"
-          :pending="busy"
+          :pending="busy && !totals"
           :failed="!!(error || historyError)"
           @retry="retryTotals"
         />
@@ -318,13 +330,17 @@ onUnmounted(() => {
             :clear-label="copy.searchClear"
             controls="shipment-results"
           />
-          <div id="shipment-results" :aria-busy="busy || searchDebouncing">
-            <div
-              v-if="searchDebouncing || (busy && !visibleItems.length)"
-              class="shipment-cards"
-            >
+          <div id="shipment-results" :aria-busy="busy">
+            <div v-if="busy && !items.length" class="shipment-cards">
               <DeliveryCardSkeleton v-for="index in 3" :key="index" />
             </div>
+            <p
+              v-else-if="busy && !visibleItems.length"
+              class="content-inset"
+              role="status"
+            >
+              Memeriksa riwayat paket…
+            </p>
             <EmptyState
               v-else-if="!visibleItems.length && !error && !historyError"
               class="shipment-list-panel__empty"
@@ -368,7 +384,7 @@ onUnmounted(() => {
             </p>
           </div>
           <button
-            v-if="!searchDebouncing && matching.length > visibleLimit"
+            v-if="matching.length > visibleLimit"
             class="button button--quiet shipment-list-panel__more"
             type="button"
             @click="visibleLimit += displayPageSize"
@@ -394,6 +410,17 @@ onUnmounted(() => {
 
 .shipment-notice {
   padding-inline: var(--card-inset);
+}
+
+.shipment-tracking {
+  display: grid;
+  gap: 6px;
+}
+
+.shipment-tracking__status {
+  min-height: 1.65em;
+  color: var(--accent);
+  font-size: 0.875rem;
 }
 
 .shipment-list-panel {

@@ -167,13 +167,40 @@ function handleKeydown(event: KeyboardEvent) {
   box-shadow: 0 18px 42px rgb(23 42 34 / 22%);
 }
 
+.app-dialog:not([open]) {
+  display: none;
+}
+
 .app-dialog::backdrop {
   background: rgb(24 38 32 / 48%);
 }
 
 .app-dialog:focus-visible {
-  outline: 3px solid #b88736;
+  outline: 2px solid var(--focus-ring);
   outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-dialog[open] {
+    transition:
+      opacity var(--motion-dialog-enter) var(--ease-enter),
+      transform var(--motion-dialog-enter) var(--ease-enter);
+  }
+
+  .app-dialog[open]::backdrop {
+    transition: opacity var(--motion-dialog-enter) var(--ease-enter);
+  }
+
+  @starting-style {
+    .app-dialog[open] {
+      opacity: 0;
+      transform: scale(0.97);
+    }
+
+    .app-dialog[open]::backdrop {
+      opacity: 0;
+    }
+  }
 }
 
 .app-dialog__header {
@@ -210,13 +237,19 @@ function handleKeydown(event: KeyboardEvent) {
   color: #53675a;
 }
 
-.app-dialog__close:hover:not(:disabled) {
+.app-dialog__close:active:not(:disabled) {
   background: #eef2e8;
-  color: #233d37;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .app-dialog__close:hover:not(:disabled) {
+    background: #eef2e8;
+    color: #233d37;
+  }
 }
 
 .app-dialog__close:focus-visible {
-  outline: 3px solid #b88736;
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 

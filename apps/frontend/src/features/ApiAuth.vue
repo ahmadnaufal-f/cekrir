@@ -21,6 +21,7 @@ const modeCopy = {
 }
 const copy = computed(() => modeCopy[mode.value])
 const heading = useTemplateRef('auth-heading')
+const authForm = useTemplateRef<HTMLFormElement>('authForm')
 const form = reactive({ email: '', password: '', full_name: '' })
 const busy = ref(false)
 const message = ref('')
@@ -33,13 +34,26 @@ function switchMode(next: typeof mode.value) {
   form.password = ''
   errors.value = {}
   error.value = ''
+  message.value = ''
   busy.value = false
   void nextTick(() => heading.value?.focus())
 }
+
+function focusInvalidField() {
+  void nextTick(() => {
+    authForm.value
+      ?.querySelector<HTMLInputElement>('[aria-invalid="true"]')
+      ?.focus()
+  })
+}
+
 async function submit() {
   if (busy.value) return
   errors.value = mode.value === 'register' ? validateRegistration(form) : {}
-  if (Object.keys(errors.value).length) return
+  if (Object.keys(errors.value).length) {
+    focusInvalidField()
+    return
+  }
   busy.value = true
   error.value = ''
   message.value = ''
@@ -59,15 +73,16 @@ async function submit() {
           password: form.password,
         })
       if (version !== attempt) return
+      switchMode('login')
       message.value =
         props.services.mode === 'mock'
           ? 'Simulasi: akun menunggu verifikasi. Gunakan akun demo untuk masuk; tidak ada email dikirim.'
           : 'Periksa email Anda dan konfirmasikan melalui tombol pada tautan verifikasi. Setelah itu, masuk di sini.'
-      switchMode('login')
     }
   } catch (cause) {
     if (version !== attempt) return
     errors.value = cause instanceof ServiceError ? cause.fieldErrors : {}
+    if (Object.keys(errors.value).length) focusInvalidField()
     error.value =
       cause instanceof ServiceError && cause.status === 401
         ? 'Email atau kata sandi salah, atau email belum diverifikasi. Anda dapat mengirim ulang verifikasi.'
@@ -77,10 +92,7 @@ async function submit() {
             ? cause.message
             : 'Permintaan gagal.'
   } finally {
-    if (version === attempt) {
-      busy.value = false
-      form.password = ''
-    }
+    if (version === attempt) busy.value = false
   }
 }
 </script>
@@ -125,6 +137,7 @@ async function submit() {
         </p>
 
         <form
+          ref="authForm"
           class="auth-form"
           aria-labelledby="auth-heading"
           :aria-busy="busy"
@@ -204,18 +217,20 @@ async function submit() {
             </p>
           </div>
 
+          <button class="button button--primary" type="submit" :disabled="busy">
+            {{ busy ? 'Memproses…' : copy.action }}
+          </button>
           <p v-if="error" role="alert" class="banner banner--error">
             {{ error }}
           </p>
-          <button class="button button--primary" :disabled="busy">
-            {{ busy ? 'Memproses…' : copy.action }}
-          </button>
         </form>
 
         <div class="auth-actions">
           <button
             v-if="mode !== 'login'"
             class="text-button"
+            type="button"
+            :disabled="busy"
             @click="switchMode('login')"
           >
             Kembali ke masuk
@@ -223,6 +238,8 @@ async function submit() {
           <button
             v-if="mode !== 'register'"
             class="text-button"
+            type="button"
+            :disabled="busy"
             @click="switchMode('register')"
           >
             Buat akun
@@ -230,6 +247,8 @@ async function submit() {
           <button
             v-if="mode !== 'resend'"
             class="text-button"
+            type="button"
+            :disabled="busy"
             @click="switchMode('resend')"
           >
             Kirim ulang verifikasi

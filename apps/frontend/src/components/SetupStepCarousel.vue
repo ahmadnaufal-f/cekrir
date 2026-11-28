@@ -4,6 +4,7 @@ import {
   nextTick,
   onBeforeUnmount,
   onMounted,
+  shallowRef,
   useTemplateRef,
   watch,
 } from 'vue'
@@ -17,12 +18,11 @@ const props = defineProps<{
 
 const viewport = useTemplateRef<HTMLDivElement>('viewport')
 const activeIndex = defineModel<number>('activeIndex', { default: 0 })
+const slidePosition = shallowRef(activeIndex.value)
 const progressLabel = computed(
   () => `Langkah ${activeIndex.value + 1} dari ${props.steps.length}`,
 )
-const progressWidth = computed(
-  () => `${((activeIndex.value + 1) / props.steps.length) * 100}%`,
-)
+const progress = computed(() => (slidePosition.value + 1) / props.steps.length)
 
 let resizeObserver: ResizeObserver | null = null
 let animationFrame: number | null = null
@@ -35,8 +35,11 @@ function reduceMotion(): boolean {
 function updateActiveIndex(): void {
   const element = viewport.value
   if (!element || element.clientWidth === 0) return
-  const index = Math.round(element.scrollLeft / element.clientWidth)
-  activeIndex.value = Math.min(Math.max(index, 0), props.steps.length - 1)
+  slidePosition.value = Math.min(
+    Math.max(element.scrollLeft / element.clientWidth, 0),
+    props.steps.length - 1,
+  )
+  activeIndex.value = Math.round(slidePosition.value)
 }
 
 function queueActiveIndexUpdate(): void {
@@ -57,13 +60,13 @@ function alignActiveSlide(): void {
   updateActiveIndex()
 }
 
-function goTo(index: number): void {
+function goTo(index: number, animate = true): void {
   const element = viewport.value
   if (!element) return
   const nextIndex = Math.min(Math.max(index, 0), props.steps.length - 1)
   element.scrollTo({
     left: nextIndex * element.clientWidth,
-    behavior: reduceMotion() ? 'auto' : 'smooth',
+    behavior: animate && !reduceMotion() ? 'smooth' : 'instant',
   })
   updateActiveIndex()
 }
@@ -73,16 +76,16 @@ function handleViewportKeydown(event: KeyboardEvent): void {
 
   if (event.key === 'ArrowRight') {
     event.preventDefault()
-    goTo(activeIndex.value + 1)
+    goTo(activeIndex.value + 1, false)
   } else if (event.key === 'ArrowLeft') {
     event.preventDefault()
-    goTo(activeIndex.value - 1)
+    goTo(activeIndex.value - 1, false)
   } else if (event.key === 'Home') {
     event.preventDefault()
-    goTo(0)
+    goTo(0, false)
   } else if (event.key === 'End') {
     event.preventDefault()
-    goTo(props.steps.length - 1)
+    goTo(props.steps.length - 1, false)
   }
 }
 
@@ -93,6 +96,7 @@ function handleResize(): void {
 watch(
   () => props.steps,
   () => {
+    slidePosition.value = 0
     activeIndex.value = 0
     void nextTick(alignActiveSlide)
   },
@@ -156,7 +160,7 @@ onBeforeUnmount(() => {
         :aria-valuenow="activeIndex + 1"
         :aria-valuetext="progressLabel"
       >
-        <span :style="{ width: progressWidth }"></span>
+        <span :style="{ transform: `scaleX(${progress})` }"></span>
       </div>
     </div>
 
@@ -203,7 +207,7 @@ onBeforeUnmount(() => {
           :class="{ 'setup-step-carousel__dot--active': index === activeIndex }"
           :aria-label="`Tampilkan langkah ${index + 1}: ${step.title}`"
           :aria-current="index === activeIndex ? 'step' : undefined"
-          @click="goTo(index)"
+          @click="goTo(index, $event.detail > 0)"
         >
           <span></span>
         </button>
@@ -213,7 +217,7 @@ onBeforeUnmount(() => {
           type="button"
           class="setup-step-carousel__arrow"
           :disabled="activeIndex === 0"
-          @click="goTo(activeIndex - 1)"
+          @click="goTo(activeIndex - 1, $event.detail > 0)"
         >
           <AppIcon name="back" />
           Sebelumnya
@@ -222,7 +226,7 @@ onBeforeUnmount(() => {
           type="button"
           class="setup-step-carousel__arrow setup-step-carousel__arrow--next"
           :disabled="activeIndex === steps.length - 1"
-          @click="goTo(activeIndex + 1)"
+          @click="goTo(activeIndex + 1, $event.detail > 0)"
         >
           Berikutnya
           <AppIcon name="next" />
@@ -258,7 +262,7 @@ onBeforeUnmount(() => {
 
 .setup-step-carousel__meter {
   width: min(170px, 36%);
-  height: 4px;
+  height: 6px;
   overflow: hidden;
   border-radius: 99px;
   background: #e6ebe2;
@@ -269,7 +273,7 @@ onBeforeUnmount(() => {
   height: 100%;
   border-radius: inherit;
   background: #588264;
-  transition: width 220ms ease-out;
+  transform-origin: left;
 }
 
 .setup-step-carousel__viewport {
@@ -360,10 +364,15 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 
+.setup-step-carousel__arrows {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .setup-step-carousel__dot {
   display: grid;
-  width: 32px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   padding: 0;
   border: 0;
@@ -373,22 +382,16 @@ onBeforeUnmount(() => {
 }
 
 .setup-step-carousel__dot span {
-  width: 9px;
+  width: 22px;
   height: 9px;
   border-radius: 99px;
   background: #c4d0c0;
-  transition:
-    width 180ms ease-out,
-    background-color 180ms ease-out;
-}
-
-.setup-step-carousel__dot:hover span {
-  background: #8fa48b;
+  transform: scaleX(0.41);
 }
 
 .setup-step-carousel__dot--active span {
-  width: 22px;
   background: #234e41;
+  transform: scaleX(1);
 }
 
 .setup-step-carousel__arrow {
@@ -406,8 +409,31 @@ onBeforeUnmount(() => {
   font-weight: 650;
 }
 
-.setup-step-carousel__arrow:hover:not(:disabled) {
+.setup-step-carousel__arrow:active:not(:disabled) {
   background: #f0f3eb;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .setup-step-carousel__dot:hover:not(.setup-step-carousel__dot--active) span {
+    background: #8fa48b;
+  }
+
+  .setup-step-carousel__arrow:hover:not(:disabled) {
+    background: #f0f3eb;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .setup-step-carousel__dot span,
+  .setup-step-carousel__arrow {
+    transition:
+      transform var(--motion-feedback) var(--ease-enter),
+      background-color var(--motion-feedback) ease;
+  }
+
+  .setup-step-carousel__arrow:active:not(:disabled) {
+    transform: scale(0.96);
+  }
 }
 
 .setup-step-carousel__arrow:disabled {
@@ -451,18 +477,17 @@ onBeforeUnmount(() => {
 
   .setup-step-carousel__pagination {
     align-self: center;
+    flex-wrap: wrap;
+    justify-content: center;
   }
 
   .setup-step-carousel__arrows {
     width: 100%;
     justify-content: space-between;
   }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .setup-step-carousel__meter span,
-  .setup-step-carousel__dot span {
-    transition: none;
+  .setup-step-carousel__arrow {
+    padding-inline: 8px;
   }
 }
 </style>

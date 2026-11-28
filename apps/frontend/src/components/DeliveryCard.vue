@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import AppIcon from './AppIcon.vue'
 import DeliveryResourceStates from './DeliveryResourceStates.vue'
 import { deliveryCopy, formatDeliveryTimestamp } from '../lib/delivery-copy'
 import { deliveryRoute } from '../lib/navigation'
@@ -64,10 +65,13 @@ function openDelivery(event: MouseEvent) {
       >
       <slot />
     </div>
-    <DeliveryResourceStates
-      :photo-state="delivery.photoState"
-      :tracking-state="delivery.trackingState"
-    />
+    <div class="delivery-card__trailing">
+      <DeliveryResourceStates
+        :photo-state="delivery.photoState"
+        :tracking-state="delivery.trackingState"
+      />
+      <AppIcon class="delivery-card__arrow" name="next" />
+    </div>
   </a>
 </template>
 
@@ -86,9 +90,16 @@ function openDelivery(event: MouseEvent) {
   color: #233d37;
   text-decoration: none;
 }
-.delivery-card:hover {
+.delivery-card:active {
   border-color: #a8b9a5;
-  background: #fafbf6;
+  background: #e9f0e6;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .delivery-card:hover:not(:active) {
+    border-color: #a8b9a5;
+    background: #fafbf6;
+  }
 }
 .delivery-card:focus-visible {
   outline-offset: 3px;
@@ -106,8 +117,9 @@ function openDelivery(event: MouseEvent) {
 }
 .delivery-card__number {
   overflow-wrap: anywhere;
-  font-size: 1rem;
+  font-size: 1.0625rem;
   font-weight: 650;
+  font-variant-numeric: tabular-nums;
   line-height: 1.4;
 }
 .delivery-card__badge {
@@ -132,6 +144,19 @@ function openDelivery(event: MouseEvent) {
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
+.delivery-card__trailing {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.delivery-card__arrow {
+  flex: none;
+  color: var(--muted);
+}
+
 @media (max-width: 640px) {
   .delivery-card {
     flex-direction: column;
@@ -139,12 +164,29 @@ function openDelivery(event: MouseEvent) {
     gap: 14px;
     padding-block: 20px;
   }
+  .delivery-card__trailing {
+    width: 100%;
+  }
 }
 @media (prefers-reduced-motion: no-preference) {
   .delivery-card {
     transition:
-      background-color 160ms ease-out,
-      border-color 160ms ease-out;
+      background-color var(--motion-feedback) ease,
+      border-color var(--motion-feedback) ease;
+  }
+
+  .delivery-card__arrow {
+    transition: transform var(--motion-feedback) var(--ease-enter);
+  }
+
+  .delivery-card:active .delivery-card__arrow {
+    transform: translateX(7px);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .delivery-card:hover:not(:active) .delivery-card__arrow {
+      transform: translateX(4px);
+    }
   }
 }
 </style>
